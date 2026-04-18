@@ -214,122 +214,154 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 function LandingPage({ onSuccess }: { onSuccess: () => void }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: BODY, maxWidth: "560px", margin: "0 auto", paddingBottom: "80px" }}>
+    <div className="tradr-landing" style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: BODY }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+        html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
         @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        input::placeholder{color:${C.dim};font-weight:400;}
-        input:focus{border-bottom-color:${C.text}!important;}
-        button:hover:not(:disabled){opacity:0.88;}
-        button:active:not(:disabled){transform:scale(0.99);}
+        .tradr-landing input::placeholder{color:${C.dim};font-weight:400;}
+        .tradr-landing input:focus{border-bottom-color:${C.text}!important;}
+        .tradr-landing button:hover:not(:disabled){opacity:0.88;}
+        .tradr-landing button:active:not(:disabled){transform:scale(0.99);}
+
+        /* Layout shell — mobile-first, expands on desktop */
+        .tradr-shell{
+          max-width:1440px;margin:0 auto;
+          padding:24px 24px 80px;
+        }
+        .tradr-grid{
+          display:grid;grid-template-columns:1fr;gap:56px;
+          margin-top:56px;
+        }
+        @media (min-width:900px){
+          .tradr-shell{padding:36px 56px 96px;}
+          .tradr-grid{
+            grid-template-columns:minmax(0,1.35fr) minmax(340px,460px);
+            gap:80px;
+            margin-top:96px;
+            align-items:start;
+          }
+          .tradr-auth-card{position:sticky;top:36px;}
+        }
+        @media (min-width:1280px){
+          .tradr-shell{padding:44px 88px 120px;}
+          .tradr-grid{gap:128px;}
+        }
+
+        /* Principles — 1-col mobile, 2-col desktop */
+        .tradr-principles{display:grid;grid-template-columns:1fr;border-top:1px solid ${C.border};}
+        @media (min-width:900px){.tradr-principles{grid-template-columns:1fr 1fr;}}
+        .tradr-principle{padding:32px 0;border-bottom:1px solid ${C.border};}
+        @media (min-width:900px){
+          .tradr-principle{padding:36px 40px 36px 0;}
+          .tradr-principle:nth-child(odd){border-right:1px solid ${C.border};}
+          .tradr-principle:nth-child(even){padding-left:40px;padding-right:0;}
+        }
       `}</style>
 
-      {/* ───────── MASTHEAD ───────── */}
-      <header style={{ padding: "28px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline", animation: "rise 0.5s ease" }}>
-        <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: C.text }}>
-          TRADR<span style={{ color: C.blue }}>.</span>
-        </div>
-        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.04em" }}>
-          BETA / 2026
-        </div>
-      </header>
+      <div className="tradr-shell" style={{ animation: "rise 0.5s ease" }}>
 
-      {/* ───────── HERO ───────── */}
-      <section style={{ padding: "72px 28px 56px", animation: "rise 0.6s ease 0.05s both" }}>
-        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", marginBottom: "28px" }}>
-          — A TRADING JOURNAL FOR TRADERS WHO INTEND TO IMPROVE.
-        </div>
+        {/* ───────── MASTHEAD ───────── */}
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.01em", color: C.text }}>
+            TRADR<span style={{ color: C.blue }}>.</span>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>
+            BETA / 2026
+          </div>
+        </header>
 
-        <h1 style={{
-          fontFamily: DISPLAY,
-          fontSize: "clamp(48px, 13vw, 84px)",
-          fontWeight: 700,
-          letterSpacing: "-0.035em",
-          lineHeight: 0.92,
-          color: C.text,
-          marginBottom: "28px",
-        }}>
-          Keep the<br />
-          <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>trades</span> that<br />
-          keep working.
-        </h1>
+        {/* ───────── TOP GRID: HERO + AUTH ───────── */}
+        <div className="tradr-grid">
 
-        <p style={{ fontSize: "16px", color: C.text2, lineHeight: 1.55, maxWidth: "460px", fontWeight: 400 }}>
-          Log every trade. See the patterns. Hold yourself to a checklist.
-          Trade alongside a small circle that cares about the same things you do.
-        </p>
-      </section>
+          {/* Hero column */}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: MONO, fontSize: "12px", color: C.muted, letterSpacing: "0.06em", marginBottom: "36px", textTransform: "uppercase" }}>
+              — A trading journal for traders who intend to improve.
+            </div>
 
-      {/* ───────── AUTH ───────── */}
-      <section style={{ padding: "0 28px", animation: "rise 0.6s ease 0.1s both" }}>
-        <AuthForm onSuccess={onSuccess} />
-      </section>
-
-      {/* ───────── PRINCIPLES ───────── */}
-      <section style={{ padding: "24px 28px 0", animation: "rise 0.6s ease 0.15s both" }}>
-        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "28px", display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
-          WHAT'S INSIDE
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {PRINCIPLES.map((p, i) => (
-            <div key={p.kicker} style={{
-              display: "grid",
-              gridTemplateColumns: "42px 1fr",
-              gap: "16px",
-              padding: "28px 0",
-              borderTop: i === 0 ? `1px solid ${C.border}` : "none",
-              borderBottom: `1px solid ${C.border}`,
+            <h1 style={{
+              fontFamily: DISPLAY,
+              fontSize: "clamp(52px, 9vw, 128px)",
+              fontWeight: 700,
+              letterSpacing: "-0.04em",
+              lineHeight: 0.9,
+              color: C.text,
+              marginBottom: "36px",
             }}>
-              <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em", paddingTop: "6px" }}>
-                {p.kicker}
-              </div>
-              <div>
+              Keep the<br />
+              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>trades</span> that<br />
+              keep working.
+            </h1>
+
+            <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", color: C.text2, lineHeight: 1.55, maxWidth: "540px", fontWeight: 400 }}>
+              Log every trade. See the patterns. Hold yourself to a checklist.
+              Trade alongside a small circle that cares about the same things you do.
+            </p>
+          </div>
+
+          {/* Auth column */}
+          <aside className="tradr-auth-card">
+            <AuthForm onSuccess={onSuccess} />
+          </aside>
+        </div>
+
+        {/* ───────── PRINCIPLES ───────── */}
+        <section style={{ marginTop: "clamp(80px, 10vw, 128px)" }}>
+          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "32px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ flex: "0 0 32px", height: "1px", background: C.border2 }} />
+            WHAT'S INSIDE
+          </div>
+
+          <div className="tradr-principles">
+            {PRINCIPLES.map((p) => (
+              <div key={p.kicker} className="tradr-principle">
+                <div style={{ display: "flex", alignItems: "baseline", gap: "16px", marginBottom: "12px" }}>
+                  <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>
+                    {p.kicker}
+                  </span>
+                  <span style={{ flex: 1, height: "1px", background: C.border, opacity: 0.6 }} />
+                </div>
                 <h3 style={{
                   fontFamily: DISPLAY,
-                  fontSize: "22px",
+                  fontSize: "clamp(22px, 2.4vw, 30px)",
                   fontWeight: 500,
-                  letterSpacing: "-0.015em",
-                  lineHeight: 1.15,
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.1,
                   color: C.text,
-                  marginBottom: "8px",
+                  marginBottom: "12px",
                 }}>
                   {p.title}
                 </h3>
-                <p style={{ fontSize: "14px", color: C.text2, lineHeight: 1.55, fontWeight: 400 }}>
+                <p style={{ fontSize: "15px", color: C.text2, lineHeight: 1.55, fontWeight: 400, maxWidth: "48ch" }}>
                   {p.body}
                 </p>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      {/* ───────── STRATEGIES ───────── */}
-      <section style={{ padding: "48px 28px 0" }}>
-        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
-          BUILT-IN STRATEGIES
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px", fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", lineHeight: 1.35 }}>
-          <span>ICT / Smart Money</span>
-          <span style={{ color: C.dim }}>·</span>
-          <span>Supply &amp; Demand</span>
-          <span style={{ color: C.dim }}>·</span>
-          <span>Wyckoff / VSA</span>
-          <span style={{ color: C.dim }}>·</span>
-          <span>Opening Range Breakout</span>
-        </div>
-      </section>
+        {/* ───────── STRATEGIES ───────── */}
+        <section style={{ marginTop: "clamp(64px, 8vw, 112px)" }}>
+          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ flex: "0 0 32px", height: "1px", background: C.border2 }} />
+            BUILT-IN STRATEGIES
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: "clamp(22px, 3vw, 38px)", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1.25 }}>
+            ICT / Smart Money <span style={{ color: C.dim }}> · </span>
+            Supply &amp; Demand <span style={{ color: C.dim }}> · </span>
+            Wyckoff / VSA <span style={{ color: C.dim }}> · </span>
+            <span style={{ color: C.text2, fontStyle: "italic" }}>Opening Range Breakout</span>
+          </div>
+        </section>
 
-      {/* ───────── FOOTER ───────── */}
-      <footer style={{ padding: "72px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.06em" }}>
-        <span>TRADR · KEEP THE EDGE YOU EARNED.</span>
-        <span>v0.1</span>
-      </footer>
+        {/* ───────── FOOTER ───────── */}
+        <footer style={{ marginTop: "clamp(80px, 10vw, 128px)", paddingTop: "28px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px", fontFamily: MONO, fontSize: "11px", color: C.dim, letterSpacing: "0.06em" }}>
+          <span>TRADR · KEEP THE EDGE YOU EARNED.</span>
+          <span>v0.1 / {new Date().getFullYear()}</span>
+        </footer>
+
+      </div>
     </div>
   );
 }
