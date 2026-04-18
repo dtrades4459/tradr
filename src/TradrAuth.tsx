@@ -5,115 +5,78 @@ import type { Session } from "@supabase/supabase-js";
 import Tradr from "./TRADR";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
+// Warm editorial palette, inspired by dvdrod.com + oddritualgolf.com.
 const C = {
-  bg: "#080808", panel: "#0f0f0f", panel2: "#141414",
-  border: "#1e1e1e", border2: "#2a2a2a",
-  text: "#e5e5e5", text2: "#a0a0a0", muted: "#6b7280", dim: "#3a3a3a",
-  accent: "#89cff0", gold: "#f59e0b",
-  green: "#22c55e", red: "#ef4444",
+  bg: "#0C0C0B",        // warm near-black
+  panel: "#161614",     // warm surface
+  panel2: "#1E1E1B",    // warm raised surface
+  border: "#2A2A26",    // hairline
+  border2: "#3A3A34",   // focused hairline
+  text: "#EDEDE8",      // warm off-white
+  text2: "#BCBCB4",     // warm mid
+  muted: "#8A8A82",     // warm muted
+  dim: "#55554F",       // warm dim
+  accent: "#EDEDE8",    // primary CTA (text-colored — stark/editorial)
+  blue: "#89cff0",      // TRADR brand accent (used sparingly)
+  green: "#00C96B",     // gain
+  red: "#FF3D00",       // loss
 };
+
+const DISPLAY = "'Syne', 'Inter', system-ui, sans-serif";
+const BODY = "'Inter', system-ui, sans-serif";
+const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const inp: React.CSSProperties = {
-  background: "#0a0a0a", border: `1px solid ${C.border2}`, borderRadius: "8px",
-  color: C.text, padding: "12px 14px", fontSize: "13px", width: "100%",
-  outline: "none", fontFamily: "'IBM Plex Mono', monospace", boxSizing: "border-box",
+  background: "transparent",
+  border: "none",
+  borderBottom: `1px solid ${C.border2}`,
+  borderRadius: 0,
+  color: C.text,
+  padding: "12px 0",
+  fontSize: "16px", // 16px prevents iOS zoom-on-focus
+  width: "100%",
+  outline: "none",
+  fontFamily: BODY,
+  boxSizing: "border-box",
+  letterSpacing: "0.01em",
 };
 const btn = (primary = false): React.CSSProperties => ({
-  background: primary ? C.accent : "transparent",
-  color: primary ? "#000" : C.accent,
-  border: `1px solid ${C.accent}`,
-  borderRadius: "10px", padding: "14px", fontSize: "12px",
-  fontWeight: 700, letterSpacing: "0.1em", cursor: "pointer",
-  fontFamily: "'IBM Plex Mono', monospace", width: "100%",
-  transition: "all 0.15s",
+  background: primary ? C.text : "transparent",
+  color: primary ? C.bg : C.text,
+  border: primary ? "none" : `1px solid ${C.border2}`,
+  borderRadius: "999px",
+  padding: "14px 20px",
+  fontSize: "13px",
+  fontWeight: 500,
+  letterSpacing: "0.01em",
+  cursor: "pointer",
+  fontFamily: BODY,
+  width: "100%",
+  transition: "opacity 0.15s, transform 0.15s",
 });
 const lbl: React.CSSProperties = {
-  fontSize: "9px", color: C.muted, letterSpacing: "0.12em",
-  textTransform: "uppercase", marginBottom: "5px", display: "block", fontWeight: 700,
+  fontSize: "11px",
+  color: C.muted,
+  letterSpacing: "0.02em",
+  marginBottom: "6px",
+  display: "block",
+  fontWeight: 400,
+  fontFamily: BODY,
 };
 
-// ─── TICKER ───────────────────────────────────────────────────────────────────
-const PAIRS = ["EURUSD", "GBPUSD", "XAUUSD", "NAS100", "US30", "GBPJPY", "AUDUSD", "USDCAD"];
-function Ticker() {
-  const [vals] = useState(() =>
-    PAIRS.map(p => ({ pair: p, v: (Math.random() * 0.6 - 0.3).toFixed(2) }))
-  );
-  return (
-    <div style={{ overflow: "hidden", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "8px 0", marginBottom: "40px" }}>
-      <div style={{ display: "flex", gap: "32px", animation: "ticker 22s linear infinite", whiteSpace: "nowrap" }}>
-        {[...vals, ...vals].map((item, i) => (
-          <span key={i} style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.08em", color: parseFloat(item.v) >= 0 ? C.green : C.red }}>
-            {item.pair} <span style={{ opacity: 0.5 }}>{parseFloat(item.v) >= 0 ? "+" : ""}{item.v}%</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── FEATURE CARDS ────────────────────────────────────────────────────────────
-const FEATURES = [
-  { icon: "📊", title: "Trade Journal", desc: "Log every trade with entry, SL, TP, session and emotional state." },
-  { icon: "🧠", title: "AI Insights", desc: "Rule-based pattern detection finds your weaknesses automatically." },
-  { icon: "✅", title: "Pre-Trade Check", desc: "Strategy-specific checklists so you only enter high-probability trades." },
-  { icon: "👥", title: "Circles & Feed", desc: "Share trades with friends and compete on leaderboards." },
-  { icon: "📈", title: "Performance Stats", desc: "Win rate, avg R:R, session breakdowns and monthly P&L charts." },
-  { icon: "📅", title: "Calendar View", desc: "Visualise profitable days and identify your best trading windows." },
+// ─── PRINCIPLE LIST ───────────────────────────────────────────────────────────
+// Replaces the old emoji "features" grid. Short, specific, no marketing.
+const PRINCIPLES: { kicker: string; title: string; body: string }[] = [
+  { kicker: "01",  title: "A journal, not a feed.",
+    body: "Log every trade with entry, stop, target, session, and the emotion behind the click. Your patterns show up whether you want them to or not." },
+  { kicker: "02", title: "Circles, not followers.",
+    body: "Trade alongside a few people who actually take it seriously. Shared leaderboards, no influencers, no signals shop." },
+  { kicker: "03", title: "Rules before entries.",
+    body: "Strategy checklists for ICT, Supply & Demand, Wyckoff and ORB. If your setup doesn't pass, you don't take the trade." },
+  { kicker: "04", title: "Your data stays yours.",
+    body: "Synced across your phone and laptop. Export any time. No ads, no resold metadata." },
 ];
-
-function FeatureGrid() {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "40px" }}>
-      {FEATURES.map(f => (
-        <div key={f.title} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 14px" }}>
-          <div style={{ fontSize: "22px", marginBottom: "8px" }}>{f.icon}</div>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: C.text, marginBottom: "5px", letterSpacing: "0.04em" }}>{f.title.toUpperCase()}</div>
-          <div style={{ fontSize: "10px", color: C.muted, lineHeight: 1.6 }}>{f.desc}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── STATS STRIP ──────────────────────────────────────────────────────────────
-const STATS = [{ label: "Strategies", value: "4" }, { label: "Setups", value: "40+" }, { label: "Data Points", value: "15" }, { label: "Charts", value: "6" }];
-function StatsStrip() {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", marginBottom: "40px" }}>
-      {STATS.map(s => (
-        <div key={s.label} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "10px", padding: "14px 10px", textAlign: "center" }}>
-          <div style={{ fontSize: "22px", fontWeight: 700, color: C.accent, lineHeight: 1 }}>{s.value}</div>
-          <div style={{ fontSize: "8px", color: C.muted, letterSpacing: "0.1em", marginTop: "4px" }}>{s.label.toUpperCase()}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── MINI SPARKLINE DEMO ──────────────────────────────────────────────────────
-function DemoChart() {
-  const pts = [0, 1.2, 0.8, 2.4, 1.9, 3.1, 2.7, 4.2, 3.8, 5.1];
-  const min = Math.min(...pts), max = Math.max(...pts), range = max - min;
-  const W = 300, H = 60, PAD = 6;
-  const cx = (x: number) => PAD + (x / (pts.length - 1)) * (W - PAD * 2);
-  const cy = (y: number) => H - PAD - ((y - min) / range) * (H - PAD * 2);
-  const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${cx(i)},${cy(p)}`).join(" ");
-  const areaD = `${pathD} L${cx(pts.length - 1)},${H - PAD} L${cx(0)},${H - PAD} Z`;
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
-      <defs>
-        <linearGradient id="dg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={C.green} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={C.green} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill="url(#dg)" />
-      <path d={pathD} fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={cx(pts.length - 1)} cy={cy(pts[pts.length - 1])} r="4" fill={C.green} />
-    </svg>
-  );
-}
 
 // ─── AUTH FORM ────────────────────────────────────────────────────────────────
 type AuthMode = "signin" | "signup";
@@ -180,25 +143,34 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border2}`, borderRadius: "16px", padding: "28px 24px", marginBottom: "32px" }}>
-      <div style={{ display: "flex", background: C.panel2, border: `1px solid ${C.border}`, borderRadius: "8px", overflow: "hidden", marginBottom: "24px" }}>
+    <div style={{ padding: "28px 0 8px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+      {/* Mode toggle — text link pair, no pill */}
+      <div style={{ display: "flex", gap: "20px", marginBottom: "24px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.06em" }}>
         {(["signin", "signup"] as AuthMode[]).map(m => (
           <button key={m} onClick={() => { setMode(m); setError(""); setMsg(""); }}
-            style={{ flex: 1, padding: "10px", background: mode === m ? "#1e1e1e" : "none", border: "none", borderBottom: mode === m ? `2px solid ${C.accent}` : "2px solid transparent", color: mode === m ? C.accent : C.muted, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", transition: "all 0.15s" }}>
-            {m === "signin" ? "SIGN IN" : "SIGN UP"}
+            style={{
+              background: "none", border: "none", padding: 0,
+              color: mode === m ? C.text : C.muted,
+              borderBottom: mode === m ? `1px solid ${C.text}` : "1px solid transparent",
+              paddingBottom: "4px",
+              cursor: "pointer",
+              fontFamily: MONO,
+              fontSize: "11px",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}>
+            {m === "signin" ? "Sign in" : "Sign up"}
           </button>
         ))}
       </div>
 
-      <div style={{ fontSize: "10px", color: C.accent, letterSpacing: "0.14em", fontWeight: 700, marginBottom: "20px" }}>{titles[mode]}</div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <div>
           <label style={lbl}>Username</label>
           <input type="text" value={username}
             onChange={e => setUsername(e.target.value.toLowerCase())}
             onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            placeholder={mode === "signup" ? "pick a handle (3-20 chars)" : "yourname"}
+            placeholder={mode === "signup" ? "pick a handle" : "yourname"}
             style={inp}
             autoComplete="username"
             autoCapitalize="none"
@@ -215,23 +187,23 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
 
         {error && (
-          <div style={{ background: "#200a0a", border: `1px solid #7f1d1d`, borderRadius: "8px", padding: "10px 12px", fontSize: "11px", color: C.red }}>
+          <div style={{ fontSize: "13px", color: C.red, marginTop: "4px", fontFamily: BODY }}>
             {error}
           </div>
         )}
         {msg && (
-          <div style={{ background: "#0a2018", border: `1px solid #14532d`, borderRadius: "8px", padding: "10px 12px", fontSize: "11px", color: C.green }}>
+          <div style={{ fontSize: "13px", color: C.green, marginTop: "4px", fontFamily: BODY }}>
             {msg}
           </div>
         )}
 
-        <button onClick={handleSubmit} disabled={loading} style={btn(true)}>
-          {loading ? "..." : titles[mode]}
+        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(true), marginTop: "8px" }}>
+          {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
         </button>
 
         {mode === "signup" && (
-          <div style={{ fontSize: "9px", color: C.muted, textAlign: "center", lineHeight: 1.5, marginTop: "4px" }}>
-            Beta access. No email required. Lost passwords can't be recovered — pick something you'll remember.
+          <div style={{ fontSize: "12px", color: C.muted, lineHeight: 1.55, marginTop: "4px", fontFamily: BODY }}>
+            Beta — no email required. Lost passwords can't be recovered, so pick one you'll remember.
           </div>
         )}
       </div>
@@ -242,81 +214,122 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 function LandingPage({ onSuccess }: { onSuccess: () => void }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'IBM Plex Mono', monospace", maxWidth: "480px", margin: "0 auto", paddingBottom: "60px" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: BODY, maxWidth: "560px", margin: "0 auto", paddingBottom: "80px" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        input::placeholder{color:${C.dim};}
-        input:focus{border-color:${C.accent}!important;}
+        body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+        @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        input::placeholder{color:${C.dim};font-weight:400;}
+        input:focus{border-bottom-color:${C.text}!important;}
+        button:hover:not(:disabled){opacity:0.88;}
+        button:active:not(:disabled){transform:scale(0.99);}
       `}</style>
 
-      <div style={{ padding: "48px 24px 32px", animation: "fadeIn 0.5s ease" }}>
-        <div style={{ fontSize: "9px", color: C.accent, letterSpacing: "0.3em", fontWeight: 700, marginBottom: "12px" }}>
-          MULTI-STRATEGY TRADING JOURNAL
+      {/* ───────── MASTHEAD ───────── */}
+      <header style={{ padding: "28px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline", animation: "rise 0.5s ease" }}>
+        <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: C.text }}>
+          TRADR<span style={{ color: C.blue }}>.</span>
         </div>
-        <div style={{ fontSize: "52px", fontWeight: 700, color: "#fff", letterSpacing: "-0.03em", lineHeight: 0.95, marginBottom: "20px" }}>
-          TRADR
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.04em" }}>
+          BETA / 2026
         </div>
-        <div style={{ fontSize: "12px", color: C.muted, lineHeight: 1.7, maxWidth: "320px", marginBottom: "32px" }}>
-          Track, analyse and sharpen your edge across ICT, Supply & Demand, Wyckoff and ORB strategies.
+      </header>
+
+      {/* ───────── HERO ───────── */}
+      <section style={{ padding: "72px 28px 56px", animation: "rise 0.6s ease 0.05s both" }}>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", marginBottom: "28px" }}>
+          — A TRADING JOURNAL FOR TRADERS WHO INTEND TO IMPROVE.
         </div>
 
-        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "14px", padding: "16px 18px", marginBottom: "32px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <div>
-              <div style={{ fontSize: "8px", color: C.muted, letterSpacing: "0.14em" }}>CUMULATIVE P&L</div>
-              <div style={{ fontSize: "28px", fontWeight: 700, color: C.green, lineHeight: 1 }}>+5.10R</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "9px", color: C.muted }}>WIN RATE</div>
-              <div style={{ fontSize: "22px", fontWeight: 700, color: C.accent }}>68%</div>
-            </div>
-          </div>
-          <DemoChart />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "12px" }}>
-            {[["10 TRADES", C.muted], ["7W · 3L", C.muted], ["2.3R AVG", C.accent], ["4W STREAK", C.green]].map(([label, color]) => (
-              <span key={label as string} style={{ fontSize: "9px", color: color as string, fontWeight: 700 }}>{label as string}</span>
-            ))}
-          </div>
-        </div>
-      </div>
+        <h1 style={{
+          fontFamily: DISPLAY,
+          fontSize: "clamp(48px, 13vw, 84px)",
+          fontWeight: 700,
+          letterSpacing: "-0.035em",
+          lineHeight: 0.92,
+          color: C.text,
+          marginBottom: "28px",
+        }}>
+          Keep the<br />
+          <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>trades</span> that<br />
+          keep working.
+        </h1>
 
-      <div style={{ paddingLeft: "24px", paddingRight: "24px" }}>
-        <Ticker />
-      </div>
+        <p style={{ fontSize: "16px", color: C.text2, lineHeight: 1.55, maxWidth: "460px", fontWeight: 400 }}>
+          Log every trade. See the patterns. Hold yourself to a checklist.
+          Trade alongside a small circle that cares about the same things you do.
+        </p>
+      </section>
 
-      <div style={{ padding: "0 24px" }}>
+      {/* ───────── AUTH ───────── */}
+      <section style={{ padding: "0 28px", animation: "rise 0.6s ease 0.1s both" }}>
         <AuthForm onSuccess={onSuccess} />
-      </div>
+      </section>
 
-      <div style={{ padding: "0 24px" }}>
-        <div style={{ fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>WHAT'S INSIDE</div>
-        <StatsStrip />
-        <FeatureGrid />
+      {/* ───────── PRINCIPLES ───────── */}
+      <section style={{ padding: "24px 28px 0", animation: "rise 0.6s ease 0.15s both" }}>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "28px", display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+          WHAT'S INSIDE
+        </div>
 
-        <div style={{ marginBottom: "40px" }}>
-          <div style={{ fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "12px" }}>SUPPORTED STRATEGIES</div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {[
-              { name: "ICT / Smart Money", color: "#89cff0" },
-              { name: "Supply & Demand", color: "#a78bfa" },
-              { name: "Wyckoff / VSA", color: "#34d399" },
-              { name: "ORB", color: "#fb923c" },
-            ].map(s => (
-              <div key={s.name} style={{ background: `${s.color}12`, border: `1px solid ${s.color}35`, borderRadius: "20px", padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: s.color }} />
-                <span style={{ fontSize: "10px", color: s.color, fontWeight: 700 }}>{s.name}</span>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {PRINCIPLES.map((p, i) => (
+            <div key={p.kicker} style={{
+              display: "grid",
+              gridTemplateColumns: "42px 1fr",
+              gap: "16px",
+              padding: "28px 0",
+              borderTop: i === 0 ? `1px solid ${C.border}` : "none",
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em", paddingTop: "6px" }}>
+                {p.kicker}
               </div>
-            ))}
-          </div>
+              <div>
+                <h3 style={{
+                  fontFamily: DISPLAY,
+                  fontSize: "22px",
+                  fontWeight: 500,
+                  letterSpacing: "-0.015em",
+                  lineHeight: 1.15,
+                  color: C.text,
+                  marginBottom: "8px",
+                }}>
+                  {p.title}
+                </h3>
+                <p style={{ fontSize: "14px", color: C.text2, lineHeight: 1.55, fontWeight: 400 }}>
+                  {p.body}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
+      </section>
 
-        <div style={{ textAlign: "center", fontSize: "9px", color: C.dim, letterSpacing: "0.1em" }}>
-          TRADR · YOUR DATA, YOUR EDGE
+      {/* ───────── STRATEGIES ───────── */}
+      <section style={{ padding: "48px 28px 0" }}>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+          BUILT-IN STRATEGIES
         </div>
-      </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px", fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", lineHeight: 1.35 }}>
+          <span>ICT / Smart Money</span>
+          <span style={{ color: C.dim }}>·</span>
+          <span>Supply &amp; Demand</span>
+          <span style={{ color: C.dim }}>·</span>
+          <span>Wyckoff / VSA</span>
+          <span style={{ color: C.dim }}>·</span>
+          <span>Opening Range Breakout</span>
+        </div>
+      </section>
+
+      {/* ───────── FOOTER ───────── */}
+      <footer style={{ padding: "72px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.06em" }}>
+        <span>TRADR · KEEP THE EDGE YOU EARNED.</span>
+        <span>v0.1</span>
+      </footer>
     </div>
   );
 }
@@ -324,10 +337,9 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
 // ─── LOADING SCREEN ───────────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono', monospace" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "32px", fontWeight: 700, color: C.accent, letterSpacing: "0.12em", marginBottom: "12px" }}>TRADR</div>
-        <div style={{ fontSize: "10px", color: C.muted, letterSpacing: "0.2em" }}>LOADING...</div>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: BODY }}>
+      <div style={{ fontFamily: DISPLAY, fontSize: "32px", fontWeight: 700, color: C.text, letterSpacing: "-0.02em" }}>
+        TRADR<span style={{ color: C.blue }}>.</span>
       </div>
     </div>
   );
