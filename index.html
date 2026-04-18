@@ -2,9 +2,53 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tradr</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+
+    <title>TRADR — Trading Journal + Circles</title>
+    <meta name="description" content="Multi-strategy trading journal with social circles. Track trades, share stats, compete on leaderboards." />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#080808" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+
+    <!-- iOS Safari -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TRADR" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="TRADR" />
+    <meta property="og:description" content="Multi-strategy trading journal + social circles for serious traders." />
+    <meta property="og:type" content="website" />
+
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #080808;
+        color: #e5e7eb;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overscroll-behavior-y: none;
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      /* Prevent iOS from zooming on input focus */
+      input, textarea, select {
+        font-size: 16px;
+      }
+      /* Hide scrollbars but keep scrolling */
+      ::-webkit-scrollbar { width: 0; height: 0; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

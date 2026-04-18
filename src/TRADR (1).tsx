@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "./lib/supabase";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STRATEGIES = {
@@ -21,7 +20,7 @@ const SESSIONS = ["London","New York","Asia","London/NY Overlap","Pre-Market","A
 const BIAS = ["Bullish","Bearish","Neutral"];
 const OUTCOMES = ["Win","Loss","Breakeven"];
 const REACTIONS = ["🔥","💎","📈","🎯","😤","🧠"];
-const TABS = ["home","log","history","stats","checklist","circles"];
+const TABS = ["home","log","history","stats","checklist"];
 
 // ─── THEMES ──────────────────────────────────────────────────────────────────
 const DARK = { bg:"#080808",panel:"#0f0f0f",panel2:"#141414",border:"#1e1e1e",border2:"#2a2a2a",text:"#e5e5e5",text2:"#a0a0a0",muted:"#6b7280",dim:"#3a3a3a",accent:"#89cff0",green:"#22c55e",red:"#ef4444",yellow:"#eab308",inputBg:"#0a0a0a",shadow:"rgba(0,0,0,0.4)" };
@@ -151,7 +150,24 @@ function WinRateChart({trades,C}){
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
               <span style={{fontSize:"10px",color:C.text2,display:"flex",alignItems:"center",gap:"5px"}}><span>{STRATEGIES[s]?.icon}</span>{s.split("(")[0].trim()}</span>
               <span style={{fontSize:"10px",fontWeight:700,color:wr>=0.5?C.green:C.red}}>{(wr*100).toFixed(0)}% <span style={{color:C.muted,fontWeight:400}}>({total}T)</span></span>
-            </div>
+              {/* ══ CIRCLES ══ */}
+        {view==="circles"&&(
+          <TradingCircles
+            myCircles={myCircles} circlesView={circlesView} setCirclesView={setCirclesView}
+            activeCircle={activeCircle} setActiveCircle={setActiveCircle}
+            circleForm={circleForm} setCircleForm={setCircleForm}
+            circleJoinCode={circleJoinCode} setCircleJoinCode={setCircleJoinCode}
+            circleMsg={circleMsg} setCircleMsg={setCircleMsg}
+            createCircle={createCircle} joinCircle={joinCircle}
+            publishToCircle={publishToCircle} fetchCircleLeaderboard={fetchCircleLeaderboard}
+            profile={profile} getMyCode={getMyCode} showToast={showToast}
+            wins={wins} losses={losses} total={total} winRate={winRate}
+            totalPnL={totalPnL} pnlPos={pnlPos} avgRR={avgRR} streak={streak}
+            STRATEGY_NAMES={STRATEGY_NAMES} STRATEGIES={STRATEGIES} C={C} inp={inp} sel={sel} lbl={lbl}
+          />
+        )}
+
+      </div>
             <div style={{background:C.panel2,borderRadius:"4px",height:"8px",overflow:"hidden"}}>
               <div style={{background:col,height:"8px",borderRadius:"4px",width:`${wr*100}%`,transition:"width 0.6s ease"}}/>
             </div>
@@ -264,16 +280,9 @@ function EditInline({val,onSave,onCancel,accent}){
 const EMPTY_TRADE={id:null,date:new Date().toISOString().split("T")[0],pair:"",session:"",bias:"",strategy:"",setup:"",entryPrice:"",slPrice:"",tpPrice:"",rr:"",outcome:"",pnl:"",notes:"",emotions:"",screenshot:"",comments:[],reactions:{}};
 const DEF_PROFILE={name:"Trader",handle:"@trader",bio:"Multi-strategy trader | Consistency over everything",avatar:"",broker:"",timezone:"London (GMT)",startDate:new Date().toISOString().split("T")[0],targetRR:"2",maxTradesPerDay:"2"};
 
-export default function Tradr({user}:{user?:any}={}){
-  const [trades,setTrades]=useState<any[]>([]);
+export default function Tradr(){
+  const [trades,setTrades]=useState([]);
   const [view,setView]=useState("home");
-  // ── Circles state (used by TradingCircles + storage sync) ───────────────
-  const [myCircles,setMyCircles]=useState<any[]>([]);
-  const [circlesView,setCirclesView]=useState<string>("browse"); // browse | create | join | detail
-  const [activeCircle,setActiveCircle]=useState<any>(null);
-  const [circleForm,setCircleForm]=useState<any>({name:"",description:"",strategy:"",privacy:"public"});
-  const [circleJoinCode,setCircleJoinCode]=useState<string>("");
-  const [circleMsg,setCircleMsg]=useState<string>("");
   const [darkMode,setDarkMode]=useState(true);
   const C=darkMode?DARK:LIGHT;
   const [form,setForm]=useState(EMPTY_TRADE);
@@ -323,18 +332,7 @@ export default function Tradr({user}:{user?:any}={}){
 
   async function loadAll(){
     try{const t=await window.storage.get("tradr_trades");if(t)setTrades(JSON.parse(t.value));}catch{}
-    try{
-      const pr=await window.storage.get("tradr_profile");
-      let p=pr?JSON.parse(pr.value):{...DEF_PROFILE};
-      // Bind the Supabase user.id to profile.uid so circle codes are stable
-      // across devices and across sign-outs. This is the key that makes
-      // "your friend can find you in the circle" actually work.
-      if(user?.id&&p.uid!==user.id){
-        p={...p,uid:user.id};
-        try{await window.storage.set("tradr_profile",JSON.stringify(p));}catch{}
-      }
-      setProfile(p);setProfileDraft(p);
-    }catch{}
+    try{const pr=await window.storage.get("tradr_profile");if(pr){const p=JSON.parse(pr.value);setProfile(p);setProfileDraft(p);}}catch{}
     try{const fr=await window.storage.get("tradr_friends");if(fr)setFriends(JSON.parse(fr.value));}catch{}
     try{const ff=await window.storage.get("tradr_feed",true);if(ff)setFriendFeed(JSON.parse(ff.value));}catch{}
     try{const sc=await window.storage.get("tradr_checklists");if(sc)setStratChecklists(JSON.parse(sc.value));}catch{}
@@ -573,7 +571,6 @@ export default function Tradr({user}:{user?:any}={}){
               {total}T · {winRate}% WR
               {streak.count>1&&<span style={{marginLeft:"5px",color:streak.type==="Win"?C.green:C.red}}>{streak.count}{streak.type==="Win"?"W":"L"}</span>}
             </div>
-            <button onClick={()=>supabase.auth.signOut()} className="hvr" style={{background:"none",border:"none",color:C.dim,fontSize:"8px",fontWeight:700,letterSpacing:"0.12em",cursor:"pointer",fontFamily:"inherit",padding:"2px 0",marginTop:"2px"}}>↪ SIGN OUT</button>
           </div>
         </div>
       </div>
@@ -965,23 +962,6 @@ export default function Tradr({user}:{user?:any}={}){
               </div>
             )}
           </div>
-        )}
-
-        {/* ══ CIRCLES ══ */}
-        {view==="circles"&&(
-          <TradingCircles
-            myCircles={myCircles} circlesView={circlesView} setCirclesView={setCirclesView}
-            activeCircle={activeCircle} setActiveCircle={setActiveCircle}
-            circleForm={circleForm} setCircleForm={setCircleForm}
-            circleJoinCode={circleJoinCode} setCircleJoinCode={setCircleJoinCode}
-            circleMsg={circleMsg} setCircleMsg={setCircleMsg}
-            createCircle={createCircle} joinCircle={joinCircle}
-            publishToCircle={publishToCircle} fetchCircleLeaderboard={fetchCircleLeaderboard}
-            profile={profile} getMyCode={getMyCode} showToast={showToast}
-            wins={wins} losses={losses} total={total} winRate={winRate}
-            totalPnL={totalPnL} pnlPos={pnlPos} avgRR={avgRR} streak={streak}
-            STRATEGY_NAMES={STRATEGY_NAMES} STRATEGIES={STRATEGIES} C={C} inp={inp} sel={sel} lbl={lbl}
-          />
         )}
       </div>
 

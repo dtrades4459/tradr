@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#080808"/>
+  <text x="256" y="320" font-family="'IBM Plex Mono', 'SF Mono', monospace" font-size="148" font-weight="700" fill="#89cff0" text-anchor="middle" letter-spacing="8">TRADR</text>
+  <rect x="64" y="384" width="384" height="3" fill="#89cff0" opacity="0.4"/>
+  <polyline points="80,360 140,340 200,360 260,310 320,330 380,280 440,260" fill="none" stroke="#22c55e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

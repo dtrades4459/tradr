@@ -1,0 +1,26 @@
+{
+  "name": "TRADR",
+  "short_name": "TRADR",
+  "description": "Multi-strategy trading journal + social circles for serious traders.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080808",
+  "theme_color": "#080808",
+  "categories": ["finance", "productivity", "social"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
