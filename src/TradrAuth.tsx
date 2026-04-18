@@ -116,78 +116,103 @@ function DemoChart() {
 }
 
 // ─── AUTH FORM ────────────────────────────────────────────────────────────────
-type AuthMode = "signin" | "signup" | "reset";
+type AuthMode = "signin" | "signup";
+
+// Username → synthetic email so Supabase auth still works.
+// Users never see this — they only type their username.
+const USERNAME_DOMAIN = "users.tradr.app";
+const usernameToEmail = (u: string) => `${u.toLowerCase().trim()}@${USERNAME_DOMAIN}`;
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 function AuthForm({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<AuthMode>("signin");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
   async function handleSubmit() {
-    if (!email || (!password && mode !== "reset")) return;
+    const u = username.toLowerCase().trim();
+    if (!u || !password) return;
+    if (!USERNAME_RE.test(u)) {
+      setError("Username must be 3–20 chars, lowercase letters, numbers, or underscores only.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
     setLoading(true); setError(""); setMsg("");
     try {
+      const email = usernameToEmail(u);
       if (mode === "signin") {
         const { error: e } = await supabase.auth.signInWithPassword({ email, password });
         if (e) throw e;
         onSuccess();
-      } else if (mode === "signup") {
-        const { error: e } = await supabase.auth.signUp({ email, password });
-        if (e) throw e;
-        setMsg("Check your email to confirm your account, then sign in.");
-        setMode("signin");
       } else {
-        const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin,
+        const { error: e } = await supabase.auth.signUp({
+          email, password,
+          options: { data: { username: u } },
         });
         if (e) throw e;
-        setMsg("Password reset email sent. Check your inbox.");
+        // If confirmation is OFF in Supabase, this signs them in immediately.
+        // If confirmation is ON, they'll need to try signing in after.
+        onSuccess();
       }
     } catch (e: any) {
-      setError(e.message || "Something went wrong.");
+      // Supabase throws "Invalid login credentials" for wrong password OR user not found.
+      const raw = e?.message || "Something went wrong.";
+      if (raw.toLowerCase().includes("invalid login")) {
+        setError("Username or password incorrect.");
+      } else if (raw.toLowerCase().includes("already registered")) {
+        setError("That username is taken. Try a different one.");
+      } else {
+        setError(raw);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   const titles: Record<AuthMode, string> = {
-    signin: "SIGN IN", signup: "CREATE ACCOUNT", reset: "RESET PASSWORD",
+    signin: "SIGN IN", signup: "CREATE ACCOUNT",
   };
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border2}`, borderRadius: "16px", padding: "28px 24px", marginBottom: "32px" }}>
-      {mode !== "reset" && (
-        <div style={{ display: "flex", background: C.panel2, border: `1px solid ${C.border}`, borderRadius: "8px", overflow: "hidden", marginBottom: "24px" }}>
-          {(["signin", "signup"] as AuthMode[]).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(""); setMsg(""); }}
-              style={{ flex: 1, padding: "10px", background: mode === m ? "#1e1e1e" : "none", border: "none", borderBottom: mode === m ? `2px solid ${C.accent}` : "2px solid transparent", color: mode === m ? C.accent : C.muted, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", transition: "all 0.15s" }}>
-              {m === "signin" ? "SIGN IN" : "SIGN UP"}
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{ display: "flex", background: C.panel2, border: `1px solid ${C.border}`, borderRadius: "8px", overflow: "hidden", marginBottom: "24px" }}>
+        {(["signin", "signup"] as AuthMode[]).map(m => (
+          <button key={m} onClick={() => { setMode(m); setError(""); setMsg(""); }}
+            style={{ flex: 1, padding: "10px", background: mode === m ? "#1e1e1e" : "none", border: "none", borderBottom: mode === m ? `2px solid ${C.accent}` : "2px solid transparent", color: mode === m ? C.accent : C.muted, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", transition: "all 0.15s" }}>
+            {m === "signin" ? "SIGN IN" : "SIGN UP"}
+          </button>
+        ))}
+      </div>
 
       <div style={{ fontSize: "10px", color: C.accent, letterSpacing: "0.14em", fontWeight: 700, marginBottom: "20px" }}>{titles[mode]}</div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <div>
-          <label style={lbl}>Email</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+          <label style={lbl}>Username</label>
+          <input type="text" value={username}
+            onChange={e => setUsername(e.target.value.toLowerCase())}
             onKeyDown={e => e.key === "Enter" && handleSubmit()}
-            placeholder="you@example.com" style={inp} autoComplete="email" />
+            placeholder={mode === "signup" ? "pick a handle (3-20 chars)" : "yourname"}
+            style={inp}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false} />
         </div>
 
-        {mode !== "reset" && (
-          <div>
-            <label style={lbl}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()}
-              placeholder={mode === "signup" ? "Min. 6 characters" : "••••••••"} style={inp} autoComplete={mode === "signin" ? "current-password" : "new-password"} />
-          </div>
-        )}
+        <div>
+          <label style={lbl}>Password</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSubmit()}
+            placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
+            style={inp}
+            autoComplete={mode === "signin" ? "current-password" : "new-password"} />
+        </div>
 
         {error && (
           <div style={{ background: "#200a0a", border: `1px solid #7f1d1d`, borderRadius: "8px", padding: "10px 12px", fontSize: "11px", color: C.red }}>
@@ -204,19 +229,11 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
           {loading ? "..." : titles[mode]}
         </button>
 
-        {mode === "signin" && (
-          <button onClick={() => { setMode("reset"); setError(""); setMsg(""); }}
-            style={{ background: "none", border: "none", color: C.muted, fontSize: "10px", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", textDecoration: "underline", textAlign: "center", letterSpacing: "0.06em" }}>
-            Forgot password?
-          </button>
+        {mode === "signup" && (
+          <div style={{ fontSize: "9px", color: C.muted, textAlign: "center", lineHeight: 1.5, marginTop: "4px" }}>
+            Beta access. No email required. Lost passwords can't be recovered — pick something you'll remember.
+          </div>
         )}
-        {mode === "reset" && (
-          <button onClick={() => { setMode("signin"); setError(""); setMsg(""); }}
-            style={{ background: "none", border: "none", color: C.muted, fontSize: "10px", cursor: "pointer", fontFamily: "'IBM Plex Mono', monospace", textDecoration: "underline", textAlign: "center", letterSpacing: "0.06em" }}>
-            ← Back to sign in
-          </button>
-        )}
-
       </div>
     </div>
   );
