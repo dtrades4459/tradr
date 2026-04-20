@@ -89,6 +89,21 @@ async function remoteSet(key: string, value: string, shared: boolean): Promise<v
   }
 }
 
+async function remoteListByPrefix(prefix: string): Promise<Array<{ key: string; value: string }>> {
+  try {
+    // Escape SQL LIKE metachars in the prefix so literal `_` / `%` are matched exactly.
+    const safe = prefix.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const { data, error } = await supabase
+      .from("shared_kv")
+      .select("key, value")
+      .like("key", `${safe}%`);
+    if (error || !data) return [];
+    return data.map((r: any) => ({ key: r.key as string, value: JSON.stringify(r.value) }));
+  } catch {
+    return [];
+  }
+}
+
 const storage = {
   async get(key: string, shared: boolean = false): Promise<StorageRow> {
     // Fast path: localStorage cache.
@@ -116,6 +131,15 @@ const storage = {
   async set(key: string, value: string, shared: boolean = false): Promise<void> {
     writeCache(key, value, shared);
     await remoteSet(key, value, shared);
+  },
+
+  /**
+   * List every shared_kv row whose key starts with the given prefix.
+   * Used to enumerate circle members (one row per member) and similar fan-out
+   * reads. Always hits the remote — no local cache.
+   */
+  async listByPrefix(prefix: string): Promise<Array<{ key: string; value: string }>> {
+    return remoteListByPrefix(prefix);
   },
 };
 

@@ -596,6 +596,29 @@ function SubNavDropdown({ sections, value, onChange, C }: any) {
   );
 }
 
+// ─── GEAR BUTTON ─────────────────────────────────────────────────────────────
+// Small circular icon button rendered next to SubNavDropdown. Clicking it jumps
+// the user to Home → Settings. Replaces the old "Settings" entry in the sub-nav.
+function GearButton({ onClick, active, C }: any) {
+  return (
+    <button onClick={onClick} title="Settings"
+      style={{
+        background: active ? C.text : "transparent",
+        color: active ? C.bg : C.muted,
+        border: `1px solid ${active ? C.text : C.border2}`,
+        borderRadius: "999px",
+        width: "32px", height: "32px",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", padding: 0, flexShrink: 0,
+      }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    </button>
+  );
+}
+
 // ─── STRATEGY EDITOR ─────────────────────────────────────────────────────────
 // Inline panel for creating/editing a user-defined strategy. Parity with built-ins:
 // name, code, setups, checklist items, rules.
@@ -991,20 +1014,42 @@ export default function Tradr({ user }: { user?: any } = {}) {
   myCirclesRef.current = myCircles;
   useEffect(() => {
     if (loading) return;
+    if (!profile.uid) return;
     let alive = true;
+    let migrated = false;
+
+    async function ensureMyMemberRow(circle: any) {
+      // For circles created before the per-member-row refactor, each user
+      // needs to write their own tradr_circle_member_<CODE>_<myCode> once.
+      // Safe to re-run (upsert).
+      const myCode = getMyCode();
+      const me = { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: myCode, joinedAt: new Date().toISOString() };
+      try {
+        await (window as any).storage.set(`tradr_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
+      } catch {}
+    }
+
     async function syncCircles() {
       const current = myCirclesRef.current;
       if (!current.length) return;
+      // One-shot migration on first tick: ensure every circle I'm in has my
+      // own member row in shared_kv. Fixes old data that only had inline
+      // members[] on the creator's row.
+      if (!migrated) {
+        migrated = true;
+        await Promise.all(current.map(ensureMyMemberRow));
+      }
       const refreshed = await Promise.all(current.map(async (c: any) => {
         try {
-          const r = await (window as any).storage.get("tradr_circle_" + c.code, true);
-          if (!r) return c;
-          const fresh = JSON.parse(r.value);
-          return { ...fresh, isOwner: c.isOwner };
+          const [metaRes, members] = await Promise.all([
+            (window as any).storage.get("tradr_circle_" + c.code, true),
+            readCircleMembers(c.code, c.members || []),
+          ]);
+          const fresh = metaRes ? JSON.parse(metaRes.value) : c;
+          return { ...fresh, members, isOwner: c.isOwner };
         } catch { return c; }
       }));
       if (!alive) return;
-      // Only write if something actually changed to avoid render churn.
       const changed = JSON.stringify(refreshed) !== JSON.stringify(current);
       if (changed) {
         setMyCircles(refreshed);
@@ -1015,7 +1060,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     const id = setInterval(syncCircles, 120_000);
     return () => { alive = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, profile.uid]);
 
   async function loadAll() {
     try { const t = await (window as any).storage.get("tradr_trades"); if (t) setTrades(JSON.parse(t.value)); } catch { }
@@ -1110,18 +1155,36 @@ export default function Tradr({ user }: { user?: any } = {}) {
   async function saveStratChecklists(u: any) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
   async function saveMyCircles(u: any) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
 
+  // Each circle is split into two kinds of rows:
+  //   tradr_circle_<CODE>                        — metadata, owned by creator
+  //   tradr_circle_member_<CODE>_<memberCode>    — membership, owned by each member
+  // This avoids the RLS bug where Jason couldn't update Dylon's circle row.
+  // Each member only writes their own row, so auth.uid() = owner_id always holds.
+  function myMemberRecord() {
+    return { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: getMyCode(), joinedAt: new Date().toISOString() };
+  }
+  async function readCircleMembers(code: string, fallback: any[] = []) {
+    try {
+      const rows = await (window as any).storage.listByPrefix(`tradr_circle_member_${code}_`);
+      if (!rows.length) return fallback;
+      return rows.map((r: any) => JSON.parse(r.value));
+    } catch { return fallback; }
+  }
+
   async function createCircle() {
     if (!circleForm.name.trim()) return;
     const code = circleForm.name.replace(/\s+/g, "").toUpperCase().slice(0, 6) + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const me = myMemberRecord();
     const circle = {
       id: Date.now(), code, name: circleForm.name.trim(),
       description: circleForm.description.trim(),
       strategy: circleForm.strategy, privacy: circleForm.privacy,
       createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
-      members: [{ name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: getMyCode(), joinedAt: new Date().toISOString() }],
     };
+    // Write metadata (owned by me) + my own member row.
     await (window as any).storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
-    const updated = [...myCircles, { ...circle, isOwner: true }];
+    await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+    const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
     await saveMyCircles(updated);
     setCircleForm({ name: "", description: "", strategy: "", privacy: "public" });
     setCirclesView("browse");
@@ -1136,10 +1199,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
       const res = await (window as any).storage.get("tradr_circle_" + code, true);
       if (!res) { setCircleMsg("Circle not found. Check the code."); setTimeout(() => setCircleMsg(""), 2500); return; }
       const circle = JSON.parse(res.value);
-      const me = { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: getMyCode(), joinedAt: new Date().toISOString() };
-      const updatedCircle = { ...circle, members: [...circle.members.filter((m: any) => m.code !== me.code), me] };
-      await (window as any).storage.set("tradr_circle_" + code, JSON.stringify(updatedCircle), true);
-      const updated = [...myCircles, { ...updatedCircle, isOwner: false }];
+      const me = myMemberRecord();
+      // Only write my OWN member row. Do not mutate the creator's circle row.
+      await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      // Read the fresh member list (includes me, creator, and any others already in).
+      const members = await readCircleMembers(code, [me]);
+      const updated = [...myCircles, { ...circle, members, isOwner: false }];
       await saveMyCircles(updated);
       setCircleJoinCode("");
       setCircleMsg("Joined.");
@@ -1166,8 +1231,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
 
   async function fetchCircleLeaderboard(circle: any) {
+    // Always pull members fresh — sync effect may not have run yet, or a new
+    // member may have joined since the last tick. Falls back to whatever's on
+    // the passed circle object if the listByPrefix fails.
+    const members = await readCircleMembers(circle.code, circle.members || []);
     const entries: any[] = [];
-    for (const m of circle.members) {
+    for (const m of members) {
       try {
         const r = await (window as any).storage.get("tradr_circle_entry_" + circle.code + "_" + m.code, true);
         if (r) entries.push(JSON.parse(r.value));
@@ -1438,7 +1507,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
     { id: "analytics", label: "Analytics" },
     { id: "ai", label: "Insights" },
     { id: "rules", label: "Rules" },
-    { id: "settings", label: "Settings" },
   ];
   const STATS_SECTIONS = [
     { id: "overview", label: "Overview" },
@@ -1513,7 +1581,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   </button>
                 ))}
               </div>
-              {(() => { const s = subNavFor(view); return s ? <SubNavDropdown sections={s.sections} value={s.value} onChange={s.onChange} C={C} /> : null; })()}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {(() => { const s = subNavFor(view); return s ? <SubNavDropdown sections={s.sections} value={s.value} onChange={s.onChange} C={C} /> : null; })()}
+                <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={view === "home" && homeSection === "settings"} C={C} />
+              </div>
             </nav>
           )}
         </header>
@@ -1526,8 +1597,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
             <div style={{ display: "flex", flexDirection: "column" }}>
               {/* Section sub-nav dropdown — mobile only; desktop uses the dropdown in the top-nav */}
               {!isDesktop && (
-                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
                   <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={setHomeSection} C={C} />
+                  <GearButton onClick={() => setHomeSection("settings")} active={homeSection === "settings"} C={C} />
                 </div>
               )}
 
@@ -2061,8 +2133,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {view === "stats" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
               {!isDesktop && (
-                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
                   <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} />
+                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
                 </div>
               )}
 
@@ -2226,8 +2299,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 />
               )}
               {!isDesktop && (
-                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}`, marginTop: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}`, marginTop: "4px" }}>
                   <SubNavDropdown sections={CHECKLIST_SECTIONS} value={checklistTab} onChange={setChecklistTab} C={C} />
+                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
                 </div>
               )}
 
@@ -2321,6 +2395,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               following={following}
               friendCodes={friendCodes}
               myCircles={myCircles}
+              followUser={followUser}
               unfollowUser={unfollowUser}
               wins={wins}
               losses={losses}
@@ -2396,7 +2471,6 @@ function HomeSectionTabs({ homeSection, setHomeSection, C }: any) {
     { id: "analytics", label: "Analytics" },
     { id: "ai", label: "Insights" },
     { id: "rules", label: "Rules" },
-    { id: "settings", label: "Settings" },
   ];
   return (
     <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px", overflowX: "auto", flexWrap: "wrap" }}>
@@ -2530,7 +2604,10 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
 // Editorial self-profile page. Shows identity, core stats, follow counts,
 // friends chips (mutual follows), and circle memberships split public/private.
 // Private circles only expose name + my rank — no member list, no stats.
-function ProfileView({ profile, myCode, followers, following, friendCodes, myCircles, unfollowUser, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, showToast, C, pillGhost, pillPrimary, setView, setActiveCircle, setCirclesView }: any) {
+function ProfileView({ profile, myCode, followers, following, friendCodes, myCircles, followUser, unfollowUser, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, showToast, C, pillGhost, pillPrimary, setView, setActiveCircle, setCirclesView }: any) {
+  // Clickable follow/following/friends lists. Null = no list open.
+  const [followList, setFollowList] = useState<null | "followers" | "following" | "friends">(null);
+
   // Rough rank within each circle based on locally-cached members. Shared sync
   // keeps this reasonably fresh. If a circle has no members list (just created
   // solo), rank defaults to 1 of 1.
@@ -2541,6 +2618,11 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
   }
   const publicCircles = myCircles.filter((c: any) => (c.privacy || "public") === "public");
   const privateCircles = myCircles.filter((c: any) => c.privacy === "private");
+
+  const activeCodes: string[] =
+    followList === "followers" ? followers :
+    followList === "following" ? following :
+    followList === "friends" ? friendCodes : [];
 
   function openCircle(circle: any) {
     setActiveCircle(circle);
@@ -2572,18 +2654,71 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
         </div>
       </section>
 
-      {/* ── Social counts: Followers · Following · Friends ── */}
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-        {[
-          ["FOLLOWERS", followers.length],
-          ["FOLLOWING", following.length],
-          ["FRIENDS", friendCodes.length],
-        ].map(([k, v], i) => (
-          <div key={k as string} style={{ padding: "18px 14px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
-            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "8px" }}>{k}</div>
-            <div style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{v}</div>
+      {/* ── Social counts: clickable → expand to list below ── */}
+      <section>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+          {([
+            ["FOLLOWERS", followers.length, "followers"],
+            ["FOLLOWING", following.length, "following"],
+            ["FRIENDS", friendCodes.length, "friends"],
+          ] as [string, number, "followers" | "following" | "friends"][]).map(([k, v, id], i) => {
+            const open = followList === id;
+            return (
+              <button key={k} onClick={() => setFollowList(open ? null : id)}
+                style={{ padding: "18px 14px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}`, background: open ? C.panel : "transparent", border: "none", borderTop: "none", borderRight: "none", borderBottom: "none", textAlign: "left", cursor: "pointer", color: "inherit" }}>
+                <div style={{ fontFamily: MONO, fontSize: "9px", color: open ? C.text : C.muted, letterSpacing: "0.14em", marginBottom: "8px" }}>{k}</div>
+                <div style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{v}</div>
+              </button>
+            );
+          })}
+        </div>
+        {followList && (
+          <div style={{ padding: "16px 0 4px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em" }}>
+                {followList === "followers" ? `FOLLOWERS · ${followers.length}` : followList === "following" ? `FOLLOWING · ${following.length}` : `FRIENDS · ${friendCodes.length}`}
+              </div>
+              <button onClick={() => setFollowList(null)} style={{ background: "none", border: "none", color: C.muted, fontSize: "10px", cursor: "pointer", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase" }}>Close</button>
+            </div>
+            {activeCodes.length === 0 ? (
+              <div style={{ fontFamily: BODY, fontStyle: "italic", fontSize: "13px", color: C.muted, lineHeight: 1.6, padding: "8px 0" }}>
+                {followList === "followers" && "Nobody's following you yet."}
+                {followList === "following" && "You're not following anyone yet — tap Follow on a circle leaderboard."}
+                {followList === "friends" && "No mutual follows yet. Friends are traders who follow you back."}
+              </div>
+            ) : (
+              <div style={{ borderTop: `1px solid ${C.border}` }}>
+                {activeCodes.map((code: string) => {
+                  const iFollow = following.includes(code);
+                  const followsMe = followers.includes(code);
+                  const isMutual = iFollow && followsMe;
+                  return (
+                    <div key={code} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+                      <AvatarCircle name={code.split("-")[0]} size={28} C={C} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "15px", color: C.text, letterSpacing: "-0.01em", fontWeight: 500 }}>{code.split("-")[0]}</div>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em", marginTop: "2px", textTransform: "uppercase" }}>
+                          {isMutual ? "FRIENDS · MUTUAL" : iFollow ? "YOU FOLLOW" : followsMe ? "FOLLOWS YOU" : ""}
+                        </div>
+                      </div>
+                      {iFollow ? (
+                        <button onClick={() => unfollowUser(code)}
+                          style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "5px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                          {isMutual ? "Unfriend" : "Unfollow"}
+                        </button>
+                      ) : (
+                        <button onClick={() => followUser(code)}
+                          style={{ background: C.text, color: C.bg, border: `1px solid ${C.text}`, borderRadius: "999px", padding: "5px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                          {followsMe ? "Follow back" : "Follow"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        ))}
+        )}
       </section>
 
       {/* ── Core stats ── */}
