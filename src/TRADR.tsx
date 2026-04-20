@@ -86,6 +86,141 @@ function calcRR(e: any, s: any, t: any) {
   return (Math.abs(tv - ev) / Math.abs(ev - sv)).toFixed(2);
 }
 function stratCode(name: string) { return STRATEGIES[name]?.code || name.slice(0, 3).toUpperCase(); }
+
+// ─── CSV PARSING + BROKER AUTO-DETECTION ─────────────────────────────────────
+// Handles quoted fields (incl. commas inside quotes) and "" escape sequences.
+// Generic enough to work with MT4/MT5, TradingView, ThinkorSwim, crypto exchange exports.
+function parseCSV(text: string): { headers: string[], rows: Record<string, string>[] } {
+  const lines: string[][] = [];
+  let row: string[] = [], cell = "", inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuote) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') inQuote = false;
+      else cell += ch;
+    } else {
+      if (ch === '"') inQuote = true;
+      else if (ch === ",") { row.push(cell); cell = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); cell = "";
+        if (row.some(v => v.trim() !== "")) lines.push(row);
+        row = [];
+      } else cell += ch;
+    }
+  }
+  if (cell !== "" || row.length) { row.push(cell); if (row.some(v => v.trim() !== "")) lines.push(row); }
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = lines[0].map(h => h.trim());
+  const rows = lines.slice(1).map(l => Object.fromEntries(headers.map((h, i) => [h, (l[i] ?? "").trim()])));
+  return { headers, rows };
+}
+
+// Column-name patterns for each TRADR field. First match wins.
+const CSV_FIELD_HINTS: { field: string; patterns: RegExp[] }[] = [
+  { field: "pair", patterns: [/^(symbol|ticker|pair|instrument|market|contract|asset|stock|coin)s?$/i, /symbol|ticker|pair|instrument/i] },
+  { field: "date", patterns: [/^(open[_\s]*time|close[_\s]*time|execution[_\s]*time|trade[_\s]*date|date[_\s]*time|timestamp|date|time)$/i, /date|time/i] },
+  { field: "bias", patterns: [/^(direction|side|action|type|position|long[_\s]*\/?[_\s]*short|buy[_\s]*\/?[_\s]*sell)$/i, /direction|side/i] },
+  { field: "outcome", patterns: [/^(outcome|result|status|win[_\s]*\/?[_\s]*loss|w\/?l)$/i, /outcome|result|status/i] },
+  { field: "pnl", patterns: [/^(p[\s/]?[&/]?l|pnl|profit|profit[_\s]*loss|net[_\s]*p[&/]?l|realized[_\s]*p[&/]?l|net|realized|gain)$/i, /pnl|profit|p.?l/i] },
+  { field: "entryPrice", patterns: [/^(entry[_\s]*price|entry|open[_\s]*price|buy[_\s]*price|avg[_\s]*entry|price[_\s]*in|fill[_\s]*price)$/i, /entry|open.*price/i] },
+  { field: "slPrice", patterns: [/^(stop[_\s]*loss|stop|sl|s\/l)$/i, /stop|sl/i] },
+  { field: "tpPrice", patterns: [/^(take[_\s]*profit|target|tp|t\/p|limit)$/i, /target|take.*profit|tp/i] },
+  { field: "rr", patterns: [/^(r[_\s/:-]*r|risk[_\s]*reward|r[_\s]*multiple|r[_\s]*value)$/i, /risk.*reward|r:?r/i] },
+  { field: "notes", patterns: [/^(note|notes|comment|comments|description|memo)$/i, /note|comment|memo/i] },
+  { field: "session", patterns: [/^(session|market[_\s]*session)$/i, /session/i] },
+];
+function autoDetectMapping(headers: string[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  const used = new Set<string>();
+  for (const { field, patterns } of CSV_FIELD_HINTS) {
+    for (const pat of patterns) {
+      const hit = headers.find(h => !used.has(h) && pat.test(h));
+      if (hit) { m[field] = hit; used.add(hit); break; }
+    }
+  }
+  return m;
+}
+
+// Normalize a bias value (buy/long/sell/short/etc) to TRADR's Bullish/Bearish/Neutral.
+function normalizeBias(raw: string): string {
+  const v = raw.toLowerCase();
+  if (/long|buy|bull/.test(v)) return "Bullish";
+  if (/short|sell|bear/.test(v)) return "Bearish";
+  return "";
+}
+// Normalize an outcome value or derive from PnL sign.
+function normalizeOutcome(raw: string, pnl: number): string {
+  const v = (raw || "").toLowerCase();
+  if (/win|profit|tp[_\s]*hit|target/.test(v)) return "Win";
+  if (/loss|lose|sl[_\s]*hit|stop/.test(v)) return "Loss";
+  if (/break[_\s]*even|be|flat/.test(v)) return "Breakeven";
+  // Fallback on PnL sign.
+  if (pnl > 0) return "Win";
+  if (pnl < 0) return "Loss";
+  if (raw || !isNaN(pnl)) return "Breakeven";
+  return "";
+}
+function parseNum(s: string): number {
+  if (!s) return NaN;
+  // Strip currency symbols, commas, parens for negatives.
+  const n = s.replace(/[^0-9.\-()]/g, "").replace(/\((.*)\)/, "-$1");
+  return parseFloat(n);
+}
+// Best-effort date normalization to YYYY-MM-DD.
+function normalizeDate(s: string): string {
+  if (!s) return new Date().toISOString().split("T")[0];
+  // Already ISO
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // US / EU: MM/DD/YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const slash = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})/);
+  if (slash) {
+    let [_, a, b, y] = slash;
+    if (y.length === 2) y = "20" + y;
+    // Assume DD/MM if a > 12; else MM/DD (TradingView/TOS convention).
+    const aN = parseInt(a), bN = parseInt(b);
+    const mm = aN > 12 ? bN : aN;
+    const dd = aN > 12 ? aN : bN;
+    return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+  // Try Date constructor as last resort.
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  return new Date().toISOString().split("T")[0];
+}
+
+// Build TRADR trade from a CSV row using a mapping, defaultStrategy applied if none.
+function rowToTrade(row: Record<string, string>, mapping: Record<string, string>, defaultStrategy: string) {
+  const get = (f: string) => mapping[f] ? row[mapping[f]] : "";
+  const pnl = parseNum(get("pnl"));
+  const trade: any = {
+    id: Date.now() + Math.random(),
+    date: normalizeDate(get("date")),
+    pair: (get("pair") || "").toUpperCase(),
+    session: get("session") || "",
+    bias: normalizeBias(get("bias")),
+    strategy: defaultStrategy || "",
+    setup: "",
+    entryPrice: get("entryPrice"),
+    slPrice: get("slPrice"),
+    tpPrice: get("tpPrice"),
+    rr: get("rr") || (get("entryPrice") && get("slPrice") && get("tpPrice") ? calcRR(get("entryPrice"), get("slPrice"), get("tpPrice")) : ""),
+    outcome: normalizeOutcome(get("outcome"), pnl),
+    pnl: isNaN(pnl) ? "" : pnl.toFixed(2),
+    notes: get("notes"),
+    emotions: "",
+    screenshot: "",
+    comments: [],
+    reactions: {},
+  };
+  return trade;
+}
+// Dedupe key — match on date + pair + entry price.
+function tradeKey(t: any): string {
+  return `${t.date}|${(t.pair || "").toUpperCase()}|${t.entryPrice || ""}`;
+}
 function stratShort(name: string) { return name.split("(")[0].trim(); }
 function fmtMonth(y: number, m: number) { return new Date(y, m, 1).toLocaleString("default", { month: "long", year: "numeric" }); }
 
@@ -560,6 +695,161 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
   );
 }
 
+// ─── CSV IMPORT PANEL ────────────────────────────────────────────────────────
+// File picker → parse → auto-detect mapping → preview + per-column override → import.
+// Dedupes against existing trades on date+pair+entryPrice.
+function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyNames, C, inp, sel, lbl }: any) {
+  const [fileName, setFileName] = useState("");
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [defaultStrategy, setDefaultStrategy] = useState("");
+  const [error, setError] = useState("");
+
+  function handleFile(e: any) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result);
+        const { headers: h, rows: r } = parseCSV(text);
+        if (!h.length || !r.length) { setError("CSV looks empty. Double-check the file."); return; }
+        setHeaders(h);
+        setRows(r);
+        setMapping(autoDetectMapping(h));
+        setError("");
+      } catch (err: any) { setError("Couldn't parse CSV: " + (err?.message || "unknown error")); }
+    };
+    reader.readAsText(file);
+  }
+
+  const fields = [
+    { key: "date", label: "Date", required: true },
+    { key: "pair", label: "Pair / Symbol", required: true },
+    { key: "outcome", label: "Outcome", required: false },
+    { key: "pnl", label: "P&L", required: false },
+    { key: "entryPrice", label: "Entry price", required: false },
+    { key: "slPrice", label: "Stop loss", required: false },
+    { key: "tpPrice", label: "Take profit", required: false },
+    { key: "rr", label: "R:R", required: false },
+    { key: "bias", label: "Direction / side", required: false },
+    { key: "session", label: "Session", required: false },
+    { key: "notes", label: "Notes", required: false },
+  ];
+
+  const existingKeys = new Set(existingTrades.map(tradeKey));
+  const previewTrades = rows.map(r => rowToTrade(r, mapping, defaultStrategy));
+  const uniquePreview = previewTrades.filter(t => !existingKeys.has(tradeKey(t)));
+  const dupCount = previewTrades.length - uniquePreview.length;
+  const canImport = !!mapping.date && !!mapping.pair && uniquePreview.length > 0;
+
+  function doImport() {
+    if (!canImport) return;
+    onImport(uniquePreview);
+  }
+
+  return (
+    <div style={{ border: `1px solid ${C.border2}`, borderRadius: "14px", padding: "20px", background: C.panel, display: "flex", flexDirection: "column", gap: "18px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Import CSV</div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "14px" }}>×</button>
+      </div>
+
+      {!headers.length && (
+        <div>
+          <label htmlFor="csv-file" style={{ display: "block", border: `1px dashed ${C.border2}`, padding: "28px 16px", borderRadius: "10px", cursor: "pointer", textAlign: "center", color: C.muted, fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            {fileName || "Click to select a CSV file"}
+            <input id="csv-file" type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: "none" }} />
+          </label>
+          <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.5 }}>
+            Works with MT4/MT5 account history, TradingView strategy exports, ThinkorSwim trade history, and most crypto exchange CSVs. Common column names are auto-detected; you can override any mapping before importing.
+          </div>
+        </div>
+      )}
+
+      {error && <div style={{ fontFamily: BODY, fontSize: "12px", color: C.red }}>{error}</div>}
+
+      {headers.length > 0 && (
+        <>
+          <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted }}>
+            <span style={{ color: C.text }}>{fileName}</span> — {rows.length} row{rows.length === 1 ? "" : "s"} detected.
+          </div>
+
+          <div>
+            <label style={lbl}>Column mapping</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px", marginTop: "8px" }}>
+              {fields.map(f => (
+                <div key={f.key}>
+                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "2px" }}>
+                    {f.label}{f.required && <span style={{ color: C.red, marginLeft: "4px" }}>*</span>}
+                  </div>
+                  <select value={mapping[f.key] || ""} onChange={e => setMapping((m: any) => ({ ...m, [f.key]: e.target.value }))} style={sel}>
+                    <option value="">— skip —</option>
+                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={lbl}>Default strategy (applied to every row)</label>
+            <select value={defaultStrategy} onChange={e => setDefaultStrategy(e.target.value)} style={sel}>
+              <option value="">— none —</option>
+              {allStrategyNames.map((s: string) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={lbl}>Preview (first 5 rows)</label>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: "10px", overflow: "auto", marginTop: "8px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: "11px" }}>
+                <thead>
+                  <tr style={{ background: C.panel2 }}>
+                    {["Date", "Pair", "Bias", "Outcome", "P&L", "Entry", "R:R"].map(h => (
+                      <th key={h} style={{ textAlign: "left", padding: "8px 10px", color: C.muted, letterSpacing: "0.08em", fontWeight: 500, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewTrades.slice(0, 5).map((t: any, i: number) => {
+                    const dup = existingKeys.has(tradeKey(t));
+                    return (
+                      <tr key={i} style={{ opacity: dup ? 0.5 : 1 }}>
+                        <td style={{ padding: "8px 10px", color: C.text, borderBottom: `1px solid ${C.border}` }}>{t.date}</td>
+                        <td style={{ padding: "8px 10px", color: C.text, borderBottom: `1px solid ${C.border}` }}>{t.pair || "—"}</td>
+                        <td style={{ padding: "8px 10px", color: C.text2, borderBottom: `1px solid ${C.border}` }}>{t.bias || "—"}</td>
+                        <td style={{ padding: "8px 10px", color: t.outcome === "Win" ? C.green : t.outcome === "Loss" ? C.red : C.text2, borderBottom: `1px solid ${C.border}` }}>{t.outcome || "—"}</td>
+                        <td style={{ padding: "8px 10px", color: C.text2, borderBottom: `1px solid ${C.border}` }}>{t.pnl || "—"}</td>
+                        <td style={{ padding: "8px 10px", color: C.text2, borderBottom: `1px solid ${C.border}` }}>{t.entryPrice || "—"}</td>
+                        <td style={{ padding: "8px 10px", color: C.text2, borderBottom: `1px solid ${C.border}` }}>{t.rr || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {dupCount > 0 && (
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
+                {dupCount} duplicate{dupCount === 1 ? "" : "s"} will be skipped.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>Cancel</button>
+            <button onClick={doImport} disabled={!canImport} style={{ background: canImport ? C.text : C.border2, color: canImport ? C.bg : C.muted, border: "none", borderRadius: "999px", padding: "10px 18px", cursor: canImport ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Import {uniquePreview.length} trade{uniquePreview.length === 1 ? "" : "s"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── EDIT INLINE ─────────────────────────────────────────────────────────────
 function EditInline({ val, onSave, onCancel, C }: any) {
   const [text, setText] = useState(val);
@@ -631,6 +921,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [showStrategyEditor, setShowStrategyEditor] = useState(false);
   const [editingStrategy, setEditingStrategy] = useState<any>(null);
   const [strategyDraft, setStrategyDraft] = useState<any>({ name: "", code: "", setups: [], checklist: [], rules: [] });
+
+  // CSV import panel state
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   // Swipe
   const swipeRef = useRef<any>(null);
@@ -740,6 +1033,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
 
   async function saveTrades(u: any) { setTrades(u); await (window as any).storage.set("tradr_trades", JSON.stringify(u)); }
+  async function handleCsvImport(newTrades: any[]) {
+    if (!newTrades.length) { setShowCsvImport(false); return; }
+    const merged = [...newTrades, ...trades];
+    await saveTrades(merged);
+    setShowCsvImport(false);
+    showToast(`Imported ${newTrades.length} trade${newTrades.length === 1 ? "" : "s"}`);
+  }
   async function saveProfile(u: any) { setProfile(u); await (window as any).storage.set("tradr_profile", JSON.stringify(u)); }
   async function saveFriends(u: any) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
   async function saveStratChecklists(u: any) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
@@ -1115,8 +1415,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {/* ══════════════════════════ HOME ══════════════════════════ */}
           {view === "home" && (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {/* Section tabs — mobile only; desktop uses the dropdown in the top-nav */}
-              {!isDesktop && <HomeSectionTabs homeSection={homeSection} setHomeSection={setHomeSection} C={C} />}
+              {/* Section sub-nav dropdown — mobile only; desktop uses the dropdown in the top-nav */}
+              {!isDesktop && (
+                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
+                  <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={setHomeSection} C={C} />
+                </div>
+              )}
 
               {/* FEED */}
               {homeSection === "feed" && (
@@ -1491,7 +1795,24 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {/* ══════════════════════════ HISTORY ══════════════════════════ */}
           {view === "history" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)" }}>
-              <SectionKicker label={`TRADES · ${filteredTrades.length}`} C={C} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                <SectionKicker label={`TRADES · ${filteredTrades.length}`} C={C} />
+                <button onClick={() => setShowCsvImport(v => !v)} style={{ background: showCsvImport ? C.text : "transparent", color: showCsvImport ? C.bg : C.text, border: `1px solid ${showCsvImport ? C.text : C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                  {showCsvImport ? "Close" : "Import CSV"}
+                </button>
+              </div>
+              {showCsvImport && (
+                <CsvImportPanel
+                  existingTrades={trades}
+                  onImport={handleCsvImport}
+                  onClose={() => setShowCsvImport(false)}
+                  allStrategyNames={allStrategyNames}
+                  C={C}
+                  inp={inp}
+                  sel={sel}
+                  lbl={lbl}
+                />
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "20px" }}>
                 <input placeholder="Pair..." value={filter.pair} onChange={e => setFilter({ ...filter, pair: e.target.value })} style={inp} />
                 <select value={filter.outcome} onChange={e => setFilter({ ...filter, outcome: e.target.value })} style={sel}><option value="">All outcomes</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select>
@@ -1631,13 +1952,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {view === "stats" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
               {!isDesktop && (
-                <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px" }}>
-                  {[["overview", "Overview"], ["strategies", "Strategies"], ["calendar", "Calendar"]].map(([id, label]) => (
-                    <button key={id} onClick={() => setStatsTab(id)}
-                      style={{ background: "none", border: "none", padding: 0, color: statsTab === id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: statsTab === id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
-                      {label}
-                    </button>
-                  ))}
+                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
+                  <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} />
                 </div>
               )}
 
@@ -1801,13 +2117,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 />
               )}
               {!isDesktop && (
-                <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px", marginTop: "4px" }}>
-                  {[{ id: "pretrade", label: "Pre-trade" }, { id: "rules", label: "Rules" }].map(st => (
-                    <button key={st.id} onClick={() => setChecklistTab(st.id)}
-                      style={{ background: "none", border: "none", padding: 0, color: checklistTab === st.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: checklistTab === st.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
-                      {st.label}
-                    </button>
-                  ))}
+                <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "10px", borderBottom: `1px solid ${C.border}`, marginTop: "4px" }}>
+                  <SubNavDropdown sections={CHECKLIST_SECTIONS} value={checklistTab} onChange={setChecklistTab} C={C} />
                 </div>
               )}
 
