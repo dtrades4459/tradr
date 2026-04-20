@@ -893,6 +893,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [commentInputs, setCommentInputs] = useState<any>({});
   const [friends, setFriends] = useState<any[]>([]);
   const [friendFeed, setFriendFeed] = useState<any[]>([]);
+  // Follow system: one-way. following = codes I follow, followers = codes following me.
+  // Friends = intersect(following, followers) — i.e. mutual follows.
+  const [following, setFollowing] = useState<string[]>([]);
+  const [followers, setFollowers] = useState<string[]>([]);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -951,6 +955,67 @@ export default function Tradr({ user }: { user?: any } = {}) {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades, myCircles, loading]);
+
+  // ── Follows sync (every 2 min) ───────────────────────────────────
+  // Load my follow lists from shared_kv and refresh periodically so counts
+  // update when someone follows you back without a page reload.
+  useEffect(() => {
+    if (loading) return;
+    if (!profile.uid) return;
+    let alive = true;
+    async function syncFollows() {
+      const mc = getMyCode();
+      try {
+        const [fg, fr] = await Promise.all([
+          (window as any).storage.get(`tradr_following_${mc}`, true),
+          (window as any).storage.get(`tradr_followers_${mc}`, true),
+        ]);
+        if (!alive) return;
+        if (fg) { try { setFollowing(JSON.parse(fg.value) || []); } catch {} }
+        if (fr) { try { setFollowers(JSON.parse(fr.value) || []); } catch {} }
+      } catch {}
+    }
+    syncFollows();
+    const id = setInterval(syncFollows, 120_000);
+    return () => { alive = false; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, profile.uid]);
+
+  // ── Circle membership sync (every 2 min) ─────────────────────────
+  // Fix: local myCircles was snapshotted at create/join time. When another
+  // member joined, this side never re-read the canonical tradr_circle_<code>
+  // from shared storage, so the members list (and therefore the leaderboard
+  // fetch) stayed stale. Pull fresh on mount + every 2 min so the social
+  // loop feels live without needing a manual refresh.
+  const myCirclesRef = useRef<any[]>(myCircles);
+  myCirclesRef.current = myCircles;
+  useEffect(() => {
+    if (loading) return;
+    let alive = true;
+    async function syncCircles() {
+      const current = myCirclesRef.current;
+      if (!current.length) return;
+      const refreshed = await Promise.all(current.map(async (c: any) => {
+        try {
+          const r = await (window as any).storage.get("tradr_circle_" + c.code, true);
+          if (!r) return c;
+          const fresh = JSON.parse(r.value);
+          return { ...fresh, isOwner: c.isOwner };
+        } catch { return c; }
+      }));
+      if (!alive) return;
+      // Only write if something actually changed to avoid render churn.
+      const changed = JSON.stringify(refreshed) !== JSON.stringify(current);
+      if (changed) {
+        setMyCircles(refreshed);
+        try { await (window as any).storage.set("tradr_circles", JSON.stringify(refreshed)); } catch {}
+      }
+    }
+    syncCircles();
+    const id = setInterval(syncCircles, 120_000);
+    return () => { alive = false; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   async function loadAll() {
     try { const t = await (window as any).storage.get("tradr_trades"); if (t) setTrades(JSON.parse(t.value)); } catch { }
@@ -1217,6 +1282,49 @@ export default function Tradr({ user }: { user?: any } = {}) {
     setTimeout(() => setFriendMsg(""), 2500);
   }
   async function removeFriend(code: string) { await saveFriends(friends.filter(f => f.code !== code)); }
+
+  // ── Follow system (one-way) ─────────────────────────────────────
+  // following = codes I follow. followers = codes following me.
+  // Friends = intersection. Both lists live in shared_kv so the other side
+  // sees the new follower on their next 2-min sync.
+  async function followUser(code: string) {
+    const target = code.trim().toUpperCase();
+    if (!target) return;
+    const mc = getMyCode();
+    if (target === mc) { showToast("That's you"); return; }
+    if (following.includes(target)) return;
+    // 1) Update my following list
+    const nextFollowing = [...following, target];
+    setFollowing(nextFollowing);
+    try { await (window as any).storage.set(`tradr_following_${mc}`, JSON.stringify(nextFollowing), true); } catch {}
+    // 2) Append me to target's followers list (merge with whatever's there)
+    try {
+      const r = await (window as any).storage.get(`tradr_followers_${target}`, true);
+      let theirFollowers: string[] = [];
+      try { theirFollowers = r ? JSON.parse(r.value) : []; } catch {}
+      if (!theirFollowers.includes(mc)) theirFollowers.push(mc);
+      await (window as any).storage.set(`tradr_followers_${target}`, JSON.stringify(theirFollowers), true);
+    } catch {}
+    showToast("Following");
+  }
+  async function unfollowUser(code: string) {
+    const target = code.trim().toUpperCase();
+    if (!target) return;
+    const mc = getMyCode();
+    const nextFollowing = following.filter(c => c !== target);
+    setFollowing(nextFollowing);
+    try { await (window as any).storage.set(`tradr_following_${mc}`, JSON.stringify(nextFollowing), true); } catch {}
+    try {
+      const r = await (window as any).storage.get(`tradr_followers_${target}`, true);
+      let theirFollowers: string[] = [];
+      try { theirFollowers = r ? JSON.parse(r.value) : []; } catch {}
+      theirFollowers = theirFollowers.filter(c => c !== mc);
+      await (window as any).storage.set(`tradr_followers_${target}`, JSON.stringify(theirFollowers), true);
+    } catch {}
+    showToast("Unfollowed");
+  }
+  // Friends = mutual follows (I follow them + they follow me).
+  const friendCodes = following.filter(c => followers.includes(c));
   async function publishFeed() {
     const mc = getMyCode();
     const items = trades.slice(0, 10).map(t => ({ authorCode: mc, authorName: profile.name || "Trader", authorHandle: profile.handle || "@trader", authorAvatar: profile.avatar || "", tradeId: t.id, pair: t.pair, date: t.date, outcome: t.outcome, pnl: t.pnl, rr: t.rr, strategy: t.strategy, setup: t.setup, notes: t.notes, session: t.session, reactions: t.reactions || {}, comments: (t.comments || []).length, publishedAt: new Date().toISOString() }));
@@ -1319,6 +1427,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     { id: "history", label: "TRADES" },
     { id: "stats", label: "STATS" },
     { id: "checklist", label: "CHECK" },
+    { id: "profile", label: "PROFILE" },
     { id: "circles", label: "CIRCLES" },
   ];
 
@@ -2203,6 +2312,34 @@ export default function Tradr({ user }: { user?: any } = {}) {
             </div>
           )}
 
+          {/* ══════════════════════════ PROFILE ══════════════════════════ */}
+          {view === "profile" && (
+            <ProfileView
+              profile={profile}
+              myCode={getMyCode()}
+              followers={followers}
+              following={following}
+              friendCodes={friendCodes}
+              myCircles={myCircles}
+              unfollowUser={unfollowUser}
+              wins={wins}
+              losses={losses}
+              total={total}
+              winRate={winRate}
+              totalPnL={totalPnL}
+              pnlPos={pnlPos}
+              avgRR={avgRR}
+              streak={streak}
+              showToast={showToast}
+              C={C}
+              pillGhost={pillGhost}
+              pillPrimary={pillPrimary}
+              setView={setView}
+              setActiveCircle={setActiveCircle}
+              setCirclesView={setCirclesView}
+            />
+          )}
+
           {/* ══════════════════════════ CIRCLES ══════════════════════════ */}
           {view === "circles" && (
             <TradingCircles
@@ -2218,6 +2355,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               totalPnL={totalPnL} pnlPos={pnlPos} avgRR={avgRR} streak={streak}
               STRATEGY_NAMES={allStrategyNames} C={C} inp={inp} sel={sel} lbl={lbl}
               pillPrimary={pillPrimary} pillGhost={pillGhost}
+              following={following} followUser={followUser} unfollowUser={unfollowUser}
             />
           )}
         </div>
@@ -2388,8 +2526,175 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
   );
 }
 
+// ─── PROFILE (self) ──────────────────────────────────────────────────────────
+// Editorial self-profile page. Shows identity, core stats, follow counts,
+// friends chips (mutual follows), and circle memberships split public/private.
+// Private circles only expose name + my rank — no member list, no stats.
+function ProfileView({ profile, myCode, followers, following, friendCodes, myCircles, unfollowUser, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, showToast, C, pillGhost, pillPrimary, setView, setActiveCircle, setCirclesView }: any) {
+  // Rough rank within each circle based on locally-cached members. Shared sync
+  // keeps this reasonably fresh. If a circle has no members list (just created
+  // solo), rank defaults to 1 of 1.
+  function myRankIn(circle: any) {
+    const members = circle.members || [];
+    const idx = members.findIndex((m: any) => m.code === myCode);
+    return { rank: idx >= 0 ? idx + 1 : 1, of: Math.max(members.length, 1) };
+  }
+  const publicCircles = myCircles.filter((c: any) => (c.privacy || "public") === "public");
+  const privateCircles = myCircles.filter((c: any) => c.privacy === "private");
+
+  function openCircle(circle: any) {
+    setActiveCircle(circle);
+    setCirclesView("detail");
+    setView("circles");
+  }
+
+  return (
+    <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(28px, 4vw, 44px)" }}>
+      {/* ── Header: avatar, name, handle, invite code ── */}
+      <section style={{ display: "flex", alignItems: "flex-start", gap: "18px", flexWrap: "wrap" }}>
+        <AvatarCircle name={profile.name || "Trader"} avatar={profile.avatar} size={72} C={C} />
+        <div style={{ flex: 1, minWidth: "200px" }}>
+          <h1 style={{ fontFamily: DISPLAY, fontSize: "clamp(32px, 7vw, 44px)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1, color: C.text, margin: 0 }}>
+            {profile.name || "Trader"}
+          </h1>
+          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", marginTop: "8px", textTransform: "lowercase" }}>
+            {profile.handle || "@trader"}
+          </div>
+          {profile.bio && (
+            <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginTop: "12px", maxWidth: "48ch" }}>{profile.bio}</div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "14px", flexWrap: "wrap" }}>
+            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>CODE</div>
+            <div style={{ fontFamily: MONO, fontSize: "12px", color: C.text, letterSpacing: "0.1em" }}>{myCode}</div>
+            <button onClick={() => { navigator.clipboard?.writeText(myCode); showToast("Code copied"); }}
+              style={{ ...pillGhost, padding: "4px 10px", fontSize: "9px" }}>COPY</button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Social counts: Followers · Following · Friends ── */}
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        {[
+          ["FOLLOWERS", followers.length],
+          ["FOLLOWING", following.length],
+          ["FRIENDS", friendCodes.length],
+        ].map(([k, v], i) => (
+          <div key={k as string} style={{ padding: "18px 14px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "8px" }}>{k}</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{v}</div>
+          </div>
+        ))}
+      </section>
+
+      {/* ── Core stats ── */}
+      <section>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>SNAPSHOT</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+          {[
+            ["W/L", `${wins}/${losses}`],
+            ["WR", total > 0 ? `${winRate}%` : "—"],
+            ["P&L", total > 0 ? `${pnlPos ? "+" : ""}${totalPnL}R` : "—"],
+            ["R:R", avgRR === "—" ? "—" : `${avgRR}R`],
+          ].map(([k, v], i) => (
+            <div key={k as string} style={{ padding: "4px 10px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "6px" }}>{k}</div>
+              <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em" }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {streak.count >= 2 && (
+          <div style={{ fontFamily: MONO, fontSize: "10px", color: streak.type === "Win" ? C.green : C.red, letterSpacing: "0.1em", marginTop: "14px", textTransform: "uppercase" }}>
+            {streak.count}{streak.type === "Win" ? "W" : "L"} STREAK
+          </div>
+        )}
+      </section>
+
+      {/* ── Friends (mutual) ── */}
+      <section style={{ borderTop: `1px solid ${C.border}`, paddingTop: "22px" }}>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>FRIENDS · {friendCodes.length}</div>
+        {friendCodes.length === 0 ? (
+          <div style={{ fontFamily: BODY, fontStyle: "italic", fontSize: "13px", color: C.muted, lineHeight: 1.6 }}>
+            No mutual follows yet. Follow traders in your circles — once they follow back, they show up here.
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {friendCodes.map((code: string) => (
+              <div key={code} style={{ display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 12px" }}>
+                <AvatarCircle name={code.split("-")[0]} size={20} C={C} />
+                <span style={{ fontFamily: MONO, fontSize: "10px", color: C.text, letterSpacing: "0.06em" }}>{code.split("-")[0]}</span>
+                <button onClick={() => unfollowUser(code)} style={{ background: "none", border: "none", color: C.dim, fontSize: "10px", cursor: "pointer", fontFamily: MONO, padding: 0, marginLeft: "2px" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Public circles ── */}
+      <section style={{ borderTop: `1px solid ${C.border}`, paddingTop: "22px" }}>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>PUBLIC CIRCLES · {publicCircles.length}</div>
+        {publicCircles.length === 0 ? (
+          <div style={{ fontFamily: BODY, fontStyle: "italic", fontSize: "13px", color: C.muted, lineHeight: 1.6 }}>
+            Not in any public circles yet.
+          </div>
+        ) : (
+          <div>
+            {publicCircles.map((c: any) => {
+              const { rank, of } = myRankIn(c);
+              return (
+                <div key={c.code} onClick={() => openCircle(c)}
+                  style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: "14px", padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                  <div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{c.name}</div>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginTop: "3px", textTransform: "uppercase" }}>
+                      {c.strategy ? `${c.strategy} · ` : ""}{of} members · {c.code}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+                    #{rank} <span style={{ color: C.muted }}>of {of}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Private circles (name + rank only) ── */}
+      <section style={{ borderTop: `1px solid ${C.border}`, paddingTop: "22px" }}>
+        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>PRIVATE CIRCLES · {privateCircles.length}</div>
+        {privateCircles.length === 0 ? (
+          <div style={{ fontFamily: BODY, fontStyle: "italic", fontSize: "13px", color: C.muted, lineHeight: 1.6 }}>
+            No private circles.
+          </div>
+        ) : (
+          <div>
+            {privateCircles.map((c: any) => {
+              const { rank, of } = myRankIn(c);
+              return (
+                <div key={c.code} onClick={() => openCircle(c)}
+                  style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: "14px", padding: "14px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                  <div style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{c.name}</div>
+                  <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+                    #{rank} <span style={{ color: C.muted }}>of {of}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section style={{ paddingTop: "8px", paddingBottom: "40px" }}>
+        <button onClick={() => setView("home")} style={{ ...pillGhost, padding: "10px 18px" }}>
+          Edit profile in Settings →
+        </button>
+      </section>
+    </div>
+  );
+}
+
 // ─── TRADING CIRCLES (editorial) ─────────────────────────────────────────────
-function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost }: any) {
+function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loadingLB, setLoadingLB] = useState(false);
 
@@ -2401,6 +2706,20 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
     setLeaderboard(entries);
     setLoadingLB(false);
   }
+
+  // Auto-refresh leaderboard every 2 min while sitting on the detail view.
+  // The parent's sync effect keeps activeCircle.members fresh, so this picks
+  // up new stats entries from other members without a manual tap.
+  useEffect(() => {
+    if (circlesView !== "detail" || !activeCircle) return;
+    const id = setInterval(async () => {
+      try {
+        const entries = await fetchCircleLeaderboard(activeCircle);
+        setLeaderboard(entries);
+      } catch {}
+    }, 120_000);
+    return () => clearInterval(id);
+  }, [circlesView, activeCircle, fetchCircleLeaderboard]);
 
   return (
     <div style={{ marginTop: "clamp(16px, 4vw, 28px)" }}>
@@ -2589,9 +2908,18 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                           {entry.streak && entry.streak.count >= 2 && <span style={{ color: entry.streak.type === "Win" ? C.green : C.red }}>{entry.streak.count}{entry.streak.type === "Win" ? "W" : "L"}</span>}
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
                         <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{pPos ? "+" : ""}{entry.totalPnL.toFixed(1)}R</div>
-                        {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, marginTop: "3px", letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R AVG</div> : null}
+                        {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R AVG</div> : null}
+                        {!isMe && (() => {
+                          const isFollowing = (following || []).includes(entry.memberCode);
+                          return (
+                            <button onClick={() => isFollowing ? unfollowUser(entry.memberCode) : followUser(entry.memberCode)}
+                              style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "3px 10px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "2px" }}>
+                              {isFollowing ? "Following" : "Follow"}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
