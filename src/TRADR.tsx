@@ -370,6 +370,196 @@ function StrategyPill({ name, selected, onClick, C }: any) {
   );
 }
 
+// ─── STRATEGY SELECT ─────────────────────────────────────────────────────────
+// Compact pill-shaped dropdown. Replaces pill rows where strategy is a *selector*
+// (not a form input). Scales to any number of strategies including custom ones.
+function StrategySelect({ strategies, value, onChange, C, align = "left" }: any) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<any>(null);
+  useEffect(() => {
+    function onDoc(e: any) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px",
+        padding: "7px 14px", cursor: "pointer", fontFamily: MONO, display: "inline-flex",
+        alignItems: "center", gap: "8px", whiteSpace: "nowrap", color: C.text,
+      }}>
+        <span style={{ fontSize: "10px", letterSpacing: "0.1em", fontWeight: 500 }}>{stratCode(value)}</span>
+        <span style={{ fontSize: "11px", color: C.muted, letterSpacing: "0.02em" }}>{stratShort(value)}</span>
+        <span style={{ fontSize: "10px", color: C.muted, marginLeft: "2px" }}>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", [align]: 0, zIndex: 50,
+          minWidth: "220px", background: C.panel, border: `1px solid ${C.border2}`,
+          borderRadius: "12px", padding: "6px", boxShadow: `0 8px 24px ${C.shadow}`,
+        }}>
+          {strategies.map((s: string) => (
+            <button key={s} onClick={() => { onChange(s); setOpen(false); }} style={{
+              display: "flex", width: "100%", alignItems: "center", gap: "10px",
+              background: s === value ? C.panel2 : "transparent", border: "none",
+              borderRadius: "8px", padding: "9px 11px", cursor: "pointer", textAlign: "left",
+              fontFamily: MONO, color: C.text,
+            }}>
+              <span style={{ fontSize: "10px", letterSpacing: "0.1em", fontWeight: 500, minWidth: "34px" }}>{stratCode(s)}</span>
+              <span style={{ fontSize: "12px", color: C.text2, letterSpacing: "0.02em" }}>{stratShort(s)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SUB-NAV DROPDOWN ────────────────────────────────────────────────────────
+// Compact dropdown for the current section's sub-views. Lives inside the desktop
+// top-nav on the right, so main-nav + sub-nav collapse from 2 rows to 1.
+function SubNavDropdown({ sections, value, onChange, C }: any) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<any>(null);
+  useEffect(() => {
+    function onDoc(e: any) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const current = sections.find((s: any) => s.id === value);
+  if (!current) return null;
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px",
+        padding: "6px 12px", cursor: "pointer", fontFamily: MONO, display: "inline-flex",
+        alignItems: "center", gap: "8px", whiteSpace: "nowrap", color: C.text,
+        fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase",
+      }}>
+        <span>{current.label}</span>
+        <span style={{ fontSize: "9px", color: C.muted }}>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+          minWidth: "180px", background: C.panel, border: `1px solid ${C.border2}`,
+          borderRadius: "12px", padding: "6px", boxShadow: `0 8px 24px ${C.shadow}`,
+        }}>
+          {sections.map((s: any) => (
+            <button key={s.id} onClick={() => { onChange(s.id); setOpen(false); }} style={{
+              display: "block", width: "100%", background: s.id === value ? C.panel2 : "transparent",
+              border: "none", borderRadius: "8px", padding: "9px 11px", cursor: "pointer",
+              textAlign: "left", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em",
+              textTransform: "uppercase", color: s.id === value ? C.text : C.text2,
+            }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── STRATEGY EDITOR ─────────────────────────────────────────────────────────
+// Inline panel for creating/editing a user-defined strategy. Parity with built-ins:
+// name, code, setups, checklist items, rules.
+function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl }: any) {
+  const [newSetup, setNewSetup] = useState("");
+  const [newCheck, setNewCheck] = useState("");
+  const [newRule, setNewRule] = useState("");
+  const addSetup = () => { if (!newSetup.trim()) return; setDraft((d: any) => ({ ...d, setups: [...d.setups, newSetup.trim()] })); setNewSetup(""); };
+  const removeSetup = (i: number) => setDraft((d: any) => ({ ...d, setups: d.setups.filter((_: any, idx: number) => idx !== i) }));
+  const addCheck = () => { if (!newCheck.trim()) return; setDraft((d: any) => ({ ...d, checklist: [...d.checklist, { id: Date.now() + Math.random(), text: newCheck.trim() }] })); setNewCheck(""); };
+  const removeCheck = (id: any) => setDraft((d: any) => ({ ...d, checklist: d.checklist.filter((x: any) => x.id !== id) }));
+  const addRule = () => { if (!newRule.trim()) return; setDraft((d: any) => ({ ...d, rules: [...d.rules, { id: Date.now() + Math.random(), text: newRule.trim() }] })); setNewRule(""); };
+  const removeRule = (id: any) => setDraft((d: any) => ({ ...d, rules: d.rules.filter((x: any) => x.id !== id) }));
+
+  const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", borderBottom: `1px solid ${C.border}` };
+  const xBtn: React.CSSProperties = { background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px" };
+  const addBtn: React.CSSProperties = { background: "transparent", border: `1px dashed ${C.border2}`, borderRadius: "8px", padding: "10px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted, width: "100%", textAlign: "left" };
+
+  return (
+    <div style={{ border: `1px solid ${C.border2}`, borderRadius: "14px", padding: "20px", background: C.panel, display: "flex", flexDirection: "column", gap: "18px" }}>
+      <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+        {isEdit ? "EDIT STRATEGY" : "NEW STRATEGY"}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px" }}>
+        <div>
+          <label style={lbl}>Name</label>
+          <input value={draft.name} onChange={e => setDraft((d: any) => ({ ...d, name: e.target.value }))}
+            placeholder="e.g. 15-min Scalper" style={inp} />
+        </div>
+        <div>
+          <label style={lbl}>Code (2-4 chars)</label>
+          <input value={draft.code} onChange={e => setDraft((d: any) => ({ ...d, code: e.target.value.toUpperCase().slice(0, 4) }))}
+            placeholder="e.g. SCLP" style={inp} maxLength={4} />
+        </div>
+      </div>
+
+      <div>
+        <label style={lbl}>Setups (optional)</label>
+        <div>
+          {draft.setups.map((s: string, i: number) => (
+            <div key={i} style={row}>
+              <span style={{ flex: 1, fontSize: "14px", color: C.text, fontFamily: BODY }}>{s}</span>
+              <button onClick={() => removeSetup(i)} style={xBtn}>×</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <input value={newSetup} onChange={e => setNewSetup(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addSetup(); }}
+            placeholder="Add a setup…" style={inp} />
+          <button onClick={addSetup} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em" }}>ADD</button>
+        </div>
+      </div>
+
+      <div>
+        <label style={lbl}>Pre-trade checklist</label>
+        <div>
+          {draft.checklist.map((c: any) => (
+            <div key={c.id} style={row}>
+              <span style={{ flex: 1, fontSize: "14px", color: C.text, fontFamily: BODY }}>{c.text}</span>
+              <button onClick={() => removeCheck(c.id)} style={xBtn}>×</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <input value={newCheck} onChange={e => setNewCheck(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addCheck(); }}
+            placeholder="Add a checklist item…" style={inp} />
+          <button onClick={addCheck} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em" }}>ADD</button>
+        </div>
+      </div>
+
+      <div>
+        <label style={lbl}>Rules</label>
+        <div>
+          {draft.rules.map((r: any) => (
+            <div key={r.id} style={row}>
+              <span style={{ flex: 1, fontSize: "14px", color: C.text, fontFamily: BODY }}>{r.text}</span>
+              <button onClick={() => removeRule(r.id)} style={xBtn}>×</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <input value={newRule} onChange={e => setNewRule(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addRule(); }}
+            placeholder="Add a rule…" style={inp} />
+          <button onClick={addRule} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em" }}>ADD</button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>Cancel</button>
+        <button onClick={onSave} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{isEdit ? "Save" : "Create"}</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── EDIT INLINE ─────────────────────────────────────────────────────────────
 function EditInline({ val, onSave, onCancel, C }: any) {
   const [text, setText] = useState(val);
@@ -433,6 +623,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [statsTab, setStatsTab] = useState("overview");
   const [savingTrade, setSavingTrade] = useState(false);
 
+  // Custom strategies: user-defined, same shape as built-ins (name, code, setups, checklist, rules).
+  // Merged into STRATEGIES global on load so stratCode/stratShort keep working unchanged.
+  const [customStrategies, setCustomStrategies] = useState<any[]>([]);
+  const allStrategyNames = [...STRATEGY_NAMES, ...customStrategies.map((s: any) => s.name)];
+  // Custom-strategy editor state
+  const [showStrategyEditor, setShowStrategyEditor] = useState(false);
+  const [editingStrategy, setEditingStrategy] = useState<any>(null);
+  const [strategyDraft, setStrategyDraft] = useState<any>({ name: "", code: "", setups: [], checklist: [], rules: [] });
+
   // Swipe
   const swipeRef = useRef<any>(null);
   const touchStartX = useRef<any>(null);
@@ -445,6 +644,20 @@ export default function Tradr({ user }: { user?: any } = {}) {
   );
 
   useEffect(() => { loadAll(); }, []);
+
+  // ── Auto-publish to circles ──────────────────────────────────────
+  // Circles are the product pillar: any time trades change, every circle
+  // the user is in must reflect the latest stats without a manual tap.
+  // Debounced 800ms to coalesce rapid edits (reactions, comments, rapid saves).
+  useEffect(() => {
+    if (loading) return;
+    if (!myCircles.length) return;
+    const t = setTimeout(() => {
+      myCircles.forEach((c: any) => { publishToCircle(c.code, true); });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades, myCircles, loading]);
 
   async function loadAll() {
     try { const t = await (window as any).storage.get("tradr_trades"); if (t) setTrades(JSON.parse(t.value)); } catch { }
@@ -464,7 +677,66 @@ export default function Tradr({ user }: { user?: any } = {}) {
     try { const dm = await (window as any).storage.get("tradr_dark"); if (dm) setDarkMode(JSON.parse(dm.value)); } catch { }
     try { const ci = await (window as any).storage.get("tradr_circles"); if (ci) setMyCircles(JSON.parse(ci.value)); } catch { }
     try { const st = await (window as any).storage.get("tradr_thresholds"); if (st) setStratThresholds(JSON.parse(st.value)); } catch { }
+    try {
+      const cs = await (window as any).storage.get("tradr_custom_strategies");
+      if (cs) {
+        const parsed = JSON.parse(cs.value);
+        setCustomStrategies(parsed);
+        // Merge into STRATEGIES so stratCode/stratShort/setups lookup work.
+        parsed.forEach((s: any) => { STRATEGIES[s.name] = s; });
+      }
+    } catch { }
     setLoading(false);
+  }
+
+  async function saveCustomStrategies(u: any[]) {
+    // Drop old custom entries from STRATEGIES then add the new set.
+    customStrategies.forEach((s: any) => { delete STRATEGIES[s.name]; });
+    u.forEach((s: any) => { STRATEGIES[s.name] = s; });
+    setCustomStrategies(u);
+    await (window as any).storage.set("tradr_custom_strategies", JSON.stringify(u));
+  }
+
+  function openNewStrategy() {
+    setEditingStrategy(null);
+    setStrategyDraft({ name: "", code: "", setups: [], checklist: [], rules: [] });
+    setShowStrategyEditor(true);
+  }
+  function openEditStrategy(s: any) {
+    setEditingStrategy(s.name);
+    setStrategyDraft({ ...s, setups: [...(s.setups || [])], checklist: [...(s.checklist || [])], rules: [...(s.rules || [])] });
+    setShowStrategyEditor(true);
+  }
+  async function saveStrategyDraft() {
+    const d = strategyDraft;
+    if (!d.name.trim()) { showToast("Name required"); return; }
+    const code = (d.code || d.name).replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "NEW";
+    const clean = { name: d.name.trim(), code, setups: d.setups.filter((x: string) => x?.trim()), checklist: d.checklist.filter((x: any) => x?.text?.trim()), rules: d.rules.filter((x: any) => x?.text?.trim()) };
+    // Block overwriting a built-in.
+    if (STRATEGY_NAMES.includes(clean.name) && editingStrategy !== clean.name) { showToast("Name clashes with a built-in"); return; }
+    let u;
+    if (editingStrategy) u = customStrategies.map((s: any) => s.name === editingStrategy ? clean : s);
+    else u = [...customStrategies, clean];
+    await saveCustomStrategies(u);
+    // Seed checklist/rules state so the Check tab can render the new strategy immediately.
+    if (!stratChecklists[clean.name]) {
+      const cl = clean.checklist.length ? clean.checklist : [];
+      await saveStratChecklists({ ...stratChecklists, [clean.name]: cl });
+    }
+    if (!stratRules[clean.name]) {
+      const rl = clean.rules.length ? clean.rules : [];
+      await saveStratRules({ ...stratRules, [clean.name]: rl });
+    }
+    setShowStrategyEditor(false);
+    showToast(editingStrategy ? "Strategy updated" : "Strategy added");
+  }
+  async function deleteCustomStrategy(name: string) {
+    const u = customStrategies.filter((s: any) => s.name !== name);
+    await saveCustomStrategies(u);
+    const cl = { ...stratChecklists }; delete cl[name]; await saveStratChecklists(cl);
+    const rl = { ...stratRules }; delete rl[name]; await saveStratRules(rl);
+    if (activeStrategy === name) setActiveStrategy(STRATEGY_NAMES[0]);
+    showToast("Strategy deleted");
   }
 
   async function saveTrades(u: any) { setTrades(u); await (window as any).storage.set("tradr_trades", JSON.stringify(u)); }
@@ -510,7 +782,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     } catch { setCircleMsg("Error joining. Try again."); setTimeout(() => setCircleMsg(""), 2500); }
   }
 
-  async function publishToCircle(circleCode: string) {
+  async function publishToCircle(circleCode: string, silent = false) {
     const myCode = getMyCode();
     const entry = {
       memberCode: myCode, name: profile.name || "Trader",
@@ -523,8 +795,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
       topStrategy: Object.entries(stratStats).sort((a: any, b: any) => b[1].w / Math.max(b[1].count, 1) - a[1].w / Math.max(a[1].count, 1))[0]?.[0] || null,
       updatedAt: new Date().toISOString(),
     };
-    await (window as any).storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true);
-    showToast("Stats published");
+    try { await (window as any).storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true); }
+    catch (e) { if (!silent) showToast("Publish failed"); return; }
+    if (!silent) showToast("Stats published");
   }
 
   async function fetchCircleLeaderboard(circle: any) {
@@ -686,7 +959,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const totalItems = checkItems.length;
   const scorePct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
   const insights = generateInsights(trades);
-  const allSetups = STRATEGY_NAMES.flatMap(s => STRATEGIES[s].setups).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+  const allSetups = allStrategyNames.flatMap((s: string) => STRATEGIES[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 
   // ─── SHARED STYLES (editorial) ─────────────────────────────────────────────
   const inp: React.CSSProperties = {
@@ -749,6 +1022,31 @@ export default function Tradr({ user }: { user?: any } = {}) {
     { id: "circles", label: "CIRCLES" },
   ];
 
+  // Sub-section config per main view — fed to the desktop SubNavDropdown so
+  // main-nav + sub-nav fit on one row instead of stacking into two.
+  const HOME_SECTIONS = [
+    { id: "feed", label: "Overview" },
+    { id: "analytics", label: "Analytics" },
+    { id: "ai", label: "Insights" },
+    { id: "rules", label: "Rules" },
+    { id: "settings", label: "Settings" },
+  ];
+  const STATS_SECTIONS = [
+    { id: "overview", label: "Overview" },
+    { id: "strategies", label: "Strategies" },
+    { id: "calendar", label: "Calendar" },
+  ];
+  const CHECKLIST_SECTIONS = [
+    { id: "pretrade", label: "Pre-trade" },
+    { id: "rules", label: "Rules" },
+  ];
+  const subNavFor = (v: string) => {
+    if (v === "home") return { sections: HOME_SECTIONS, value: homeSection, onChange: setHomeSection };
+    if (v === "stats") return { sections: STATS_SECTIONS, value: statsTab, onChange: setStatsTab };
+    if (v === "checklist") return { sections: CHECKLIST_SECTIONS, value: checklistTab, onChange: setChecklistTab };
+    return null;
+  };
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: DARK.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DISPLAY, color: DARK.text }}>
       <div style={{ fontSize: "32px", letterSpacing: "-0.02em", fontWeight: 700 }}>
@@ -795,15 +1093,18 @@ export default function Tradr({ user }: { user?: any } = {}) {
               </button>
             </div>
           </div>
-          {/* Desktop top-nav: horizontal strip of mono text tabs under the wordmark */}
+          {/* Desktop top-nav: main tabs left, current section's sub-nav dropdown right. One row. */}
           {isDesktop && (
-            <nav style={{ display: "flex", gap: "28px", borderTop: `1px solid ${C.border}`, paddingTop: "14px", paddingBottom: "14px", overflowX: "auto" }}>
-              {NAV_TABS.map(tab => (
-                <button key={tab.id} onClick={() => setView(tab.id)}
-                  style={{ background: "none", border: "none", padding: 0, color: view === tab.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", whiteSpace: "nowrap" }}>
-                  {tab.label}
-                </button>
-              ))}
+            <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px", borderTop: `1px solid ${C.border}`, paddingTop: "14px", paddingBottom: "14px" }}>
+              <div style={{ display: "flex", gap: "28px", overflowX: "auto", minWidth: 0 }}>
+                {NAV_TABS.map(tab => (
+                  <button key={tab.id} onClick={() => setView(tab.id)}
+                    style={{ background: "none", border: "none", padding: 0, color: view === tab.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", whiteSpace: "nowrap" }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {(() => { const s = subNavFor(view); return s ? <SubNavDropdown sections={s.sections} value={s.value} onChange={s.onChange} C={C} /> : null; })()}
             </nav>
           )}
         </header>
@@ -814,8 +1115,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {/* ══════════════════════════ HOME ══════════════════════════ */}
           {view === "home" && (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {/* Section tabs — mono text links, not pills */}
-              <HomeSectionTabs homeSection={homeSection} setHomeSection={setHomeSection} C={C} />
+              {/* Section tabs — mobile only; desktop uses the dropdown in the top-nav */}
+              {!isDesktop && <HomeSectionTabs homeSection={homeSection} setHomeSection={setHomeSection} C={C} />}
 
               {/* FEED */}
               {homeSection === "feed" && (
@@ -1025,11 +1326,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
               {/* RULES */}
               {homeSection === "rules" && (
                 <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "16px" }}>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {STRATEGY_NAMES.map(s => <StrategyPill key={s} name={s} selected={activeStrategy === s} onClick={() => { setActiveStrategy(s); setEditingRule(null); }} C={C} />)}
-                  </div>
-                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    Read before every {stratShort(activeStrategy)} session.
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                      Read before every {stratShort(activeStrategy)} session.
+                    </div>
+                    <StrategySelect strategies={allStrategyNames} value={activeStrategy} onChange={(s: string) => { setActiveStrategy(s); setEditingRule(null); }} C={C} align="right" />
                   </div>
                   <div style={{ borderTop: `1px solid ${C.border}` }}>
                     {ruleItems.map((rule: any, idx: number) => (
@@ -1133,7 +1434,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               <div>
                 <label style={lbl}>Strategy</label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
-                  {STRATEGY_NAMES.map(s => <StrategyPill key={s} name={s} selected={form.strategy === s} onClick={() => setForm((f: any) => ({ ...f, strategy: s, setup: "" }))} C={C} />)}
+                  {allStrategyNames.map((s: string) => <StrategyPill key={s} name={s} selected={form.strategy === s} onClick={() => setForm((f: any) => ({ ...f, strategy: s, setup: "" }))} C={C} />)}
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -1196,7 +1497,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 <select value={filter.outcome} onChange={e => setFilter({ ...filter, outcome: e.target.value })} style={sel}><option value="">All outcomes</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "14px", marginBottom: "20px" }}>
-                <select value={filter.strategy} onChange={e => setFilter({ ...filter, strategy: e.target.value, setup: "" })} style={sel}><option value="">All strategies</option>{STRATEGY_NAMES.map(s => <option key={s}>{s}</option>)}</select>
+                <select value={filter.strategy} onChange={e => setFilter({ ...filter, strategy: e.target.value, setup: "" })} style={sel}><option value="">All strategies</option>{allStrategyNames.map((s: string) => <option key={s}>{s}</option>)}</select>
                 <select value={filter.setup} onChange={e => setFilter({ ...filter, setup: e.target.value })} style={sel}><option value="">All setups</option>{(filter.strategy ? STRATEGIES[filter.strategy]?.setups || [] : allSetups).map((s: string) => <option key={s} value={s}>{s.split("(")[0].trim()}</option>)}</select>
               </div>
               {filteredTrades.length === 0 ? (
@@ -1329,14 +1630,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {/* ══════════════════════════ STATS ══════════════════════════ */}
           {view === "stats" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
-              <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px" }}>
-                {[["overview", "Overview"], ["strategies", "Strategies"], ["calendar", "Calendar"]].map(([id, label]) => (
-                  <button key={id} onClick={() => setStatsTab(id)}
-                    style={{ background: "none", border: "none", padding: 0, color: statsTab === id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: statsTab === id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {!isDesktop && (
+                <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px" }}>
+                  {[["overview", "Overview"], ["strategies", "Strategies"], ["calendar", "Calendar"]].map(([id, label]) => (
+                    <button key={id} onClick={() => setStatsTab(id)}
+                      style={{ background: "none", border: "none", padding: 0, color: statsTab === id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: statsTab === id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {statsTab === "overview" && total === 0 && <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: "13px", fontStyle: "italic" }}>Log trades to see stats.</div>}
 
@@ -1467,18 +1770,46 @@ export default function Tradr({ user }: { user?: any } = {}) {
           {/* ══════════════════════════ CHECKLIST ══════════════════════════ */}
           {view === "checklist" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "18px" }}>
-              <SectionKicker label={`PRE-TRADE · ${stratShort(activeStrategy).toUpperCase()}`} C={C} />
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {STRATEGY_NAMES.map(s => <StrategyPill key={s} name={s} selected={activeStrategy === s} onClick={() => { setActiveStrategy(s); setEditingCheckItem(null); setEditingRule(null); }} C={C} />)}
-              </div>
-              <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px", marginTop: "4px" }}>
-                {[{ id: "pretrade", label: "Pre-trade" }, { id: "rules", label: "Rules" }].map(st => (
-                  <button key={st.id} onClick={() => setChecklistTab(st.id)}
-                    style={{ background: "none", border: "none", padding: 0, color: checklistTab === st.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: checklistTab === st.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
-                    {st.label}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <SectionKicker label={`${checklistTab === "rules" ? "RULES" : "PRE-TRADE"} · ${stratShort(activeStrategy).toUpperCase()}`} C={C} />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <StrategySelect strategies={allStrategyNames} value={activeStrategy} onChange={(s: string) => { setActiveStrategy(s); setEditingCheckItem(null); setEditingRule(null); }} C={C} align="right" />
+                  {customStrategies.find((s: any) => s.name === activeStrategy) && (
+                    <>
+                      <button onClick={() => openEditStrategy(customStrategies.find((s: any) => s.name === activeStrategy))}
+                        style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted }}>
+                        Edit
+                      </button>
+                      <button onClick={() => { if (confirm(`Delete "${activeStrategy}"?`)) deleteCustomStrategy(activeStrategy); }}
+                        style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted }}>
+                        Del
+                      </button>
+                    </>
+                  )}
+                  <button onClick={openNewStrategy}
+                    style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    + New
                   </button>
-                ))}
+                </div>
               </div>
+
+              {showStrategyEditor && (
+                <StrategyEditor
+                  draft={strategyDraft} setDraft={setStrategyDraft}
+                  onSave={saveStrategyDraft} onCancel={() => setShowStrategyEditor(false)}
+                  isEdit={!!editingStrategy} C={C} inp={inp} lbl={lbl}
+                />
+              )}
+              {!isDesktop && (
+                <div style={{ display: "flex", gap: "22px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px", marginTop: "4px" }}>
+                  {[{ id: "pretrade", label: "Pre-trade" }, { id: "rules", label: "Rules" }].map(st => (
+                    <button key={st.id} onClick={() => setChecklistTab(st.id)}
+                      style={{ background: "none", border: "none", padding: 0, color: checklistTab === st.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: checklistTab === st.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", marginBottom: "-11px" }}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {checklistTab === "pretrade" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -1574,7 +1905,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               profile={profile} getMyCode={getMyCode} showToast={showToast}
               wins={wins} losses={losses} total={total} winRate={winRate}
               totalPnL={totalPnL} pnlPos={pnlPos} avgRR={avgRR} streak={streak}
-              STRATEGY_NAMES={STRATEGY_NAMES} C={C} inp={inp} sel={sel} lbl={lbl}
+              STRATEGY_NAMES={allStrategyNames} C={C} inp={inp} sel={sel} lbl={lbl}
               pillPrimary={pillPrimary} pillGhost={pillGhost}
             />
           )}
