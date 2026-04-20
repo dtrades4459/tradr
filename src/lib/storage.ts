@@ -89,6 +89,25 @@ async function remoteSet(key: string, value: string, shared: boolean): Promise<v
   }
 }
 
+async function remoteDelete(key: string, shared: boolean): Promise<void> {
+  try {
+    if (shared) {
+      const { error } = await supabase.from("shared_kv").delete().eq("key", key);
+      if (error) console.error("[TRADR][storage.delete][shared]", key, error);
+      return;
+    }
+    if (!currentUserId) return;
+    const { error } = await supabase
+      .from("user_kv")
+      .delete()
+      .eq("user_id", currentUserId)
+      .eq("key", key);
+    if (error) console.error("[TRADR][storage.delete][user]", key, error);
+  } catch (e) {
+    console.error("[TRADR][storage.delete][throw]", key, e);
+  }
+}
+
 async function remoteListByPrefix(prefix: string): Promise<Array<{ key: string; value: string }>> {
   try {
     // Escape SQL LIKE metachars in the prefix so literal `_` / `%` are matched exactly.
@@ -134,42 +153,22 @@ const storage = {
   },
 
   /**
+   * Delete a row from user_kv or shared_kv. Also clears the local cache entry
+   * so a subsequent get() doesn't return the stale value from localStorage.
+   */
+  async delete(key: string, shared: boolean = false): Promise<void> {
+    try {
+      localStorage.removeItem(cacheKey(key, shared));
+    } catch {
+      /* noop */
+    }
+    await remoteDelete(key, shared);
+  },
+
+  /**
    * List every shared_kv row whose key starts with the given prefix.
    * Used to enumerate circle members (one row per member) and similar fan-out
    * reads. Always hits the remote — no local cache.
    */
   async listByPrefix(prefix: string): Promise<Array<{ key: string; value: string }>> {
-    return remoteListByPrefix(prefix);
-  },
-};
-
-// ─── LIFECYCLE ────────────────────────────────────────────────────────────────
-
-/**
- * Install the shim on window.storage. Safe to call multiple times.
- * Pass the authenticated user's id so per-user reads/writes route correctly.
- */
-export function installStorage(userId: string | null): void {
-  currentUserId = userId;
-  (window as any).storage = storage;
-}
-
-/**
- * Wipe the local cache. Call on sign-out so the next user starts clean.
- */
-export function clearStorageCache(): void {
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && (k.startsWith("tradr__user__") || k.startsWith("tradr__shared__"))) {
-        keys.push(k);
-      }
-    }
-    keys.forEach(k => localStorage.removeItem(k));
-  } catch {
-    /* noop */
-  }
-}
-
-export { storage };
+    return remoteListByPrefix(prefix

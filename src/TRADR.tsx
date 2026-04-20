@@ -989,13 +989,59 @@ export default function Tradr({ user }: { user?: any } = {}) {
     async function syncFollows() {
       const mc = getMyCode();
       try {
-        const [fg, fr] = await Promise.all([
+        // New canonical source: per-row edges. Each follow writes TWO rows,
+        // both owned by the follower, so RLS never blocks a second writer:
+        //   tradr_follow_<follower>_<target>    — enumerates my "following"
+        //   tradr_follower_<target>_<follower>  — enumerates my "followers"
+        const [followRows, followerRows, legacyFg, legacyFr] = await Promise.all([
+          (window as any).storage.listByPrefix(`tradr_follow_${mc}_`),
+          (window as any).storage.listByPrefix(`tradr_follower_${mc}_`),
+          // Legacy fallback — users who followed before the per-row refactor
+          // still have single rows. Merge them in for a transparent upgrade.
           (window as any).storage.get(`tradr_following_${mc}`, true),
           (window as any).storage.get(`tradr_followers_${mc}`, true),
         ]);
         if (!alive) return;
-        if (fg) { try { setFollowing(JSON.parse(fg.value) || []); } catch {} }
-        if (fr) { try { setFollowers(JSON.parse(fr.value) || []); } catch {} }
+
+        const followingSet = new Set<string>();
+        const followersSet = new Set<string>();
+
+        // Per-row edges are the source of truth.
+        for (const row of (followRows || [])) {
+          const target = String(row.key).slice(`tradr_follow_${mc}_`.length);
+          if (target) followingSet.add(target);
+        }
+        for (const row of (followerRows || [])) {
+          const follower = String(row.key).slice(`tradr_follower_${mc}_`.length);
+          if (follower) followersSet.add(follower);
+        }
+
+        // Merge legacy lists (read-only fallback; never overwrites per-row data).
+        if (legacyFg) {
+          try { (JSON.parse(legacyFg.value) || []).forEach((c: string) => followingSet.add(c)); } catch {}
+        }
+        if (legacyFr) {
+          try { (JSON.parse(legacyFr.value) || []).forEach((c: string) => followersSet.add(c)); } catch {}
+        }
+
+        setFollowing(Array.from(followingSet));
+        setFollowers(Array.from(followersSet));
+
+        // One-time migration: if we still have a legacy `tradr_following_<mc>`
+        // row, materialize each entry as a per-row edge (both sides, owned by
+        // us) and drop the legacy row. Safe because we own the legacy row.
+        if (legacyFg) {
+          try {
+            const legacy: string[] = JSON.parse(legacyFg.value) || [];
+            await Promise.all(legacy.map(async (target) => {
+              if (!target || target === mc) return;
+              const edge = { follower: mc, target, at: new Date().toISOString() };
+              try { await (window as any).storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
+              try { await (window as any).storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
+            }));
+            try { await (window as any).storage.delete(`tradr_following_${mc}`, true); } catch {}
+          } catch {}
+        }
       } catch {}
     }
     syncFollows();
@@ -1352,44 +1398,35 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
   async function removeFriend(code: string) { await saveFriends(friends.filter(f => f.code !== code)); }
 
-  // ── Follow system (one-way) ─────────────────────────────────────
-  // following = codes I follow. followers = codes following me.
-  // Friends = intersection. Both lists live in shared_kv so the other side
-  // sees the new follower on their next 2-min sync.
+  // ── Follow system (per-row edges, one-way) ─────────────────────
+  // Every follow writes TWO rows, both owned by the follower:
+  //   tradr_follow_<follower>_<target>    — for prefix-listing my "following"
+  //   tradr_follower_<target>_<follower>  — for prefix-listing my "followers"
+  // A single shared list failed RLS the moment a second follower tried to
+  // append (first writer owns the row, second writer's UPDATE is blocked).
+  // Per-row edges sidestep this: each follow creates *new* rows the follower
+  // owns, never updates someone else's.
   async function followUser(code: string) {
     const target = code.trim().toUpperCase();
     if (!target) return;
     const mc = getMyCode();
     if (target === mc) { showToast("That's you"); return; }
     if (following.includes(target)) return;
-    // 1) Update my following list
-    const nextFollowing = [...following, target];
-    setFollowing(nextFollowing);
-    try { await (window as any).storage.set(`tradr_following_${mc}`, JSON.stringify(nextFollowing), true); } catch {}
-    // 2) Append me to target's followers list (merge with whatever's there)
-    try {
-      const r = await (window as any).storage.get(`tradr_followers_${target}`, true);
-      let theirFollowers: string[] = [];
-      try { theirFollowers = r ? JSON.parse(r.value) : []; } catch {}
-      if (!theirFollowers.includes(mc)) theirFollowers.push(mc);
-      await (window as any).storage.set(`tradr_followers_${target}`, JSON.stringify(theirFollowers), true);
-    } catch {}
+    // Optimistic local state
+    setFollowing([...following, target]);
+    const edge = { follower: mc, target, at: new Date().toISOString() };
+    try { await (window as any).storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
+    try { await (window as any).storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
     showToast("Following");
   }
   async function unfollowUser(code: string) {
     const target = code.trim().toUpperCase();
     if (!target) return;
     const mc = getMyCode();
-    const nextFollowing = following.filter(c => c !== target);
-    setFollowing(nextFollowing);
-    try { await (window as any).storage.set(`tradr_following_${mc}`, JSON.stringify(nextFollowing), true); } catch {}
-    try {
-      const r = await (window as any).storage.get(`tradr_followers_${target}`, true);
-      let theirFollowers: string[] = [];
-      try { theirFollowers = r ? JSON.parse(r.value) : []; } catch {}
-      theirFollowers = theirFollowers.filter(c => c !== mc);
-      await (window as any).storage.set(`tradr_followers_${target}`, JSON.stringify(theirFollowers), true);
-    } catch {}
+    setFollowing(following.filter(c => c !== target));
+    // Delete both edges. We own both, so RLS lets us through.
+    try { await (window as any).storage.delete(`tradr_follow_${mc}_${target}`, true); } catch {}
+    try { await (window as any).storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
     showToast("Unfollowed");
   }
   // Friends = mutual follows (I follow them + they follow me).
@@ -3152,34 +3189,4 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fri
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", marginBottom: item.notes ? "12px" : "14px" }}>
                   <span style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{item.pair || "—"}</span>
-                  {item.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{item.rr}R</span>}
-                  {item.pnl && <span style={{ fontFamily: MONO, fontSize: "12px", color: parseFloat(item.pnl) >= 0 ? C.green : C.red, letterSpacing: "0.04em" }}>{parseFloat(item.pnl) >= 0 ? "+" : ""}{item.pnl}R</span>}
-                </div>
-                {item.notes && <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "14px" }}>{item.notes.slice(0, 140)}{item.notes.length > 140 ? "…" : ""}</div>}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {REACTIONS.map(rx => {
-                    const count = (item.reactions || {})[rx] || 0;
-                    return (
-                      <button key={rx} onClick={() => reactToFeed(item.authorCode, item.tradeId, rx)}
-                        style={{ background: count > 0 ? C.text : "transparent", color: count > 0 ? C.bg : C.text, border: `1px solid ${count > 0 ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 11px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>{rx}</span>
-                        {count > 0 && <span>{count}</span>}
-                      </button>
-                    );
-                  })}
-                  {item.comments > 0 && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", alignSelf: "center" }}>{item.comments} NOTES</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {friends.length > 0 && friendFeed.length === 0 && !showAddFriend && (
-        <div style={{ padding: "24px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Ask friends to publish, then hit refresh.</div>
-        </div>
-      )}
-    </div>
-  );
-}
+                  {item.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{item.rr}R<
