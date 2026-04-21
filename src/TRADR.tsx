@@ -3189,4 +3189,34 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fri
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", marginBottom: item.notes ? "12px" : "14px" }}>
                   <span style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{item.pair || "—"}</span>
-                  {item.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{item.rr}R<
+                  {item.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{item.rr}R</span>}
+                  {item.pnl && <span style={{ fontFamily: MONO, fontSize: "12px", color: parseFloat(item.pnl) >= 0 ? C.green : C.red, letterSpacing: "0.04em" }}>{parseFloat(item.pnl) >= 0 ? "+" : ""}{item.pnl}R</span>}
+                </div>
+                {item.notes && <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "14px" }}>{item.notes.slice(0, 140)}{item.notes.length > 140 ? "…" : ""}</div>}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {REACTIONS.map(rx => {
+                    const count = (item.reactions || {})[rx] || 0;
+                    return (
+                      <button key={rx} onClick={() => reactToFeed(item.authorCode, item.tradeId, rx)}
+                        style={{ background: count > 0 ? C.text : "transparent", color: count > 0 ? C.bg : C.text, border: `1px solid ${count > 0 ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 11px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>{rx}</span>
+                        {count > 0 && <span>{count}</span>}
+                      </button>
+                    );
+                  })}
+                  {item.comments > 0 && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", alignSelf: "center" }}>{item.comments} NOTES</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {friends.length > 0 && friendFeed.length === 0 && !showAddFriend && (
+        <div style={{ padding: "24px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
+          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Ask friends to publish, then hit refresh.</div>
+        </div>
+      )}
+    </div>
+  );
+}

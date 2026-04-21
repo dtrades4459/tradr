@@ -73,19 +73,21 @@ async function remoteSet(key: string, value: string, shared: boolean): Promise<v
     const parsed = JSON.parse(value);
     if (shared) {
       if (!currentUserId) return;
-      await supabase.from("shared_kv").upsert(
+      const { error } = await supabase.from("shared_kv").upsert(
         { key, value: parsed, owner_id: currentUserId },
         { onConflict: "key" }
       );
+      if (error) console.error("[TRADR][storage.set][shared]", key, error);
       return;
     }
     if (!currentUserId) return;
-    await supabase.from("user_kv").upsert(
+    const { error } = await supabase.from("user_kv").upsert(
       { user_id: currentUserId, key, value: parsed },
       { onConflict: "user_id,key" }
     );
-  } catch {
-    // Network / RLS error — localStorage still has the data, retry next write.
+    if (error) console.error("[TRADR][storage.set][user]", key, error);
+  } catch (e) {
+    console.error("[TRADR][storage.set][throw]", key, e);
   }
 }
 
@@ -116,9 +118,13 @@ async function remoteListByPrefix(prefix: string): Promise<Array<{ key: string; 
       .from("shared_kv")
       .select("key, value")
       .like("key", `${safe}%`);
-    if (error || !data) return [];
+    if (error || !data) {
+      if (error) console.error("[TRADR][storage.listByPrefix]", prefix, error);
+      return [];
+    }
     return data.map((r: any) => ({ key: r.key as string, value: JSON.stringify(r.value) }));
-  } catch {
+  } catch (e) {
+    console.error("[TRADR][storage.listByPrefix][throw]", prefix, e);
     return [];
   }
 }
@@ -156,7 +162,7 @@ const storage = {
    * Delete a row from user_kv or shared_kv. Also clears the local cache entry
    * so a subsequent get() doesn't return the stale value from localStorage.
    */
-  async delete(key: string, shared: boolean = false): Promise<void> {
+  async del(key: string, shared: boolean = false): Promise<void> {
     try {
       localStorage.removeItem(cacheKey(key, shared));
     } catch {
@@ -166,9 +172,48 @@ const storage = {
   },
 
   /**
+   * Alias for del() — keep both for backward compatibility.
+   */
+  async delete(key: string, shared: boolean = false): Promise<void> {
+    return this.del(key, shared);
+  },
+
+  /**
    * List every shared_kv row whose key starts with the given prefix.
-   * Used to enumerate circle members (one row per member) and similar fan-out
-   * reads. Always hits the remote — no local cache.
+   * Used to enumerate circle members (one row per member), follow edges,
+   * and similar fan-out reads. Always hits the remote — no local cache.
    */
   async listByPrefix(prefix: string): Promise<Array<{ key: string; value: string }>> {
-    return remoteListByPrefix(prefix
+    return remoteListByPrefix(prefix);
+  },
+};
+
+// ─── LIFECYCLE ────────────────────────────────────────────────────────────────
+
+/**
+ * Install the shim on window.storage. Safe to call multiple times.
+ * Pass the authenticated user's id so per-user reads/writes route correctly.
+ */
+export function installStorage(userId: string | null): void {
+  currentUserId = userId;
+  (window as any).storage = storage;
+}
+
+/**
+ * Wipe the local cache. Call on sign-out so the next user starts clean.
+ */
+export function clearStorageCache(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith("tradr__user__") || k.startsWith("tradr__shared__"))) {
+        keys.push(k);
+      }
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  } catch {
+    /* noop */
+  }
+}
+export { storage };
