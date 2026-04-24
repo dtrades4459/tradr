@@ -101,9 +101,27 @@ create trigger shared_kv_touch
   for each row execute function public.touch_updated_at();
 
 
--- ─── 4. (OPTIONAL) Realtime for circles ───────────────────────────────────────
--- Uncomment if you want live leaderboard updates.
--- alter publication supabase_realtime add table public.shared_kv;
+-- ─── 4. Realtime for circles + follows ────────────────────────────────────────
+-- Wired through src/data/circles.ts → subscribeToCircle and
+-- src/data/follows.ts → subscribeToFollows. Without this, those subscriptions
+-- silently no-op and circle membership / follower counts only update on
+-- the next poll (or page reload).
+--
+-- Run this once against your Supabase project. Safe to re-run; the
+-- `drop publication ... add table` is idempotent because Postgres errors
+-- only on a true conflict.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'shared_kv'
+  ) then
+    execute 'alter publication supabase_realtime add table public.shared_kv';
+  end if;
+end $$;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════════

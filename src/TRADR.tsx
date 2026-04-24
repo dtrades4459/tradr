@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./lib/supabase";
+import { subscribeToCircle } from "./data/circles";
+import { subscribeToFollows } from "./data/follows";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 // Strategy icons are now 2-3 letter mono codes (no emoji).
@@ -1045,8 +1047,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
       } catch {}
     }
     syncFollows();
+    // Realtime: re-sync the moment any row touching either side of my follow
+    // graph changes. Falls back to the 2-min poll if Realtime is offline.
+    const unsub = subscribeToFollows(getMyCode(), syncFollows);
     const id = setInterval(syncFollows, 120_000);
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, profile.uid]);
 
@@ -1104,7 +1109,39 @@ export default function Tradr({ user }: { user?: any } = {}) {
     }
     syncCircles();
     const id = setInterval(syncCircles, 120_000);
-    return () => { alive = false; clearInterval(id); };
+
+    // Realtime: subscribe to every circle the user is currently a member of.
+    // The set of circles can change (join/leave/create), so we keep the live
+    // unsubs in a map keyed by circle code and reconcile on each tick.
+    const liveSubs = new Map<string, () => void>();
+    function reconcileSubs() {
+      const wantCodes = new Set(myCirclesRef.current.map((c: any) => c.code));
+      // Drop subs for circles we are no longer in.
+      for (const code of Array.from(liveSubs.keys())) {
+        if (!wantCodes.has(code)) {
+          try { liveSubs.get(code)!(); } catch {}
+          liveSubs.delete(code);
+        }
+      }
+      // Add subs for new circles.
+      for (const code of wantCodes) {
+        if (!liveSubs.has(code)) {
+          try { liveSubs.set(code, subscribeToCircle(code, () => { syncCircles(); })); } catch {}
+        }
+      }
+    }
+    reconcileSubs();
+    // Reconcile every tick so newly-joined circles get a live channel without
+    // waiting for a full reload. Cheap — Map lookups + a few subscribe calls.
+    const recId = setInterval(reconcileSubs, 30_000);
+
+    return () => {
+      alive = false;
+      clearInterval(id);
+      clearInterval(recId);
+      for (const off of liveSubs.values()) { try { off(); } catch {} }
+      liveSubs.clear();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, profile.uid]);
 
@@ -1381,10 +1418,28 @@ export default function Tradr({ user }: { user?: any } = {}) {
   async function saveEditRule(id: any, text: string) { const u = { ...stratRules, [activeStrategy]: ruleItems.map((r: any) => r.id === id ? { ...r, text } : r) }; await saveStratRules(u); setEditingRule(null); }
 
   // Friends
+  // ── Stable user code (rename-safe) ──────────────────────────────
+  // Once a user has a code, it is LOCKED to their profile.code field. Renaming
+  // (changing profile.name) does not change their code — followers and circle
+  // entries keyed to the old code keep working. Only on first call do we
+  // synthesize one from the auth uid (or a random fallback for offline users)
+  // and persist it. This is the fix for BETA-SMOKE-TEST.md Phase 0.2.
   function getMyCode() {
-    const uid = profile.uid || Math.random().toString(36).slice(2, 8).toUpperCase();
-    if (!profile.uid) saveProfile({ ...profile, uid });
-    return `${(profile.name || "TRADER").toUpperCase().replace(/\s+/g, "").slice(0, 6)}-${uid}`;
+    if ((profile as any).code) return (profile as any).code;
+    const authUid = (user as any)?.id;
+    const uid: string = profile.uid || authUid || Math.random().toString(36).slice(2, 10).toUpperCase();
+    const namePart = (profile.name || "").toUpperCase().replace(/\s+/g, "").slice(0, 6);
+    // FNV-1a 32-bit hash for short, stable codes when we have no name.
+    let h = 0x811c9dc5;
+    for (let i = 0; i < uid.length; i++) {
+      h ^= uid.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    const fallback = "T-" + h.toString(16).padStart(8, "0").toUpperCase();
+    const code = namePart ? `${namePart}-${uid}` : fallback;
+    // Persist the code AND the uid so future calls hit the early-return above.
+    saveProfile({ ...profile, uid, code });
+    return code;
   }
   async function addFriend() {
     const code = friendCodeInput.trim().toUpperCase();
@@ -2869,10 +2924,14 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
 function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loadingLB, setLoadingLB] = useState(false);
+  // Tap a row to expand a tiny member card with COPY + Follow CTA. Toggle by
+  // setting to memberCode, clear on a second tap. Resets on circle switch.
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
 
   async function openCircle(circle: any) {
     setActiveCircle(circle);
     setCirclesView("detail");
+    setExpandedMember(null);
     setLoadingLB(true);
     const entries = await fetchCircleLeaderboard(circle);
     setLeaderboard(entries);
@@ -2881,16 +2940,26 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
 
   // Auto-refresh leaderboard every 2 min while sitting on the detail view.
   // The parent's sync effect keeps activeCircle.members fresh, so this picks
-  // up new stats entries from other members without a manual tap.
+  // up new stats entries from other members without a manual tap. Realtime
+  // (subscribeToCircle, wired in TRADR.syncCircles) will trigger fresher
+  // refreshes by updating activeCircle.members; this interval is the floor.
   useEffect(() => {
     if (circlesView !== "detail" || !activeCircle) return;
-    const id = setInterval(async () => {
+    let alive = true;
+    async function refresh() {
       try {
         const entries = await fetchCircleLeaderboard(activeCircle);
-        setLeaderboard(entries);
+        if (alive) setLeaderboard(entries);
       } catch {}
-    }, 120_000);
-    return () => clearInterval(id);
+    }
+    const id = setInterval(refresh, 120_000);
+    // Realtime: re-fetch the leaderboard the moment any row in this circle
+    // changes (member join, entry publish, meta update).
+    let unsub = () => {};
+    try {
+      unsub = subscribeToCircle(activeCircle.code, () => { refresh(); });
+    } catch {}
+    return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
   }, [circlesView, activeCircle, fetchCircleLeaderboard]);
 
   return (
@@ -3064,35 +3133,59 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                   const isMe = entry.memberCode === getMyCode();
                   const pPos = entry.totalPnL >= 0;
                   const pnlCol = i === 0 && pPos ? C.green : pPos ? C.text : C.red;
+                  const isExpanded = expandedMember === entry.memberCode;
+                  const isFollowing = (following || []).includes(entry.memberCode);
                   return (
                     <div key={entry.memberCode}
-                      style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px" }}>
-                      <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted, letterSpacing: "0.08em", minWidth: "28px" }}>{String(i + 1).padStart(2, "0")}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                          {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>· You</span>}
+                      style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <div
+                        onClick={() => setExpandedMember(isExpanded ? null : entry.memberCode)}
+                        style={{ padding: "16px 0", display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px", cursor: "pointer", background: isExpanded ? C.surface : "transparent", paddingLeft: isExpanded ? "10px" : 0, paddingRight: isExpanded ? "10px" : 0, transition: "background 120ms ease" }}>
+                        <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted, letterSpacing: "0.08em", minWidth: "28px" }}>{String(i + 1).padStart(2, "0")}</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+                            <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
+                            {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>· You</span>}
+                          </div>
+                          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "3px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            <span>{entry.total} trades</span>
+                            <span style={{ color: entry.winRate >= 50 ? C.green : entry.winRate > 0 ? C.red : C.muted }}>{entry.winRate.toFixed(0)}% WR</span>
+                            {entry.topStrategy && <span>{stratCode(entry.topStrategy)}</span>}
+                            {entry.streak && entry.streak.count >= 2 && <span style={{ color: entry.streak.type === "Win" ? C.green : C.red }}>{entry.streak.count}{entry.streak.type === "Win" ? "W" : "L"}</span>}
+                          </div>
                         </div>
-                        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "3px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                          <span>{entry.total} trades</span>
-                          <span style={{ color: entry.winRate >= 50 ? C.green : entry.winRate > 0 ? C.red : C.muted }}>{entry.winRate.toFixed(0)}% WR</span>
-                          {entry.topStrategy && <span>{stratCode(entry.topStrategy)}</span>}
-                          {entry.streak && entry.streak.count >= 2 && <span style={{ color: entry.streak.type === "Win" ? C.green : C.red }}>{entry.streak.count}{entry.streak.type === "Win" ? "W" : "L"}</span>}
+                        <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{pPos ? "+" : ""}{entry.totalPnL.toFixed(1)}R</div>
+                          {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R AVG</div> : null}
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                        <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{pPos ? "+" : ""}{entry.totalPnL.toFixed(1)}R</div>
-                        {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R AVG</div> : null}
-                        {!isMe && (() => {
-                          const isFollowing = (following || []).includes(entry.memberCode);
-                          return (
-                            <button onClick={() => isFollowing ? unfollowUser(entry.memberCode) : followUser(entry.memberCode)}
-                              style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "3px 10px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "2px" }}>
-                              {isFollowing ? "Following" : "Follow"}
-                            </button>
-                          );
-                        })()}
-                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: "12px", background: C.surface }}>
+                          <div>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "4px" }}>USER CODE</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.10em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{entry.memberCode}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(entry.memberCode); showToast("Code copied"); }}
+                                style={{ ...pillGhost, padding: "6px 12px", fontSize: "9px" }}>COPY</button>
+                            </div>
+                          </div>
+                          {!isMe && (
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); isFollowing ? unfollowUser(entry.memberCode) : followUser(entry.memberCode); }}
+                                style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "8px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", flex: 1 }}>
+                                {isFollowing ? "✓ Following" : "+ Follow"}
+                              </button>
+                            </div>
+                          )}
+                          {entry.updatedAt && (
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.10em", textTransform: "uppercase" }}>
+                              Last published · {new Date(entry.updatedAt).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
