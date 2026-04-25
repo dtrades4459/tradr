@@ -4,9 +4,93 @@ import { onStorageError } from "./lib/storage";
 import { subscribeToCircle } from "./data/circles";
 import { subscribeToFollows } from "./data/follows";
 
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+
+export interface TradeComment {
+  id: number;
+  author: string;
+  text: string;
+  ts: string;
+}
+
+/** Reactions are stored as arrays of user codes (one entry per reactor).
+ *  Legacy data may contain a plain number — always normalise before display. */
+export type ReactionMap = Record<string, string[] | number>;
+
+export interface Trade {
+  id: number;
+  date: string;
+  pair: string;
+  session: string;
+  bias: string;
+  strategy: string;
+  setup: string;
+  entryPrice: string;
+  slPrice: string;
+  tpPrice: string;
+  rr: string;
+  outcome: string;
+  pnl: string;
+  notes: string;
+  emotions: string;
+  screenshot: string;
+  comments: TradeComment[];
+  reactions: ReactionMap;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Profile {
+  name: string;
+  handle: string;
+  bio: string;
+  avatar: string;
+  broker: string;
+  timezone: string;
+  startDate: string;
+  targetRR: string;
+  maxTradesPerDay: string;
+  uid?: string;
+  code?: string;
+}
+
+export interface CircleMember {
+  name: string;
+  handle: string;
+  avatar: string;
+  code: string;
+  joinedAt: string;
+}
+
+export interface Circle {
+  id: number;
+  code: string;
+  name: string;
+  description: string;
+  strategy: string;
+  privacy: "public" | "private";
+  createdBy: string;
+  createdAt: string;
+  members: CircleMember[];
+  isOwner: boolean;
+}
+
+export interface Insight {
+  kicker: string;
+  text: string;
+  type: "info" | "warning" | "positive" | "danger";
+}
+
+export interface StrategyDef {
+  code: string;
+  setups: string[];
+  checklist: string[];
+  rules: string[];
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 // Strategy icons are now 2-3 letter mono codes (no emoji).
-const STRATEGIES: any = {
+const STRATEGIES: Record<string, StrategyDef> = {
   "ICT / Smart Money": {
     code: "ICT",
     setups: ["OTE (Optimal Trade Entry)","FVG (Fair Value Gap)","Order Block","Breaker Block","Liquidity Sweep","SIBI / BISI","Silver Bullet","Judas Swing","Power of 3","MSS (Market Structure Shift)","Other"],
@@ -277,8 +361,8 @@ function useIsDesktop(breakpoint = 900) {
 
 // ─── AI INSIGHTS ─────────────────────────────────────────────────────────────
 // Icons replaced with short mono kicker labels.
-function generateInsights(trades: any[]) {
-  const insights: any[] = [];
+function generateInsights(trades: Trade[]): Insight[] {
+  const insights: Insight[] = [];
   if (!trades.length) return [{ kicker: "START", text: "Log your first trade to get personalised feedback.", type: "info" }];
   const wins = trades.filter(t => t.outcome === "Win").length;
   const losses = trades.filter(t => t.outcome === "Loss").length;
@@ -286,16 +370,19 @@ function generateInsights(trades: any[]) {
   // Session analysis
   const sesStats: any = {};
   trades.forEach(t => { if (!t.session) return; if (!sesStats[t.session]) sesStats[t.session] = { w: 0, total: 0 }; if (t.outcome === "Win") sesStats[t.session].w++; sesStats[t.session].total++; });
+  // Minimum 10 trades per session before drawing session-level conclusions —
+  // 3 trades is too small a sample to be statistically meaningful.
+  const SESSION_MIN = 10;
   Object.entries(sesStats).forEach(([ses, v]: any) => {
     const swr = v.w / v.total;
-    if (v.total >= 3 && swr < wr - 0.15) insights.push({ kicker: "WARN", text: `Your ${ses} session win rate (${(swr * 100).toFixed(0)}%) is below your average. Consider trading fewer setups here.`, type: "warning" });
-    if (v.total >= 3 && swr > wr + 0.15) insights.push({ kicker: "NOTE", text: `${ses} is your best session with a ${(swr * 100).toFixed(0)}% win rate. Prioritise it.`, type: "positive" });
+    if (v.total >= SESSION_MIN && swr < wr - 0.15) insights.push({ kicker: "WARN", text: `Your ${ses} session win rate (${(swr * 100).toFixed(0)}%) is below your average. Consider trading fewer setups here.`, type: "warning" });
+    if (v.total >= SESSION_MIN && swr > wr + 0.15) insights.push({ kicker: "NOTE", text: `${ses} is your best session with a ${(swr * 100).toFixed(0)}% win rate. Prioritise it.`, type: "positive" });
   });
-  // Strategy analysis
+  // Strategy analysis — also requires SESSION_MIN trades before surfacing a verdict.
   const stratS: any = {};
   trades.forEach(t => { if (!t.strategy) return; if (!stratS[t.strategy]) stratS[t.strategy] = { w: 0, total: 0, pnl: 0 }; if (t.outcome === "Win") stratS[t.strategy].w++; stratS[t.strategy].total++; stratS[t.strategy].pnl += parseFloat(t.pnl) || 0; });
   let bestStrat: string | null = null, bestWR = 0;
-  Object.entries(stratS).forEach(([s, v]: any) => { const swr = v.total ? v.w / v.total : 0; if (v.total >= 3 && swr > bestWR) { bestWR = swr; bestStrat = s; } });
+  Object.entries(stratS).forEach(([s, v]: any) => { const swr = v.total ? v.w / v.total : 0; if (v.total >= SESSION_MIN && swr > bestWR) { bestWR = swr; bestStrat = s; } });
   if (bestStrat) insights.push({ kicker: "EDGE", text: `${stratShort(bestStrat)} is your strongest strategy at ${(bestWR * 100).toFixed(0)}% win rate.`, type: "positive" });
   // Losing streak
   let streak = 0;
@@ -308,12 +395,12 @@ function generateInsights(trades: any[]) {
   if (overtradeDays >= 2) insights.push({ kicker: "WARN", text: `You've exceeded 3 trades/day on ${overtradeDays} occasions. Overtrading may be hurting your results.`, type: "warning" });
   // RR analysis
   const rrTrades = trades.filter(t => t.rr);
-  if (rrTrades.length >= 5) {
+  if (rrTrades.length >= SESSION_MIN) {
     const avgRR = rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length;
     if (avgRR < 1.5) insights.push({ kicker: "R:R", text: `Your average R:R is ${avgRR.toFixed(2)}. Aim for 2R+ to maintain positive expectancy even at 40% win rate.`, type: "warning" });
   }
-  // Positive reinforcement
-  if (wr >= 0.6 && trades.length >= 10) insights.push({ kicker: "HOLD", text: `Solid consistency — ${(wr * 100).toFixed(0)}% win rate over ${trades.length} trades. Stay disciplined.`, type: "positive" });
+  // Positive reinforcement — only after a meaningful sample (20 trades).
+  if (wr >= 0.6 && trades.length >= 20) insights.push({ kicker: "HOLD", text: `Solid consistency — ${(wr * 100).toFixed(0)}% win rate over ${trades.length} trades. Stay disciplined.`, type: "positive" });
   if (!insights.length) insights.push({ kicker: "OKAY", text: "No major issues detected. Keep journaling consistently for deeper insights.", type: "info" });
   return insights;
 }
@@ -917,33 +1004,33 @@ function EditInline({ val, onSave, onCancel, C }: any) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-const EMPTY_TRADE: any = { id: null, date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
-const DEF_PROFILE: any = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2" };
+const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
+const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2" };
 
 export default function Tradr({ user }: { user?: any } = {}) {
-  const [trades, setTrades] = useState<any[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [view, setView] = useState("home");
   // ── Circles state ──────────────────────────────────────────────
-  const [myCircles, setMyCircles] = useState<any[]>([]);
+  const [myCircles, setMyCircles] = useState<Circle[]>([]);
   const [circlesView, setCirclesView] = useState<string>("browse");
-  const [activeCircle, setActiveCircle] = useState<any>(null);
-  const [circleForm, setCircleForm] = useState<any>({ name: "", description: "", strategy: "", privacy: "public" });
+  const [activeCircle, setActiveCircle] = useState<Circle | null>(null);
+  const [circleForm, setCircleForm] = useState<{ name: string; description: string; strategy: string; privacy: string }>({ name: "", description: "", strategy: "", privacy: "public" });
   const [circleJoinCode, setCircleJoinCode] = useState<string>("");
   const [circleMsg, setCircleMsg] = useState<string>("");
   const [darkMode, setDarkMode] = useState(true);
   const isDesktop = useIsDesktop(900);
-  const C: any = darkMode ? DARK : LIGHT;
-  const [form, setForm] = useState<any>(EMPTY_TRADE);
-  const [editId, setEditId] = useState<any>(null);
-  const [filter, setFilter] = useState<any>({ outcome: "", setup: "", pair: "", strategy: "" });
+  const C: typeof DARK = darkMode ? DARK : LIGHT;
+  const [form, setForm] = useState<Partial<Trade>>(EMPTY_TRADE);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<{ outcome: string; setup: string; pair: string; strategy: string }>({ outcome: "", setup: "", pair: "", strategy: "" });
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<any>(null);
-  const [confirmDelete, setConfirmDelete] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(DEF_PROFILE);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [profile, setProfile] = useState<Profile>(DEF_PROFILE);
   const [editingProfile, setEditingProfile] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<any>(DEF_PROFILE);
-  const [commentInputs, setCommentInputs] = useState<any>({});
-  const [friends, setFriends] = useState<any[]>([]);
+  const [profileDraft, setProfileDraft] = useState<Profile>(DEF_PROFILE);
+  const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
+  const [friends, setFriends] = useState<string[]>([]);
   const [friendFeed, setFriendFeed] = useState<any[]>([]);
   // Follow system: one-way. following = codes I follow, followers = codes following me.
   // Friends = intersect(following, followers) — i.e. mutual follows.
@@ -1265,7 +1352,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     showToast("Strategy deleted");
   }
 
-  async function saveTrades(u: any) { setTrades(u); await (window as any).storage.set("tradr_trades", JSON.stringify(u)); }
+  async function saveTrades(u: Trade[]) { setTrades(u); await (window as any).storage.set("tradr_trades", JSON.stringify(u)); }
   async function handleCsvImport(newTrades: any[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
     setIsImportingCsv(true);
@@ -1278,7 +1365,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
       setIsImportingCsv(false);
     }
   }
-  async function saveProfile(u: any) { setProfile(u); await (window as any).storage.set("tradr_profile", JSON.stringify(u)); }
+  async function saveProfile(u: Profile) { setProfile(u); await (window as any).storage.set("tradr_profile", JSON.stringify(u)); }
   async function saveFriends(u: any) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
   async function saveStratChecklists(u: any) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
   async function saveMyCircles(u: any) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
@@ -1412,10 +1499,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
   async function submitTrade() {
     if (!form.pair || !form.date || !form.outcome || savingTrade) return;
     setSavingTrade(true);
-    const base = { comments: [], reactions: {}, ...form };
+    const now = new Date().toISOString();
+    const base = { comments: [], reactions: {}, ...form, updatedAt: now };
     let u;
-    if (editId) { u = trades.map(t => t.id === editId ? { ...base, id: editId } : t); setEditId(null); }
-    else { u = [{ ...base, id: Date.now() }, ...trades]; }
+    if (editId) {
+      // Preserve original createdAt; stamp new updatedAt.
+      u = trades.map(t => t.id === editId ? { ...base, id: editId, createdAt: t.createdAt ?? now } : t);
+      setEditId(null);
+    } else {
+      u = [{ ...base, id: Date.now(), createdAt: now }, ...trades];
+    }
     await saveTrades(u); setForm(EMPTY_TRADE);
     showToast("Trade saved");
     setTimeout(() => setSavingTrade(false), 1500);
@@ -1425,7 +1518,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
   function editTrade(t: any) { setForm(t); setEditId(t.id); setView("log"); }
   async function deleteTrade(id: any) { await saveTrades(trades.filter(t => t.id !== id)); setConfirmDelete(null); showToast("Trade deleted"); }
   async function toggleReaction(tid: any, reaction: any) {
-    const u = trades.map(t => { if (t.id !== tid) return t; const r: any = { ...(t.reactions || {}) }; r[reaction] = (r[reaction] || 0) + 1; return { ...t, reactions: r }; });
+    const myCode = getMyCode();
+    const u = trades.map((t: any) => {
+      if (t.id !== tid) return t;
+      const r: any = { ...(t.reactions || {}) };
+      const current = r[reaction];
+      if (!Array.isArray(current)) {
+        // Migration: old format was a count number. Treat it as having no known reactors
+        // and seed with the current user so they can toggle off next time.
+        r[reaction] = [myCode];
+      } else if (current.includes(myCode)) {
+        // Already reacted — remove (toggle off).
+        const next = current.filter((c: string) => c !== myCode);
+        if (next.length === 0) delete r[reaction];
+        else r[reaction] = next;
+      } else {
+        // Add reaction.
+        r[reaction] = [...current, myCode];
+      }
+      return { ...t, reactions: r };
+    });
     await saveTrades(u);
   }
   async function addComment(tid: any) {
@@ -1436,7 +1548,17 @@ export default function Tradr({ user }: { user?: any } = {}) {
     await saveTrades(u);
     setCommentInputs((p: any) => ({ ...p, [tid]: "" }));
   }
-  async function deleteComment(tid: any, cid: any) { const u = trades.map(t => t.id === tid ? { ...t, comments: (t.comments || []).filter((c: any) => c.id !== cid) } : t); await saveTrades(u); }
+  async function deleteComment(tid: any, cid: any) {
+    const myName = profile.name || "You";
+    // Guard: only let the comment author delete their own comment.
+    const trade = trades.find((t: any) => t.id === tid);
+    const comment = (trade?.comments || []).find((c: any) => c.id === cid);
+    if (!comment) return;
+    const isAuthor = comment.author === myName || comment.author === "You";
+    if (!isAuthor) { showToast("Can't delete someone else's comment"); return; }
+    const u = trades.map((t: any) => t.id === tid ? { ...t, comments: (t.comments || []).filter((c: any) => c.id !== cid) } : t);
+    await saveTrades(u);
+  }
 
   // Screenshot upload
   async function handleScreenshotUpload(e: any, tradeId: any) {
@@ -2220,14 +2342,20 @@ export default function Tradr({ user }: { user?: any } = {}) {
                               <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>REACTIONS</div>
                               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                 {REACTIONS.map(rx => {
-                                  const count = (t.reactions || {})[rx] || 0;
+                                  const raw = (t.reactions || {})[rx];
+                                  // Support both new (string[]) and legacy (number) formats.
+                                  const reactors: string[] = Array.isArray(raw) ? raw : (raw > 0 ? [] : []);
+                                  const count = Array.isArray(raw) ? raw.length : (raw || 0);
+                                  const myCode = profile.code || "";
+                                  const iMine = Array.isArray(raw) && raw.includes(myCode);
                                   return (
                                     <button key={rx} onClick={() => toggleReaction(t.id, rx)}
-                                      style={{ background: count > 0 ? C.text : "transparent", color: count > 0 ? C.bg : C.text, border: `1px solid ${count > 0 ? C.text : C.border2}`, borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
+                                      style={{ background: iMine ? C.text : "transparent", color: iMine ? C.bg : C.text, border: `1px solid ${iMine ? C.text : C.border2}`, borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
                                       <span>{rx}</span>
                                       {count > 0 && <span>{count}</span>}
                                     </button>
                                   );
+                                  void reactors;
                                 })}
                               </div>
                             </div>
@@ -2243,7 +2371,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
                                       <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.04em" }}>{c.author}</span>
                                       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                                         <span style={{ fontFamily: MONO, fontSize: "9px", color: C.dim, letterSpacing: "0.04em" }}>{c.ts}</span>
-                                        <button onClick={() => deleteComment(t.id, c.id)} style={{ background: "none", border: "none", color: C.dim, fontSize: "10px", cursor: "pointer", fontFamily: MONO }}>x</button>
+                                        {(c.author === profile.name || c.author === "You") && (
+                                          <button onClick={() => deleteComment(t.id, c.id)} style={{ background: "none", border: "none", color: C.dim, fontSize: "10px", cursor: "pointer", fontFamily: MONO }}>x</button>
+                                        )}
                                       </div>
                                     </div>
                                     <div style={{ fontSize: "13px", color: C.text2, lineHeight: 1.55, wordBreak: "break-word", fontFamily: BODY }}>{c.text}</div>
