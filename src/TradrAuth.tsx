@@ -79,7 +79,7 @@ const PRINCIPLES: { kicker: string; title: string; body: string }[] = [
 ];
 
 // ─── AUTH FORM ────────────────────────────────────────────────────────────────
-type AuthMode = "signin" | "signup";
+type AuthMode = "signin" | "signup" | "reset" | "reset-sent" | "new-password";
 
 // Username → synthetic email so Supabase auth still works.
 // Users never see this — they only type their username.
@@ -91,9 +91,19 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
+
+  // If user arrives via a password-reset magic link, Supabase fires a
+  // PASSWORD_RECOVERY event — switch to the new-password form automatically.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setMode("new-password");
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function handleSubmit() {
     const u = username.toLowerCase().trim();
@@ -138,10 +148,114 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
     }
   }
 
-  const titles: Record<AuthMode, string> = {
-    signin: "SIGN IN", signup: "CREATE ACCOUNT",
-  };
+  async function handleReset() {
+    const u = username.toLowerCase().trim();
+    if (!u) { setError("Enter your username."); return; }
+    if (!USERNAME_RE.test(u)) { setError("Invalid username format."); return; }
+    setLoading(true); setError("");
+    try {
+      // resetPasswordForEmail sends a magic link to the synthetic email address.
+      const { error: e } = await supabase.auth.resetPasswordForEmail(usernameToEmail(u), {
+        // redirectTo must match an allowed redirect URL in your Supabase project settings.
+        redirectTo: window.location.origin,
+      });
+      if (e) throw e;
+      setMode("reset-sent");
+    } catch (e: any) {
+      setError(e?.message || "Failed to send reset link. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
+  async function handleNewPassword() {
+    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setLoading(true); setError("");
+    try {
+      const { error: e } = await supabase.auth.updateUser({ password: newPassword });
+      if (e) throw e;
+      onSuccess();
+    } catch (e: any) {
+      setError(e?.message || "Failed to update password. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Reset-sent confirmation screen ────────────────────────────────
+  if (mode === "reset-sent") {
+    return (
+      <div style={{ padding: "28px 0 8px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.green, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "16px" }}>
+          — Link sent
+        </div>
+        <p style={{ fontSize: "14px", color: C.text2, lineHeight: 1.65, marginBottom: "20px", fontFamily: BODY }}>
+          Check the inbox linked to your username. Click the link in the email, then come back here to set a new password.
+        </p>
+        <button onClick={() => { setMode("signin"); setUsername(""); setError(""); }} style={{ ...btn(false) }}>
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  // ── New-password screen (after clicking the magic link) ───────────
+  if (mode === "new-password") {
+    return (
+      <div style={{ padding: "28px 0 8px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "20px" }}>
+          — Set new password
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={lbl}>New password</label>
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleNewPassword()}
+              placeholder="min. 6 characters"
+              style={inp}
+              autoComplete="new-password" />
+          </div>
+          {error && <div style={{ fontSize: "13px", color: C.red, fontFamily: BODY }}>{error}</div>}
+          <button onClick={handleNewPassword} disabled={loading} style={{ ...btn(true), marginTop: "8px" }}>
+            {loading ? "…" : "Update password →"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Password reset request screen ─────────────────────────────────
+  if (mode === "reset") {
+    return (
+      <div style={{ padding: "28px 0 8px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "20px" }}>
+          — Reset password
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={lbl}>Username</label>
+            <input type="text" value={username}
+              onChange={e => setUsername(e.target.value.toLowerCase())}
+              onKeyDown={e => e.key === "Enter" && handleReset()}
+              placeholder="yourname"
+              style={inp}
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false} />
+          </div>
+          {error && <div style={{ fontSize: "13px", color: C.red, fontFamily: BODY }}>{error}</div>}
+          <button onClick={handleReset} disabled={loading} style={{ ...btn(true), marginTop: "8px" }}>
+            {loading ? "…" : "Send reset link →"}
+          </button>
+          <button onClick={() => { setMode("signin"); setError(""); }} style={{ background: "none", border: "none", color: C.muted, fontSize: "12px", cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0 }}>
+            ← Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main sign-in / sign-up form ───────────────────────────────────
   return (
     <div style={{ padding: "28px 0 8px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
       {/* Mode toggle — text link pair, no pill */}
@@ -201,9 +315,15 @@ function AuthForm({ onSuccess }: { onSuccess: () => void }) {
           {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
         </button>
 
+        {mode === "signin" && (
+          <button onClick={() => { setMode("reset"); setError(""); }} style={{ background: "none", border: "none", color: C.muted, fontSize: "12px", cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0, marginTop: "2px" }}>
+            Forgot password?
+          </button>
+        )}
+
         {mode === "signup" && (
           <div style={{ fontSize: "12px", color: C.muted, lineHeight: 1.55, marginTop: "4px", fontFamily: BODY }}>
-            Beta — no email required. Lost passwords can't be recovered, so pick one you'll remember.
+            Beta — no email required. Keep a copy of your password somewhere safe.
           </div>
         )}
       </div>

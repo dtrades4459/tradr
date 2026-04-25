@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./lib/supabase";
+import { onStorageError } from "./lib/storage";
 import { subscribeToCircle } from "./data/circles";
 import { subscribeToFollows } from "./data/follows";
 
@@ -82,10 +83,17 @@ const DISPLAY = "'Syne', 'Inter', system-ui, sans-serif";
 const BODY = "'Inter', system-ui, sans-serif";
 const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 
-function calcRR(e: any, s: any, t: any) {
+function calcRR(e: any, s: any, t: any): string {
   const ev = parseFloat(e), sv = parseFloat(s), tv = parseFloat(t);
-  if (!ev || !sv || !tv || ev === sv) return "";
-  return (Math.abs(tv - ev) / Math.abs(ev - sv)).toFixed(2);
+  // Guard against missing inputs (NaN) and division-by-zero (entry === stop loss).
+  if (isNaN(ev) || isNaN(sv) || isNaN(tv)) return "";
+  const risk = Math.abs(ev - sv);
+  if (risk === 0) return ""; // entry === stop loss → undefined R:R
+  const reward = Math.abs(tv - ev);
+  const rr = reward / risk;
+  // Sanity-cap: anything above 100R is almost certainly a data error.
+  if (!isFinite(rr) || rr > 100) return "";
+  return rr.toFixed(2);
 }
 function stratCode(name: string) { return STRATEGIES[name]?.code || name.slice(0, 3).toUpperCase(); }
 
@@ -219,9 +227,28 @@ function rowToTrade(row: Record<string, string>, mapping: Record<string, string>
   };
   return trade;
 }
-// Dedupe key — match on date + pair + entry price.
+// ─── STABLE IMPORT DEDUP KEY ─────────────────────────────────────────────────
+// djb2 hash over multiple fields so dedup survives edits to a single field
+// (e.g. correcting an entry price after import).  The key is only used during
+// CSV import — user-created trades get a Date.now() id instead.
+function _djb2(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+  }
+  return (h >>> 0).toString(36);
+}
 function tradeKey(t: any): string {
-  return `${t.date}|${(t.pair || "").toUpperCase()}|${t.entryPrice || ""}`;
+  const content = [
+    t.date ?? "",
+    (t.pair ?? "").toUpperCase(),
+    t.entryPrice ?? "",
+    t.slPrice ?? "",
+    t.tpPrice ?? "",
+    t.pnl ?? "",
+    t.session ?? "",
+  ].join("|");
+  return _djb2(content);
 }
 function stratShort(name: string) { return name.split("(")[0].trim(); }
 function fmtMonth(y: number, m: number) { return new Date(y, m, 1).toLocaleString("default", { month: "long", year: "numeric" }); }
@@ -953,6 +980,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
   // CSV import panel state
   const [showCsvImport, setShowCsvImport] = useState(false);
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+
+  // Circle action loading states
+  const [isCreatingCircle, setIsCreatingCircle] = useState(false);
+  const [isJoiningCircle, setIsJoiningCircle] = useState(false);
 
   // Swipe
   const swipeRef = useRef<any>(null);
@@ -960,6 +992,14 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const touchStartY = useRef<any>(null);
 
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); }, []);
+
+  // ── Surface Supabase write failures as user-visible toasts ───────────────────
+  // storage.ts calls this callback instead of silently logging to the console.
+  useEffect(() => {
+    onStorageError((_key, _err) => {
+      showToast("Save failed — check your connection");
+    });
+  }, [showToast]);
 
   const [stratThresholds, setStratThresholds] = useState<any>(() =>
     Object.fromEntries(STRATEGY_NAMES.map(s => [s, { minCount: Math.ceil(STRATEGIES[s].checklist.length * 0.75), required: [] }]))
@@ -1228,10 +1268,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
   async function saveTrades(u: any) { setTrades(u); await (window as any).storage.set("tradr_trades", JSON.stringify(u)); }
   async function handleCsvImport(newTrades: any[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
-    const merged = [...newTrades, ...trades];
-    await saveTrades(merged);
-    setShowCsvImport(false);
-    showToast(`Imported ${newTrades.length} trade${newTrades.length === 1 ? "" : "s"}`);
+    setIsImportingCsv(true);
+    try {
+      const merged = [...newTrades, ...trades];
+      await saveTrades(merged);
+      setShowCsvImport(false);
+      showToast(`Imported ${newTrades.length} trade${newTrades.length === 1 ? "" : "s"}`);
+    } finally {
+      setIsImportingCsv(false);
+    }
   }
   async function saveProfile(u: any) { setProfile(u); await (window as any).storage.set("tradr_profile", JSON.stringify(u)); }
   async function saveFriends(u: any) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
@@ -1255,29 +1300,36 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
 
   async function createCircle() {
-    if (!circleForm.name.trim()) return;
-    const code = circleForm.name.replace(/\s+/g, "").toUpperCase().slice(0, 6) + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-    const me = myMemberRecord();
-    const circle = {
-      id: Date.now(), code, name: circleForm.name.trim(),
-      description: circleForm.description.trim(),
-      strategy: circleForm.strategy, privacy: circleForm.privacy,
-      createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
-    };
-    // Write metadata (owned by me) + my own member row.
-    await (window as any).storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
-    await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
-    const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
-    await saveMyCircles(updated);
-    setCircleForm({ name: "", description: "", strategy: "", privacy: "public" });
-    setCirclesView("browse");
-    showToast("Circle created");
+    if (!circleForm.name.trim() || isCreatingCircle) return;
+    setIsCreatingCircle(true);
+    try {
+      const code = circleForm.name.replace(/\s+/g, "").toUpperCase().slice(0, 6) + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const me = myMemberRecord();
+      const circle = {
+        id: Date.now(), code, name: circleForm.name.trim(),
+        description: circleForm.description.trim(),
+        strategy: circleForm.strategy, privacy: circleForm.privacy,
+        createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
+      };
+      // Write metadata (owned by me) + my own member row.
+      await (window as any).storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
+      await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
+      await saveMyCircles(updated);
+      setCircleForm({ name: "", description: "", strategy: "", privacy: "public" });
+      setCirclesView("browse");
+      showToast("Circle created");
+    } finally {
+      setIsCreatingCircle(false);
+    }
   }
 
   async function joinCircle() {
     const code = circleJoinCode.trim().toUpperCase();
     if (!code) { setCircleMsg("Enter a circle code."); return; }
     if (myCircles.find(c => c.code === code)) { setCircleMsg("Already a member."); setTimeout(() => setCircleMsg(""), 2000); return; }
+    if (isJoiningCircle) return;
+    setIsJoiningCircle(true);
     try {
       const res = await (window as any).storage.get("tradr_circle_" + code, true);
       if (!res) { setCircleMsg("Circle not found. Check the code."); setTimeout(() => setCircleMsg(""), 2500); return; }
@@ -1293,6 +1345,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
       setCircleMsg("Joined.");
       setTimeout(() => setCircleMsg(""), 2000);
     } catch { setCircleMsg("Error joining. Try again."); setTimeout(() => setCircleMsg(""), 2500); }
+    finally { setIsJoiningCircle(false); }
   }
 
   async function publishToCircle(circleCode: string, silent = false) {
@@ -1972,7 +2025,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
                           <div><label style={lbl}>Target R:R</label><input type="number" value={profileDraft.targetRR} onChange={e => setProfileDraft({ ...profileDraft, targetRR: e.target.value })} style={inp} /></div>
                           <div><label style={lbl}>Max Trades/Day</label><input type="number" value={profileDraft.maxTradesPerDay} onChange={e => setProfileDraft({ ...profileDraft, maxTradesPerDay: e.target.value })} style={inp} /></div>
                         </div>
-                        <button onClick={async () => { await saveProfile(profileDraft); setEditingProfile(false); showToast("Profile saved"); }} style={{ ...pillPrimary(true), marginTop: "8px" }}>Save profile →</button>
+                        <button onClick={async () => {
+                          const name = (profileDraft.name || "").trim();
+                          const handle = (profileDraft.handle || "").trim();
+                          if (!name) { showToast("Name can't be empty"); return; }
+                          if (!handle) { showToast("Handle can't be empty"); return; }
+                          await saveProfile({ ...profileDraft, name, handle });
+                          setEditingProfile(false);
+                          showToast("Profile saved");
+                        }} style={{ ...pillPrimary(true), marginTop: "8px" }}>Save profile →</button>
                       </div>
                     )}
                   </section>
@@ -3053,8 +3114,8 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
               {circleForm.privacy === "public" ? "Anyone with the code can join." : "Invite only."}
             </div>
           </div>
-          <button onClick={createCircle} style={{ ...pillPrimary(!!circleForm.name.trim()), marginTop: "8px" }}>
-            Create circle →
+          <button onClick={createCircle} disabled={isCreatingCircle || !circleForm.name.trim()} style={{ ...pillPrimary(!!circleForm.name.trim() && !isCreatingCircle), marginTop: "8px" }}>
+            {isCreatingCircle ? "Creating…" : "Create circle →"}
           </button>
         </div>
       )}
@@ -3074,7 +3135,9 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
               onKeyDown={e => e.key === "Enter" && joinCircle()}
               placeholder="TRADR-ABCD-EFGH"
               style={{ ...inp, textAlign: "center", fontFamily: MONO, fontSize: "22px", letterSpacing: "0.14em", padding: "16px 0" }} />
-            <button onClick={joinCircle} style={{ ...pillPrimary(!!circleJoinCode.trim()), marginTop: "20px" }}>Join →</button>
+            <button onClick={joinCircle} disabled={isJoiningCircle || !circleJoinCode.trim()} style={{ ...pillPrimary(!!circleJoinCode.trim() && !isJoiningCircle), marginTop: "20px" }}>
+              {isJoiningCircle ? "Joining…" : "Join →"}
+            </button>
             {circleMsg && <div style={{ fontFamily: BODY, fontSize: "13px", color: circleMsg.toLowerCase().includes("joined") ? C.green : C.red, marginTop: "14px" }}>{circleMsg}</div>}
           </div>
           <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, textAlign: "center", maxWidth: "32ch", margin: "0 auto" }}>

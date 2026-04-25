@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import TradrAuth from "./TradrAuth";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { installStorage } from "./lib/storage";
 
 // Install a no-op storage shim immediately so TRADR.tsx never hits an
@@ -10,6 +11,8 @@ installStorage(null);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <TradrAuth />
+    <ErrorBoundary>
+      <TradrAuth />
+    </ErrorBoundary>
   </React.StrictMode>
 );

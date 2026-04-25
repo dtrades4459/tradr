@@ -17,8 +17,24 @@
 import { supabase } from "./supabase";
 
 type StorageRow = { value: string } | null;
+type StorageErrorCallback = (key: string, error: unknown) => void;
 
 let currentUserId: string | null = null;
+let storageErrorCallback: StorageErrorCallback | null = null;
+
+/**
+ * Register a callback that fires whenever a Supabase write fails.
+ * TRADR.tsx uses this to show a user-visible toast instead of silently
+ * logging to the console.
+ */
+export function onStorageError(cb: StorageErrorCallback): void {
+  storageErrorCallback = cb;
+}
+
+function emitError(key: string, error: unknown): void {
+  console.error("[TRADR][storage]", key, error);
+  storageErrorCallback?.(key, error);
+}
 
 function cacheKey(key: string, shared: boolean): string {
   return shared ? `tradr__shared__${key}` : `tradr__user__${currentUserId ?? "anon"}__${key}`;
@@ -68,26 +84,28 @@ async function remoteGet(key: string, shared: boolean): Promise<StorageRow> {
   }
 }
 
-async function remoteSet(key: string, value: string, shared: boolean): Promise<void> {
+async function remoteSet(key: string, value: string, shared: boolean): Promise<boolean> {
   try {
     const parsed = JSON.parse(value);
     if (shared) {
-      if (!currentUserId) return;
+      if (!currentUserId) return false;
       const { error } = await supabase.from("shared_kv").upsert(
         { key, value: parsed, owner_id: currentUserId },
         { onConflict: "key" }
       );
-      if (error) console.error("[TRADR][storage.set][shared]", key, error);
-      return;
+      if (error) { emitError(key, error); return false; }
+      return true;
     }
-    if (!currentUserId) return;
+    if (!currentUserId) return false;
     const { error } = await supabase.from("user_kv").upsert(
       { user_id: currentUserId, key, value: parsed },
       { onConflict: "user_id,key" }
     );
-    if (error) console.error("[TRADR][storage.set][user]", key, error);
+    if (error) { emitError(key, error); return false; }
+    return true;
   } catch (e) {
-    console.error("[TRADR][storage.set][throw]", key, e);
+    emitError(key, e);
+    return false;
   }
 }
 
@@ -95,7 +113,7 @@ async function remoteDelete(key: string, shared: boolean): Promise<void> {
   try {
     if (shared) {
       const { error } = await supabase.from("shared_kv").delete().eq("key", key);
-      if (error) console.error("[TRADR][storage.delete][shared]", key, error);
+      if (error) emitError(key, error);
       return;
     }
     if (!currentUserId) return;
@@ -104,9 +122,9 @@ async function remoteDelete(key: string, shared: boolean): Promise<void> {
       .delete()
       .eq("user_id", currentUserId)
       .eq("key", key);
-    if (error) console.error("[TRADR][storage.delete][user]", key, error);
+    if (error) emitError(key, error);
   } catch (e) {
-    console.error("[TRADR][storage.delete][throw]", key, e);
+    emitError(key, e);
   }
 }
 
@@ -119,12 +137,12 @@ async function remoteListByPrefix(prefix: string): Promise<Array<{ key: string; 
       .select("key, value")
       .like("key", `${safe}%`);
     if (error || !data) {
-      if (error) console.error("[TRADR][storage.listByPrefix]", prefix, error);
+      if (error) emitError(prefix, error);
       return [];
     }
     return data.map((r: any) => ({ key: r.key as string, value: JSON.stringify(r.value) }));
   } catch (e) {
-    console.error("[TRADR][storage.listByPrefix][throw]", prefix, e);
+    emitError(prefix, e);
     return [];
   }
 }
