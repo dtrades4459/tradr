@@ -52,6 +52,9 @@ export interface Profile {
   maxTradesPerDay: string;
   uid?: string;
   code?: string;
+  /** Short display alias shown on leaderboards instead of the raw code hash.
+   *  3–12 chars, letters/numbers only. Does not affect storage keys. */
+  alias?: string;
 }
 
 export interface CircleMember {
@@ -409,7 +412,7 @@ function generateInsights(trades: Trade[]): Insight[] {
 function Toast({ message, onDone, C }: any) {
   useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
   return (
-    <div style={{ position: "fixed", bottom: "94px", left: "50%", transform: "translateX(-50%)", zIndex: 1000, animation: "rise 0.25s ease", background: C.bg, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "10px 20px", fontSize: "11px", color: C.text, whiteSpace: "nowrap", letterSpacing: "0.08em", fontFamily: MONO, textTransform: "uppercase" }}>
+    <div style={{ position: "fixed", bottom: "calc(52px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", zIndex: 1000, animation: "rise 0.25s ease", background: C.panel, border: `0.5px solid ${C.border2}`, borderRadius: "999px", padding: "9px 18px", fontSize: "10px", color: C.text2, whiteSpace: "nowrap", letterSpacing: "0.10em", fontFamily: MONO, textTransform: "uppercase" }}>
       {message}
     </div>
   );
@@ -1376,7 +1379,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // This avoids the RLS bug where Jason couldn't update Dylon's circle row.
   // Each member only writes their own row, so auth.uid() = owner_id always holds.
   function myMemberRecord() {
-    return { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: getMyCode(), joinedAt: new Date().toISOString() };
+    const storageCode = getMyCode();
+    // alias is the user's chosen display ID (shown on leaderboards).
+    // Falls back to the hash-based storage code if not set.
+    const alias = profile.alias?.trim() || storageCode;
+    return { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: storageCode, alias, joinedAt: new Date().toISOString() };
   }
   async function readCircleMembers(code: string, fallback: any[] = []) {
     try {
@@ -1435,11 +1442,33 @@ export default function Tradr({ user }: { user?: any } = {}) {
     finally { setIsJoiningCircle(false); }
   }
 
+  /** Circle owner removes a member. Deletes their member row + leaderboard entry. */
+  async function kickMember(circleCode: string, memberCode: string) {
+    try {
+      await Promise.all([
+        (window as any).storage.del(`tradr_circle_member_${circleCode}_${memberCode}`, true),
+        (window as any).storage.del(`tradr_circle_entry_${circleCode}_${memberCode}`, true),
+      ]);
+      const updated = myCircles.map((c: Circle) =>
+        c.code !== circleCode ? c : { ...c, members: c.members.filter(m => m.code !== memberCode) }
+      );
+      await saveMyCircles(updated);
+      // Keep activeCircle in sync so leaderboard clears the kicked row immediately.
+      setActiveCircle((prev: Circle | null) =>
+        prev?.code !== circleCode ? prev : { ...prev, members: prev.members.filter(m => m.code !== memberCode) }
+      );
+      showToast("Member removed");
+    } catch {
+      showToast("Couldn't remove member — try again");
+    }
+  }
+
   async function publishToCircle(circleCode: string, silent = false) {
     const myCode = getMyCode();
     const entry = {
       memberCode: myCode, name: profile.name || "Trader",
       handle: profile.handle || "@trader", avatar: profile.avatar || "",
+      alias: profile.alias?.trim() || myCode,
       wins, losses, total,
       winRate: parseFloat(winRate as any),
       totalPnL: parseFloat(totalPnL),
@@ -1824,9 +1853,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
         style={{ maxWidth: isDesktop ? "960px" : "480px", margin: "0 auto", paddingBottom: isDesktop ? "32px" : "84px", minHeight: "100vh", background: C.bg, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
 
         {/* ── MASTHEAD ── */}
-        <header style={{ padding: isDesktop ? "22px 40px 0" : "18px 22px 14px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "18px" : 0 }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "26px" : "22px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>
+        <header style={{ padding: isDesktop ? "18px 40px 0" : "14px 22px 12px", borderBottom: `0.5px solid ${C.border}`, position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
+            <div style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "22px" : "19px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>
               TRADR<span style={{ color: C.blue }}>.</span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "14px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -1839,11 +1868,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
           </div>
           {/* Desktop top-nav: main tabs left, current section's sub-nav dropdown right. One row. */}
           {isDesktop && (
-            <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px", borderTop: `1px solid ${C.border}`, paddingTop: "14px", paddingBottom: "14px" }}>
-              <div style={{ display: "flex", gap: "28px", overflowX: "auto", minWidth: 0 }}>
+            <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px", borderTop: `0.5px solid ${C.border}`, paddingTop: "12px", paddingBottom: "12px" }}>
+              <div style={{ display: "flex", gap: "24px", overflowX: "auto", minWidth: 0 }}>
                 {NAV_TABS.map(tab => (
                   <button key={tab.id} onClick={() => setView(tab.id)}
-                    style={{ background: "none", border: "none", padding: 0, color: view === tab.id ? C.text : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "4px", whiteSpace: "nowrap" }}>
+                    style={{ background: "none", border: "none", padding: 0, color: view === tab.id ? C.text : C.dim, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", borderBottom: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", paddingBottom: "3px", whiteSpace: "nowrap", transition: "color 0.12s ease" }}>
                     {tab.label}
                   </button>
                 ))}
@@ -1864,7 +1893,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
             <div style={{ display: "flex", flexDirection: "column" }}>
               {/* Section sub-nav dropdown — mobile only; desktop uses the dropdown in the top-nav */}
               {!isDesktop && (
-                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `0.5px solid ${C.border}` }}>
                   <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={setHomeSection} C={C} />
                   <GearButton onClick={() => setHomeSection("settings")} active={homeSection === "settings"} C={C} />
                 </div>
@@ -2115,7 +2144,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
               {/* SETTINGS */}
               {homeSection === "settings" && (
-                <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "32px" }}>
+                <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "28px" }}>
+                  {/* Back nav */}
+                  <div>
+                    <button
+                      onClick={() => setHomeSection("feed")}
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.10em", textTransform: "uppercase" }}>
+                      <span style={{ fontSize: "12px" }}>←</span> Overview
+                    </button>
+                  </div>
+
                   {/* Profile */}
                   <section>
                     <SectionKicker label="PROFILE" C={C} />
@@ -2142,6 +2180,18 @@ export default function Tradr({ user }: { user?: any } = {}) {
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                           <div><label style={lbl}>Broker</label><input value={profileDraft.broker} onChange={e => setProfileDraft({ ...profileDraft, broker: e.target.value })} placeholder="IC Markets" style={inp} /></div>
                           <div><label style={lbl}>Timezone</label><input value={profileDraft.timezone} onChange={e => setProfileDraft({ ...profileDraft, timezone: e.target.value })} style={inp} /></div>
+                        </div>
+                        <div>
+                          <label style={lbl}>Circle alias <span style={{ color: C.dim }}>(shown on leaderboards · 3–12 chars)</span></label>
+                          <input
+                            value={profileDraft.alias || ""}
+                            onChange={e => {
+                              const v = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
+                              setProfileDraft({ ...profileDraft, alias: v });
+                            }}
+                            placeholder="e.g. DYLON-PRO"
+                            style={{ ...inp, fontFamily: MONO, letterSpacing: "0.08em" }}
+                          />
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                           <div><label style={lbl}>Target R:R</label><input type="number" value={profileDraft.targetRR} onChange={e => setProfileDraft({ ...profileDraft, targetRR: e.target.value })} style={inp} /></div>
@@ -2714,16 +2764,17 @@ export default function Tradr({ user }: { user?: any } = {}) {
               STRATEGY_NAMES={allStrategyNames} C={C} inp={inp} sel={sel} lbl={lbl}
               pillPrimary={pillPrimary} pillGhost={pillGhost}
               following={following} followUser={followUser} unfollowUser={unfollowUser}
+              kickMember={kickMember}
             />
           )}
         </div>
 
         {/* ── BOTTOM NAV (mobile only — desktop uses the top-nav strip inside the masthead) ── */}
         {!isDesktop && (
-          <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: C.bg, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: C.bg, borderTop: `0.5px solid ${C.border}`, display: "flex", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" }}>
             {NAV_TABS.map(tab => (
               <button key={tab.id} onClick={() => setView(tab.id)}
-                style={{ flex: 1, padding: "14px 4px 14px", background: "none", border: "none", borderTop: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", marginTop: "-1px", color: view === tab.id ? C.text : C.muted, fontSize: "10px", letterSpacing: "0.08em", cursor: "pointer", fontFamily: MONO, textTransform: "uppercase" }}>
+                style={{ flex: 1, padding: "12px 4px 12px", background: "none", border: "none", borderTop: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", marginTop: "-0.5px", color: view === tab.id ? C.text : C.dim, fontSize: "9px", letterSpacing: "0.10em", cursor: "pointer", fontFamily: MONO, textTransform: "uppercase", transition: "color 0.12s ease" }}>
                 {tab.label}
               </button>
             ))}
@@ -2739,8 +2790,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
 // ─── SECTION KICKER ──────────────────────────────────────────────────────────
 function SectionKicker({ label, C }: any) {
   return (
-    <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", display: "flex", alignItems: "center", gap: "12px", textTransform: "uppercase" }}>
-      <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.18em", display: "flex", alignItems: "center", gap: "10px", textTransform: "uppercase" }}>
+      <span style={{ flex: "0 0 16px", height: "0.5px", background: C.border2 }} />
       {label}
     </div>
   );
@@ -3112,7 +3163,7 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
 }
 
 // ─── TRADING CIRCLES (editorial) ─────────────────────────────────────────────
-function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser }: any) {
+function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loadingLB, setLoadingLB] = useState(false);
   // Tap a row to expand a tiny member card with COPY + Follow CTA. Toggle by
@@ -3355,9 +3406,13 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                       {isExpanded && (
                         <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: "12px", background: C.surface }}>
                           <div>
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "4px" }}>USER CODE</div>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "4px" }}>
+                              {entry.alias && entry.alias !== entry.memberCode ? "ALIAS · USER CODE" : "USER CODE"}
+                            </div>
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.10em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{entry.memberCode}</span>
+                              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.10em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                                {entry.alias && entry.alias !== entry.memberCode ? `${entry.alias} · ${entry.memberCode}` : entry.memberCode}
+                              </span>
                               <button
                                 onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(entry.memberCode); showToast("Code copied"); }}
                                 style={{ ...pillGhost, padding: "6px 12px", fontSize: "9px" }}>COPY</button>
@@ -3370,6 +3425,14 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                                 style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "8px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", flex: 1 }}>
                                 {isFollowing ? "✓ Following" : "+ Follow"}
                               </button>
+                              {/* Only circle owner sees kick button */}
+                              {activeCircle?.isOwner && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); kickMember(activeCircle.code, entry.memberCode); }}
+                                  style={{ background: "transparent", color: C.red, border: `1px solid ${C.red}44`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                                  KICK
+                                </button>
+                              )}
                             </div>
                           )}
                           {entry.updatedAt && (
