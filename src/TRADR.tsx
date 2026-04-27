@@ -1035,6 +1035,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
   const [friends, setFriends] = useState<string[]>([]);
   const [friendFeed, setFriendFeed] = useState<any[]>([]);
+  // Track which feed reactions the current user has already added this session.
+  // Key format: `${authorCode}_${tradeId}_${reaction}`. Prevents spam and gives
+  // true toggle semantics even though feed reactions aren't persisted remotely.
+  const [myFeedReactions, setMyFeedReactions] = useState<Set<string>>(new Set());
   // Follow system: one-way. following = codes I follow, followers = codes following me.
   // Friends = intersect(following, followers) — i.e. mutual follows.
   const [following, setFollowing] = useState<string[]>([]);
@@ -1385,11 +1389,24 @@ export default function Tradr({ user }: { user?: any } = {}) {
     const alias = profile.alias?.trim() || storageCode;
     return { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: storageCode, alias, joinedAt: new Date().toISOString() };
   }
+  /** Read the ban list for a circle. Returns a Set of banned member codes. */
+  async function readCircleBans(circleCode: string): Promise<Set<string>> {
+    try {
+      const r = await (window as any).storage.get(`tradr_circle_bans_${circleCode}`, true);
+      if (!r) return new Set();
+      const arr = JSON.parse(r.value);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch { return new Set(); }
+  }
+
   async function readCircleMembers(code: string, fallback: any[] = []) {
     try {
-      const rows = await (window as any).storage.listByPrefix(`tradr_circle_member_${code}_`);
-      if (!rows.length) return fallback;
-      return rows.map((r: any) => JSON.parse(r.value));
+      const [rows, bans] = await Promise.all([
+        (window as any).storage.listByPrefix(`tradr_circle_member_${code}_`),
+        readCircleBans(code),
+      ]);
+      if (!rows.length) return fallback.filter((m: any) => !bans.has(m.code));
+      return rows.map((r: any) => JSON.parse(r.value)).filter((m: any) => !bans.has(m.code));
     } catch { return fallback; }
   }
 
@@ -1442,20 +1459,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
     finally { setIsJoiningCircle(false); }
   }
 
-  /** Circle owner removes a member. Deletes their member row + leaderboard entry. */
+  /** Circle owner removes a member via ban list (RLS-safe — owner writes a row they own). */
   async function kickMember(circleCode: string, memberCode: string) {
     try {
-      await Promise.all([
-        (window as any).storage.del(`tradr_circle_member_${circleCode}_${memberCode}`, true),
-        (window as any).storage.del(`tradr_circle_entry_${circleCode}_${memberCode}`, true),
-      ]);
+      // Read the current ban list, add the member, write it back.
+      // The ban row key is owned by the circle creator so RLS allows the write.
+      const bans = await readCircleBans(circleCode);
+      bans.add(memberCode);
+      await (window as any).storage.set(
+        `tradr_circle_bans_${circleCode}`,
+        JSON.stringify([...bans]),
+        true
+      );
+      // Update local state immediately so the UI reflects the kick without a refresh.
+      const filterKicked = (m: any) => m.code !== memberCode;
       const updated = myCircles.map((c: Circle) =>
-        c.code !== circleCode ? c : { ...c, members: c.members.filter(m => m.code !== memberCode) }
+        c.code !== circleCode ? c : { ...c, members: c.members.filter(filterKicked) }
       );
       await saveMyCircles(updated);
-      // Keep activeCircle in sync so leaderboard clears the kicked row immediately.
       setActiveCircle((prev: Circle | null) =>
-        prev?.code !== circleCode ? prev : { ...prev, members: prev.members.filter(m => m.code !== memberCode) }
+        prev?.code !== circleCode ? prev : { ...prev, members: prev.members.filter(filterKicked) }
       );
       showToast("Member removed");
     } catch {
@@ -1702,8 +1725,21 @@ export default function Tradr({ user }: { user?: any } = {}) {
     setFriendFeed(items);
     await (window as any).storage.set("tradr_feed", JSON.stringify(items));
   }
-  async function reactToFeed(ac: string, tid: any, reaction: string) {
-    setFriendFeed((p: any) => p.map((item: any) => { if (item.authorCode !== ac || item.tradeId !== tid) return item; const r = { ...item.reactions }; r[reaction] = (r[reaction] || 0) + 1; return { ...item, reactions: r }; }));
+  function reactToFeed(ac: string, tid: any, reaction: string) {
+    const key = `${ac}_${tid}_${reaction}`;
+    const alreadyReacted = myFeedReactions.has(key);
+    setMyFeedReactions(prev => {
+      const next = new Set(prev);
+      alreadyReacted ? next.delete(key) : next.add(key);
+      return next;
+    });
+    setFriendFeed((p: any) => p.map((item: any) => {
+      if (item.authorCode !== ac || item.tradeId !== tid) return item;
+      const r = { ...item.reactions };
+      const cur = typeof r[reaction] === "number" ? r[reaction] : (Array.isArray(r[reaction]) ? r[reaction].length : 0);
+      r[reaction] = alreadyReacted ? Math.max(0, cur - 1) : cur + 1;
+      return { ...item, reactions: r };
+    }));
   }
 
   // Stats
@@ -2021,6 +2057,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       friendCodeInput={friendCodeInput} setFriendCodeInput={setFriendCodeInput}
                       friendMsg={friendMsg} addFriend={addFriend} removeFriend={removeFriend}
                       publishFeed={publishFeed} refreshFeed={refreshFeed} reactToFeed={reactToFeed}
+                      myFeedReactions={myFeedReactions}
                       getMyCode={getMyCode} profile={profile} C={C} inp={inp} lbl={lbl} pillGhost={pillGhost} pillPrimary={pillPrimary}
                     />
                   </section>
@@ -2328,9 +2365,25 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 <select value={filter.setup} onChange={e => setFilter({ ...filter, setup: e.target.value })} style={sel}><option value="">All setups</option>{(filter.strategy ? STRATEGIES[filter.strategy]?.setups || [] : allSetups).map((s: string) => <option key={s} value={s}>{s.split("(")[0].trim()}</option>)}</select>
               </div>
               {filteredTrades.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: "13px", fontFamily: BODY, fontStyle: "italic" }}>
-                  No trades match.
-                </div>
+                trades.length === 0 ? (
+                  // True empty — no trades at all yet
+                  <div style={{ textAlign: "center", padding: "72px 0", borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "clamp(22px, 5vw, 28px)", fontWeight: 500, fontStyle: "italic", color: C.text2, letterSpacing: "-0.02em", marginBottom: "10px" }}>
+                      No trades logged yet.
+                    </div>
+                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6, marginBottom: "28px" }}>
+                      Every edge starts with data. Log your first trade.
+                    </div>
+                    <button onClick={() => setView("log")} style={pillPrimary(true)}>
+                      Log a trade →
+                    </button>
+                  </div>
+                ) : (
+                  // Filters active, nothing matches
+                  <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: "13px", fontFamily: BODY, fontStyle: "italic" }}>
+                    No trades match those filters.
+                  </div>
+                )
               ) : (
                 <div style={{ borderTop: `1px solid ${C.border}` }}>
                   {filteredTrades.map(t => {
@@ -3428,7 +3481,13 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                               {/* Only circle owner sees kick button */}
                               {activeCircle?.isOwner && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); kickMember(activeCircle.code, entry.memberCode); }}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await kickMember(activeCircle.code, entry.memberCode);
+                                    // Remove the kicked member from the local leaderboard immediately.
+                                    setLeaderboard(prev => prev.filter(r => r.memberCode !== entry.memberCode));
+                                    setExpandedMember(null);
+                                  }}
                                   style={{ background: "transparent", color: C.red, border: `1px solid ${C.red}44`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
                                   KICK
                                 </button>
@@ -3466,7 +3525,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
 }
 
 // ─── FRIENDS FEED (editorial) ────────────────────────────────────────────────
-function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, friendCodeInput, setFriendCodeInput, friendMsg, addFriend, removeFriend, publishFeed, refreshFeed, reactToFeed, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary }: any) {
+function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, friendCodeInput, setFriendCodeInput, friendMsg, addFriend, removeFriend, publishFeed, refreshFeed, reactToFeed, myFeedReactions, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary }: any) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
@@ -3544,10 +3603,13 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fri
                 {item.notes && <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "14px" }}>{item.notes.slice(0, 140)}{item.notes.length > 140 ? "…" : ""}</div>}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {REACTIONS.map(rx => {
-                    const count = (item.reactions || {})[rx] || 0;
+                    const raw = (item.reactions || {})[rx];
+                    const count = typeof raw === "number" ? raw : (Array.isArray(raw) ? raw.length : 0);
+                    const iMine = myFeedReactions?.has(`${item.authorCode}_${item.tradeId}_${rx}`);
+                    const active = iMine || count > 0;
                     return (
                       <button key={rx} onClick={() => reactToFeed(item.authorCode, item.tradeId, rx)}
-                        style={{ background: count > 0 ? C.text : "transparent", color: count > 0 ? C.bg : C.text, border: `1px solid ${count > 0 ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 11px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
+                        style={{ background: iMine ? C.text : "transparent", color: iMine ? C.bg : C.text, border: `1px solid ${active ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 11px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
                         <span>{rx}</span>
                         {count > 0 && <span>{count}</span>}
                       </button>
