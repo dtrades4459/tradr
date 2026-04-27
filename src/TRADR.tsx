@@ -34,6 +34,7 @@ export interface Trade {
   notes: string;
   emotions: string;
   screenshot: string;
+  pnlDollar: string;
   comments: TradeComment[];
   reactions: ReactionMap;
   createdAt?: string;
@@ -1009,7 +1010,7 @@ function EditInline({ val, onSave, onCancel, C }: any) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
+const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
 const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2" };
 
 export default function Tradr({ user }: { user?: any } = {}) {
@@ -1027,7 +1028,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const C: typeof DARK = darkMode ? DARK : LIGHT;
   const [form, setForm] = useState<Partial<Trade>>(EMPTY_TRADE);
   const [editId, setEditId] = useState<number | null>(null);
-  const [filter, setFilter] = useState<{ outcome: string; setup: string; pair: string; strategy: string }>({ outcome: "", setup: "", pair: "", strategy: "" });
+  const [filter, setFilter] = useState<{ outcome: string; setup: string; pair: string; strategy: string; dateFrom: string; dateTo: string }>({ outcome: "", setup: "", pair: "", strategy: "", dateFrom: "", dateTo: "" });
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -1488,6 +1489,23 @@ export default function Tradr({ user }: { user?: any } = {}) {
     }
   }
 
+  /** Member leaves a circle they joined. Deletes their own member + entry rows
+   *  (they own both, so RLS allows it) and removes from local state. */
+  async function leaveCircle(circleCode: string) {
+    const myCode = getMyCode();
+    try {
+      await Promise.all([
+        (window as any).storage.del(`tradr_circle_member_${circleCode}_${myCode}`, true),
+        (window as any).storage.del(`tradr_circle_entry_${circleCode}_${myCode}`, true),
+      ]);
+    } catch { /* rows may not exist — that's fine */ }
+    const updated = myCircles.filter((c: Circle) => c.code !== circleCode);
+    await saveMyCircles(updated);
+    setActiveCircle(null);
+    setCirclesView("browse");
+    showToast("Left circle");
+  }
+
   async function publishToCircle(circleCode: string, silent = false) {
     const myCode = getMyCode();
     const entry = {
@@ -1751,6 +1769,21 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const total = trades.length;
   const winRate: any = total ? ((wins / total) * 100).toFixed(1) : 0;
   const totalPnL = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0).toFixed(2);
+
+  // ── This-week trades (Mon 00:00 local → now) ──────────────────────────────
+  const weekTrades = (() => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun … 6=Sat
+    const msSinceMonday = ((day === 0 ? 6 : day - 1)) * 86400000
+      + now.getHours() * 3600000 + now.getMinutes() * 60000 + now.getSeconds() * 1000;
+    const weekStart = new Date(now.getTime() - msSinceMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = weekStart.toISOString().split("T")[0];
+    return trades.filter(t => t.date >= weekStartStr);
+  })();
+  const weekPnL = weekTrades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
+  const weekPnLStr = weekPnL.toFixed(2);
+  const weekPnLPos = weekPnL >= 0;
   const rrTrades = trades.filter(t => t.rr);
   const avgRR = rrTrades.length ? (rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length).toFixed(2) : "—";
   const pnlPos = parseFloat(totalPnL) >= 0;
@@ -1763,6 +1796,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
     if (filter.setup && t.setup !== filter.setup) return false;
     if (filter.pair && !t.pair.toLowerCase().includes(filter.pair.toLowerCase())) return false;
     if (filter.strategy && t.strategy !== filter.strategy) return false;
+    if (filter.dateFrom && t.date < filter.dateFrom) return false;
+    if (filter.dateTo && t.date > filter.dateTo) return false;
     return true;
   });
 
@@ -1975,10 +2010,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       THIS WEEK
                     </div>
                     <div style={{ fontFamily: DISPLAY, fontSize: "clamp(56px, 14vw, 84px)", fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 0.95, color: C.text, marginBottom: "8px" }}>
-                      {pnlPos ? "+" : ""}{totalPnL}<span style={{ color: C.muted, fontStyle: "italic", fontWeight: 500 }}>R</span>
+                      {weekPnLPos ? "+" : ""}{weekPnLStr}<span style={{ color: C.muted, fontStyle: "italic", fontWeight: 500 }}>R</span>
                     </div>
                     <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2 }}>
-                      <span style={{ color: pnlPos ? C.green : C.red }}>{pnlPos ? "Up" : "Down"}</span> over {total} trade{total !== 1 ? "s" : ""}.
+                      {weekTrades.length === 0
+                        ? <span style={{ color: C.muted }}>No trades logged this week.</span>
+                        : <><span style={{ color: weekPnLPos ? C.green : C.red }}>{weekPnLPos ? "Up" : "Down"}</span> over {weekTrades.length} trade{weekTrades.length !== 1 ? "s" : ""} this week.</>
+                      }
                     </div>
                   </section>
 
@@ -2338,7 +2376,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div><label style={lbl}>Outcome</label><select name="outcome" value={form.outcome} onChange={handleChange} style={sel}><option value="">Select</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select></div>
-                <div><label style={lbl}>P&L (R multiples)</label><input type="number" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5 or -1" style={inp} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div><label style={lbl}>P&L (R)</label><input type="number" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5 or -1" style={inp} /></div>
+                  <div><label style={lbl}>P&L ($)</label><input type="number" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="e.g. +320" style={inp} /></div>
+                </div>
               </div>
               <div><label style={lbl}>Notes</label><textarea name="notes" value={form.notes} onChange={handleChange} placeholder="What did price do? Why did you enter?" rows={3} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
               <div><label style={lbl}>Emotional State</label><input name="emotions" value={form.emotions} onChange={handleChange} placeholder="Calm, FOMO, disciplined..." style={inp} /></div>
@@ -2390,10 +2431,20 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 <input placeholder="Pair..." value={filter.pair} onChange={e => setFilter({ ...filter, pair: e.target.value })} style={inp} />
                 <select value={filter.outcome} onChange={e => setFilter({ ...filter, outcome: e.target.value })} style={sel}><option value="">All outcomes</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "14px", marginBottom: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "14px" }}>
                 <select value={filter.strategy} onChange={e => setFilter({ ...filter, strategy: e.target.value, setup: "" })} style={sel}><option value="">All strategies</option>{allStrategyNames.map((s: string) => <option key={s}>{s}</option>)}</select>
                 <select value={filter.setup} onChange={e => setFilter({ ...filter, setup: e.target.value })} style={sel}><option value="">All setups</option>{(filter.strategy ? STRATEGIES[filter.strategy]?.setups || [] : allSetups).map((s: string) => <option key={s} value={s}>{s.split("(")[0].trim()}</option>)}</select>
               </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "14px", marginBottom: "20px" }}>
+                <input type="date" value={filter.dateFrom} onChange={e => setFilter({ ...filter, dateFrom: e.target.value })} style={{ ...inp, colorScheme: darkMode ? "dark" : "light" }} />
+                <input type="date" value={filter.dateTo} onChange={e => setFilter({ ...filter, dateTo: e.target.value })} style={{ ...inp, colorScheme: darkMode ? "dark" : "light" }} />
+              </div>
+              {(filter.pair || filter.outcome || filter.strategy || filter.setup || filter.dateFrom || filter.dateTo) && (
+                <button onClick={() => setFilter({ outcome: "", setup: "", pair: "", strategy: "", dateFrom: "", dateTo: "" })}
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0 0 16px", textDecoration: "underline" }}>
+                  Clear filters
+                </button>
+              )}
               {filteredTrades.length === 0 ? (
                 trades.length === 0 ? (
                   // True empty — no trades at all yet
@@ -2439,6 +2490,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                               {t.bias && <span style={{ color: t.bias === "Bullish" ? C.green : t.bias === "Bearish" ? C.red : C.muted }}>{t.bias}</span>}
                               {t.setup && <span>{stratShort(t.setup)}</span>}
                               {t.pnl && <span style={{ color: parseFloat(t.pnl) >= 0 ? C.green : C.red }}>{parseFloat(t.pnl) >= 0 ? "+" : ""}{t.pnl}R</span>}
+                              {t.pnlDollar && <span style={{ color: parseFloat(t.pnlDollar) >= 0 ? C.green : C.red }}>{parseFloat(t.pnlDollar) >= 0 ? "+" : ""}${t.pnlDollar}</span>}
                             </div>
                             {/* Prices */}
                             {t.entryPrice && (
@@ -2848,6 +2900,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               pillPrimary={pillPrimary} pillGhost={pillGhost}
               following={following} followUser={followUser} unfollowUser={unfollowUser}
               kickMember={kickMember}
+              leaveCircle={leaveCircle}
             />
           )}
         </div>
@@ -3542,7 +3595,7 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
 }
 
 // ─── TRADING CIRCLES (editorial) ─────────────────────────────────────────────
-function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember }: any) {
+function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [loadingLB, setLoadingLB] = useState(false);
   // Tap a row to expand a tiny member card with COPY + Follow CTA. Toggle by
@@ -3709,8 +3762,21 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
       {/* ── CIRCLE DETAIL / LEADERBOARD ── */}
       {circlesView === "detail" && activeCircle && (
         <div style={{ display: "flex", flexDirection: "column", gap: "clamp(28px, 4vw, 44px)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px" }}>
             <button onClick={() => { setCirclesView("browse"); setActiveCircle(null); setLeaderboard([]); }} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
+            {/* Non-owners can leave; owners cannot leave their own circle */}
+            {!activeCircle.isOwner && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Leave "${activeCircle.name}"? You can rejoin with the code.`)) {
+                    leaveCircle(activeCircle.code);
+                  }
+                }}
+                style={{ background: "transparent", color: C.muted, border: `0.5px solid ${C.border2}`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}
+              >
+                Leave
+              </button>
+            )}
           </div>
           {/* Circle title */}
           <section>
@@ -3841,8 +3907,23 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
               <div style={{ flex: 1, borderBottom: `1px solid ${C.border2}`, padding: "14px 0", fontFamily: MONO, fontSize: "18px", color: C.text, letterSpacing: "0.14em" }}>{activeCircle.code}</div>
               <button onClick={() => { navigator.clipboard?.writeText(activeCircle.code); showToast("Code copied"); }}
                 style={{ ...pillGhost, padding: "10px 18px" }}>COPY</button>
+              <button
+                onClick={() => {
+                  const msg = `Join my TRADR circle "${activeCircle.name}" — use code ${activeCircle.code} on the Circles tab.`;
+                  if (navigator.share) {
+                    navigator.share({ title: "Join my TRADR circle", text: msg }).catch(() => {});
+                  } else {
+                    navigator.clipboard?.writeText(msg);
+                    showToast("Invite message copied");
+                  }
+                }}
+                style={{ ...pillGhost, padding: "10px 18px" }}>
+                SHARE
+              </button>
             </div>
-            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.5 }}>Share this code so others can join your circle.</div>
+            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.5 }}>
+              COPY copies just the code. SHARE sends a ready-made invite message — or copies it on desktop.
+            </div>
           </section>
         </div>
       )}
