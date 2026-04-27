@@ -124,6 +124,52 @@ begin
 end $$;
 
 
+
+
+-- ─── 5. CIRCLE CHAT MESSAGES ──────────────────────────────────────────────────
+-- Stores real-time chat messages per circle. Any authenticated user can read;
+-- only the sender can insert or delete their own messages.
+create table if not exists public.circle_messages (
+  id           uuid        default gen_random_uuid() primary key,
+  circle_code  text        not null,
+  sender_id    uuid        not null references auth.users(id) on delete cascade,
+  sender_name  text        not null default '',
+  sender_handle text       not null default '',
+  text         text        not null,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists circle_messages_circle_time_idx
+  on public.circle_messages (circle_code, created_at desc);
+
+alter table public.circle_messages enable row level security;
+
+drop policy if exists "circle_messages_select" on public.circle_messages;
+create policy "circle_messages_select" on public.circle_messages
+  for select to authenticated using (true);
+
+drop policy if exists "circle_messages_insert" on public.circle_messages;
+create policy "circle_messages_insert" on public.circle_messages
+  for insert to authenticated with check (auth.uid() = sender_id);
+
+drop policy if exists "circle_messages_delete" on public.circle_messages;
+create policy "circle_messages_delete" on public.circle_messages
+  for delete to authenticated using (auth.uid() = sender_id);
+
+-- Enable realtime for circle chat
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'circle_messages'
+  ) then
+    execute 'alter publication supabase_realtime add table public.circle_messages';
+  end if;
+end $$;
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- Done. Next step: set the Google OAuth provider in Supabase Auth settings
 -- if you want "Continue with Google" to work. Email/password works out of the box.
