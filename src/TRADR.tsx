@@ -1042,6 +1042,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Key format: `${authorCode}_${tradeId}_${reaction}`. Prevents spam and gives
   // true toggle semantics even though feed reactions aren't persisted remotely.
   const [myFeedReactions, setMyFeedReactions] = useState<Set<string>>(new Set());
+  const [pnlMode, setPnlMode] = useState<"r" | "$">("r");
+  const [timeMode, setTimeMode] = useState<"week" | "all">("week");
   // Follow system: one-way. following = codes I follow, followers = codes following me.
   // Friends = intersect(following, followers) — i.e. mutual follows.
   const [following, setFollowing] = useState<string[]>([]);
@@ -1878,6 +1880,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const weekPnL = weekTrades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
   const weekPnLStr = weekPnL.toFixed(2);
   const weekPnLPos = weekPnL >= 0;
+  // Dollar P&L — only from trades that have pnlDollar set
+  const hasDollarData = trades.some(t => t.pnlDollar && t.pnlDollar !== "");
+  const totalPnlDollar = trades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
+  const weekPnlDollar = weekTrades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
   const rrTrades = trades.filter(t => t.rr);
   const avgRR = rrTrades.length ? (rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length).toFixed(2) : "—";
   const pnlPos = parseFloat(totalPnL) >= 0;
@@ -2097,22 +2103,57 @@ export default function Tradr({ user }: { user?: any } = {}) {
               {/* FEED */}
               {homeSection === "feed" && (
                 <div>
-                  {/* Hero stat — this week P&L */}
-                  <section style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
-                    <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
-                      <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
-                      THIS WEEK
-                    </div>
-                    <div style={{ fontFamily: DISPLAY, fontSize: "clamp(56px, 14vw, 84px)", fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 0.95, color: C.text, marginBottom: "8px" }}>
-                      {weekPnLPos ? "+" : ""}{weekPnLStr}<span style={{ color: C.muted, fontStyle: "italic", fontWeight: 500 }}>R</span>
-                    </div>
-                    <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2 }}>
-                      {weekTrades.length === 0
-                        ? <span style={{ color: C.muted }}>No trades logged this week.</span>
-                        : <><span style={{ color: weekPnLPos ? C.green : C.red }}>{weekPnLPos ? "Up" : "Down"}</span> over {weekTrades.length} trade{weekTrades.length !== 1 ? "s" : ""} this week.</>
-                      }
-                    </div>
-                  </section>
+                  {/* Hero stat — P&L with time + unit toggles */}
+                  {(() => {
+                    const isWeek = timeMode === "week";
+                    const isDollar = pnlMode === "$" && hasDollarData;
+                    const val = isWeek
+                      ? (isDollar ? weekPnlDollar : weekPnL)
+                      : (isDollar ? totalPnlDollar : parseFloat(totalPnL));
+                    const valPos = val >= 0;
+                    const valStr = isDollar
+                      ? `${valPos ? "+" : "−"}$${Math.abs(val).toFixed(2)}`
+                      : `${valPos ? "+" : ""}${val.toFixed(2)}`;
+                    const tradeCount = isWeek ? weekTrades.length : total;
+                    return (
+                      <section style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
+                        {/* Toggle row */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+                          {/* Time toggle */}
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            {(["week", "all"] as const).map(m => (
+                              <button key={m} onClick={() => setTimeMode(m)}
+                                style={{ background: timeMode === m ? C.text : "transparent", color: timeMode === m ? C.bg : C.muted, border: `1px solid ${timeMode === m ? C.text : C.border2}`, borderRadius: "999px", padding: "4px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                                {m === "week" ? "This Week" : "All Time"}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Unit toggle — only if dollar data exists */}
+                          {hasDollarData && (
+                            <div style={{ display: "flex", gap: "4px", marginLeft: "auto" }}>
+                              {(["r", "$"] as const).map(m => (
+                                <button key={m} onClick={() => setPnlMode(m)}
+                                  style={{ background: pnlMode === m ? C.text : "transparent", color: pnlMode === m ? C.bg : C.muted, border: `1px solid ${pnlMode === m ? C.text : C.border2}`, borderRadius: "999px", padding: "4px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                                  {m === "r" ? "R" : "$"}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* Big number */}
+                        <div style={{ fontFamily: DISPLAY, fontSize: "clamp(56px, 14vw, 84px)", fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 0.95, color: C.text, marginBottom: "8px" }}>
+                          {valStr}{!isDollar && <span style={{ color: C.muted, fontStyle: "italic", fontWeight: 500 }}>R</span>}
+                        </div>
+                        {/* Subtitle */}
+                        <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2 }}>
+                          {tradeCount === 0
+                            ? <span style={{ color: C.muted }}>{isWeek ? "No trades logged this week." : "No trades logged yet."}</span>
+                            : <><span style={{ color: valPos ? C.green : C.red }}>{valPos ? "Up" : "Down"}</span> over {tradeCount} trade{tradeCount !== 1 ? "s" : ""}{isWeek ? " this week" : " all time"}.</>
+                          }
+                        </div>
+                      </section>
+                    );
+                  })()}
 
                   {/* Secondary stats — mono labels, hairline-separated */}
                   <section style={{ marginTop: "40px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
@@ -2778,7 +2819,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       {[
                         ["Total Trades", total],
                         ["Win Rate", `${winRate}%`],
-                        ["Total P&L", `${pnlPos ? "+" : ""}${totalPnL}R`],
+                        ["Total P&L", pnlMode === "$" && hasDollarData ? `${totalPnlDollar >= 0 ? "+" : "−"}$${Math.abs(totalPnlDollar).toFixed(2)}` : `${pnlPos ? "+" : ""}${totalPnL}R`],
                         ["Average R:R", avgRR === "—" ? "—" : `${avgRR}R`],
                         ["Wins / Losses / B/E", `${wins} / ${losses} / ${bes}`],
                         ["Best Streak", (() => { let best = 0, cur = 0, last: any = null; trades.slice().reverse().forEach((t: any) => { if (t.outcome === "Win") { cur = last === "Win" ? cur + 1 : 1; last = "Win"; best = Math.max(best, cur); } else { last = t.outcome; cur = 0; } }); return best > 0 ? `${best}W` : "—"; })()],
