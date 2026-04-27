@@ -55,6 +55,8 @@ export interface Profile {
   /** Short display alias shown on leaderboards instead of the raw code hash.
    *  3–12 chars, letters/numbers only. Does not affect storage keys. */
   alias?: string;
+  /** Set to true once the user completes the onboarding flow. */
+  onboarded?: boolean;
 }
 
 export interface CircleMember {
@@ -1864,6 +1866,34 @@ export default function Tradr({ user }: { user?: any } = {}) {
     </div>
   );
 
+  // Show onboarding for new users who haven't completed the flow yet.
+  if (!profile.onboarded) {
+    return (
+      <OnboardingFlow
+        C={C}
+        allStrategyNames={allStrategyNames}
+        onComplete={async (name: string, handle: string, strategy: string) => {
+          const updated: Profile = {
+            ...profile,
+            name: name.trim(),
+            handle: handle.trim() || `@${name.trim().toLowerCase().replace(/\s+/g, "")}`,
+            broker: profile.broker,
+            timezone: profile.timezone,
+            startDate: profile.startDate,
+            targetRR: profile.targetRR,
+            maxTradesPerDay: profile.maxTradesPerDay,
+            onboarded: true,
+          };
+          if (strategy) updated.targetRR = profile.targetRR;
+          await saveProfile(updated);
+          // If they picked a strategy, pre-select it in the log form so their first trade is faster.
+          if (strategy) setForm((f: Partial<Trade>) => ({ ...f, strategy }));
+          setView("log");
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: BODY, transition: "background 0.2s, color 0.2s" }}>
       <style>{`
@@ -3211,6 +3241,302 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
           Edit profile in Settings →
         </button>
       </section>
+    </div>
+  );
+}
+
+// ─── ONBOARDING FLOW ──────────────────────────────────────────────────────────
+
+const ONBOARDING_STEPS = ["welcome", "strategy", "ready"] as const;
+type OnboardingStep = typeof ONBOARDING_STEPS[number];
+
+function OnboardingFlow({ C, allStrategyNames, onComplete }: {
+  C: any;
+  allStrategyNames: string[];
+  onComplete: (name: string, handle: string, strategy: string) => Promise<void>;
+}) {
+  const [step, setStep] = useState<OnboardingStep>("welcome");
+  const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [strategy, setStrategy] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [nameErr, setNameErr] = useState("");
+
+  const inp: React.CSSProperties = {
+    background: "transparent", border: "none",
+    borderBottom: `1px solid ${C.border2}`, borderRadius: 0,
+    color: C.text, padding: "14px 0", fontSize: "16px",
+    fontFamily: "'Inter', system-ui, sans-serif", width: "100%", outline: "none",
+  };
+  const pillPrimary = (active: boolean): React.CSSProperties => ({
+    background: active ? C.text : C.border2, color: active ? C.bg : C.muted,
+    border: "none", borderRadius: "999px", padding: "16px 32px",
+    fontSize: "14px", fontWeight: 500, cursor: active ? "pointer" : "default",
+    fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: "0.01em",
+    width: "100%", transition: "background 0.15s",
+  });
+
+  async function finish() {
+    if (saving) return;
+    setSaving(true);
+    await onComplete(name, handle, strategy);
+    setSaving(false);
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh", minHeight: "100dvh",
+      background: C.bg, color: C.text,
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "32px 24px",
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      <div style={{ width: "100%", maxWidth: "420px" }}>
+
+        {/* Wordmark */}
+        <div style={{
+          fontFamily: "'Syne', 'Inter', system-ui, sans-serif",
+          fontSize: "17px", fontWeight: 700, letterSpacing: "-0.01em",
+          color: C.text, marginBottom: "56px",
+        }}>
+          TRADR<span style={{ color: C.blue }}>.</span>
+        </div>
+
+        {/* Step indicator */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "48px" }}>
+          {ONBOARDING_STEPS.map((s, i) => (
+            <div key={s} style={{
+              height: "2px", flex: 1, borderRadius: "1px",
+              background: ONBOARDING_STEPS.indexOf(step) >= i ? C.text : C.border,
+              transition: "background 0.3s",
+            }} />
+          ))}
+        </div>
+
+        {/* ── STEP 1: Welcome + name ── */}
+        {step === "welcome" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <div style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
+              textTransform: "uppercase", marginBottom: "16px",
+            }}>
+              — Step 1 of 3
+            </div>
+            <h1 style={{
+              fontFamily: "'Syne', 'Inter', system-ui, sans-serif",
+              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
+              letterSpacing: "-0.03em", lineHeight: 1.05,
+              color: C.text, marginBottom: "12px",
+            }}>
+              Let's set up<br />
+              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>your profile.</span>
+            </h1>
+            <p style={{
+              fontSize: "14px", color: C.muted, lineHeight: 1.7,
+              marginBottom: "40px",
+            }}>
+              This is how other traders will see you on leaderboards and in circles.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginBottom: "40px" }}>
+              <div>
+                <label style={{
+                  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+                  fontSize: "10px", color: C.muted, letterSpacing: "0.14em",
+                  textTransform: "uppercase", display: "block", marginBottom: "8px",
+                }}>Your name</label>
+                <input
+                  value={name} onChange={e => { setName(e.target.value); setNameErr(""); }}
+                  placeholder="e.g. Dylon" style={inp} autoFocus
+                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("strategy"); }}
+                />
+                {nameErr && <div style={{ fontSize: "12px", color: C.red, marginTop: "6px" }}>{nameErr}</div>}
+              </div>
+              <div>
+                <label style={{
+                  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+                  fontSize: "10px", color: C.muted, letterSpacing: "0.14em",
+                  textTransform: "uppercase", display: "block", marginBottom: "8px",
+                }}>Handle <span style={{ color: C.dim, fontSize: "9px" }}>optional</span></label>
+                <input
+                  value={handle} onChange={e => setHandle(e.target.value)}
+                  placeholder="@yourhandle" style={inp}
+                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("strategy"); }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (!name.trim()) { setNameErr("Name is required."); return; }
+                setStep("strategy");
+              }}
+              style={pillPrimary(!!name.trim())}
+            >
+              Continue →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 2: Primary strategy ── */}
+        {step === "strategy" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <div style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
+              textTransform: "uppercase", marginBottom: "16px",
+            }}>
+              — Step 2 of 3
+            </div>
+            <h1 style={{
+              fontFamily: "'Syne', 'Inter', system-ui, sans-serif",
+              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
+              letterSpacing: "-0.03em", lineHeight: 1.05,
+              color: C.text, marginBottom: "12px",
+            }}>
+              What's your<br />
+              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>main strategy?</span>
+            </h1>
+            <p style={{
+              fontSize: "14px", color: C.muted, lineHeight: 1.7,
+              marginBottom: "32px",
+            }}>
+              We'll pre-load your checklist and rules. You can add more strategies later.
+            </p>
+
+            <div style={{
+              display: "flex", flexDirection: "column", gap: "1px",
+              borderTop: `1px solid ${C.border}`,
+              marginBottom: "36px",
+            }}>
+              {allStrategyNames.map((s: string) => (
+                <div
+                  key={s}
+                  onClick={() => setStrategy(strategy === s ? "" : s)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "16px 0", borderBottom: `1px solid ${C.border}`,
+                    cursor: "pointer",
+                    transition: "opacity 0.12s",
+                  }}
+                >
+                  <span style={{
+                    fontFamily: "'Inter', system-ui, sans-serif",
+                    fontSize: "14px", color: strategy === s ? C.text : C.text2,
+                    fontWeight: strategy === s ? 500 : 400,
+                  }}>{s}</span>
+                  <div style={{
+                    width: "18px", height: "18px", borderRadius: "50%",
+                    border: `1px solid ${strategy === s ? C.text : C.border2}`,
+                    background: strategy === s ? C.text : "transparent",
+                    flexShrink: 0,
+                    transition: "all 0.15s",
+                  }} />
+                </div>
+              ))}
+              {/* Skip option */}
+              <div
+                onClick={() => setStrategy("")}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "16px 0", borderBottom: `1px solid ${C.border}`,
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{
+                  fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+                  fontSize: "11px", color: C.muted, letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}>I'll decide later</span>
+                <div style={{
+                  width: "18px", height: "18px", borderRadius: "50%",
+                  border: `1px solid ${strategy === "" ? C.text : C.border2}`,
+                  background: strategy === "" ? C.text : "transparent",
+                  flexShrink: 0, transition: "all 0.15s",
+                }} />
+              </div>
+            </div>
+
+            <button onClick={() => setStep("ready")} style={pillPrimary(true)}>
+              Continue →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 3: Ready to log ── */}
+        {step === "ready" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <div style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
+              textTransform: "uppercase", marginBottom: "16px",
+            }}>
+              — Step 3 of 3
+            </div>
+            <h1 style={{
+              fontFamily: "'Syne', 'Inter', system-ui, sans-serif",
+              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
+              letterSpacing: "-0.03em", lineHeight: 1.05,
+              color: C.text, marginBottom: "16px",
+            }}>
+              You're in,<br />
+              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>{name || "trader"}.</span>
+            </h1>
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "40px" }}>
+              Your edge is built one trade at a time. Log your first trade — the stats and insights follow automatically.
+            </p>
+
+            {/* Quick summary of what they set */}
+            <div style={{
+              borderTop: `1px solid ${C.border}`,
+              borderBottom: `1px solid ${C.border}`,
+              padding: "20px 0", marginBottom: "36px",
+              display: "flex", flexDirection: "column", gap: "12px",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Name</span>
+                <span style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: "14px", color: C.text }}>{name}</span>
+              </div>
+              {handle && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Handle</span>
+                  <span style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: "14px", color: C.text }}>{handle}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Strategy</span>
+                <span style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: "14px", color: C.text }}>{strategy || "Not set"}</span>
+              </div>
+            </div>
+
+            <button onClick={finish} disabled={saving} style={pillPrimary(!saving)}>
+              {saving ? "Setting up…" : "Log my first trade →"}
+            </button>
+          </div>
+        )}
+
+        {/* Back link */}
+        {step !== "welcome" && (
+          <button
+            onClick={() => setStep(step === "ready" ? "strategy" : "welcome")}
+            style={{
+              background: "none", border: "none", color: C.muted,
+              cursor: "pointer", fontSize: "12px",
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+              letterSpacing: "0.1em", textTransform: "uppercase",
+              marginTop: "20px", padding: "8px 0",
+            }}
+          >
+            ← Back
+          </button>
+        )}
+
+      </div>
+
+      {/* CSS for the rise animation used above */}
+      <style>{`@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
     </div>
   );
 }
