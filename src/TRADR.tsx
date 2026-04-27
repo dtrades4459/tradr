@@ -3802,14 +3802,68 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [lbSort, setLbSort] = useState<"all" | "week">("all");
   const [loadingLB, setLoadingLB] = useState(false);
+  const [circleTab, setCircleTab] = useState<"leaderboard" | "chat">("leaderboard");
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   // Tap a row to expand a tiny member card with COPY + Follow CTA. Toggle by
   // setting to memberCode, clear on a second tap. Resets on circle switch.
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+
+  async function loadChatMessages(circleCode: string) {
+    setChatLoading(true);
+    try {
+      const { data } = await supabase
+        .from("circle_messages")
+        .select("*")
+        .eq("circle_code", circleCode)
+        .order("created_at", { ascending: true })
+        .limit(100);
+      setChatMessages(data || []);
+    } catch {}
+    setChatLoading(false);
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+  }
+
+  async function sendChatMessage(circleCode: string, myId: string) {
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    setChatSending(true);
+    setChatInput("");
+    try {
+      await supabase.from("circle_messages").insert({
+        circle_code: circleCode,
+        sender_id: myId,
+        sender_name: profile.name || "Trader",
+        sender_handle: profile.handle || "",
+        text,
+      });
+    } catch { setChatInput(text); }
+    setChatSending(false);
+  }
+
+  async function deleteChatMessage(id: string) {
+    await supabase.from("circle_messages").delete().eq("id", id);
+    setChatMessages(prev => prev.filter((m: any) => m.id !== id));
+  }
+
+  function fmtMsgTime(iso: string) {
+    const diff = (Date.now() - new Date(iso).getTime()) / 60000;
+    if (diff < 1) return "just now";
+    if (diff < 60) return `${Math.floor(diff)}m ago`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
 
   async function openCircle(circle: any) {
     setActiveCircle(circle);
     setCirclesView("detail");
     setExpandedMember(null);
+    setCircleTab("leaderboard");
+    setChatMessages([]);
+    setChatInput("");
     setLoadingLB(true);
     const entries = await fetchCircleLeaderboard(circle);
     setLeaderboard(entries);
@@ -3837,7 +3891,25 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
     try {
       unsub = subscribeToCircle(activeCircle.code, () => { refresh(); });
     } catch {}
-    return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
+
+    // Realtime chat — new messages pop in without a refresh.
+    const chatChannel = supabase
+      .channel(`circle_chat_${activeCircle.code}`)
+      .on("postgres_changes" as any, {
+        event: "INSERT", schema: "public",
+        table: "circle_messages",
+        filter: `circle_code=eq.${activeCircle.code}`,
+      }, (payload: any) => {
+        setChatMessages(prev => prev.some((m: any) => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      })
+      .subscribe();
+
+    return () => {
+      alive = false; clearInterval(id);
+      try { unsub(); } catch {}
+      supabase.removeChannel(chatChannel);
+    };
   }, [circlesView, activeCircle, fetchCircleLeaderboard]);
 
   return (
@@ -4009,13 +4081,73 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
             <button onClick={() => publishToCircle(activeCircle.code)} style={{ ...pillGhost, width: "100%", padding: "14px 20px" }}>PUBLISH MY STATS →</button>
           </section>
 
-          {/* Leaderboard */}
+          {/* Leaderboard / Chat */}
           <section>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
-              <SectionKicker label="LEADERBOARD" C={C} />
-              <button onClick={async () => { setLoadingLB(true); const e = await fetchCircleLeaderboard(activeCircle); setLeaderboard(e); setLoadingLB(false); }}
-                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>↻ Refresh</button>
+            {/* Tab switcher */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {(["leaderboard", "chat"] as const).map(tab => (
+                  <button key={tab}
+                    onClick={() => { setCircleTab(tab); if (tab === "chat" && chatMessages.length === 0) loadChatMessages(activeCircle.code); }}
+                    style={{ background: circleTab === tab ? C.text : "transparent", color: circleTab === tab ? C.bg : C.muted, border: `1px solid ${circleTab === tab ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 16px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    {tab === "leaderboard" ? "Leaderboard" : "Chat"}
+                  </button>
+                ))}
+              </div>
+              {circleTab === "leaderboard" && (
+                <button onClick={async () => { setLoadingLB(true); const e = await fetchCircleLeaderboard(activeCircle); setLeaderboard(e); setLoadingLB(false); }}
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>↻ Refresh</button>
+              )}
             </div>
+
+            {/* ── CHAT ── */}
+            {circleTab === "chat" && (() => {
+              const myId = profile?.uid;
+              return (
+                <div>
+                  <div style={{ borderTop: `1px solid ${C.border}`, minHeight: "260px", maxHeight: "400px", overflowY: "auto", paddingTop: "8px" }}>
+                    {chatLoading
+                      ? <div style={{ padding: "40px 0", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
+                      : chatMessages.length === 0
+                        ? <div style={{ padding: "48px 0", textAlign: "center" }}>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontStyle: "italic", color: C.text2, marginBottom: "6px" }}>No messages yet.</div>
+                            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted }}>Be the first to say something.</div>
+                          </div>
+                        : chatMessages.map((msg: any) => {
+                            const isMe = msg.sender_id === myId;
+                            return (
+                              <div key={msg.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: isMe ? "flex-end" : "flex-start" }}>
+                                <div style={{ maxWidth: "80%" }}>
+                                  {!isMe && <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em", marginBottom: "4px" }}>{msg.sender_name}{msg.sender_handle ? ` · @${msg.sender_handle}` : ""}</div>}
+                                  <div style={{ background: isMe ? C.text : C.surface, color: isMe ? C.bg : C.text, borderRadius: isMe ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "9px 13px", fontFamily: BODY, fontSize: "14px", lineHeight: 1.5, wordBreak: "break-word" }}>{msg.text}</div>
+                                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, marginTop: "4px", display: "flex", gap: "10px", justifyContent: isMe ? "flex-end" : "flex-start", alignItems: "center" }}>
+                                    <span>{fmtMsgTime(msg.created_at)}</span>
+                                    {isMe && <button onClick={() => deleteChatMessage(msg.id)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "9px", padding: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>Delete</button>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                    }
+                    <div ref={chatBottomRef} />
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", paddingTop: "14px", borderTop: `1px solid ${C.border}`, marginTop: "2px" }}>
+                    <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(activeCircle.code, myId); } }}
+                      placeholder="Message the circle…" rows={2}
+                      style={{ ...inp, flex: 1, resize: "none", lineHeight: 1.5, fontFamily: BODY, fontSize: "14px" }} />
+                    <button onClick={() => sendChatMessage(activeCircle.code, myId)}
+                      disabled={!chatInput.trim() || chatSending}
+                      style={{ ...pillPrimary(!!chatInput.trim() && !chatSending), width: "auto", padding: "10px 18px", opacity: chatSending ? 0.6 : 1, flexShrink: 0 }}>
+                      {chatSending ? "…" : "Send"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── LEADERBOARD ── */}
+            {circleTab === "leaderboard" && (<div>
             {loadingLB ? (
               <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
             ) : leaderboard.length === 0 ? (
@@ -4102,6 +4234,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                 })}
               </div>
             )}
+            </div>)}
           </section>
 
           {/* Invite */}
