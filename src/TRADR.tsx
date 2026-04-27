@@ -1048,6 +1048,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Friends = intersect(following, followers) — i.e. mutual follows.
   const [following, setFollowing] = useState<string[]>([]);
   const [followers, setFollowers] = useState<string[]>([]);
+  const [followerProfiles, setFollowerProfiles] = useState<Array<{ code: string; name: string; handle: string }>>([]);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -1170,9 +1171,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
           const target = String(row.key).slice(`tradr_follow_${mc}_`.length);
           if (target) followingSet.add(target);
         }
+        const profiles: Array<{ code: string; name: string; handle: string }> = [];
         for (const row of (followerRows || [])) {
           const follower = String(row.key).slice(`tradr_follower_${mc}_`.length);
-          if (follower) followersSet.add(follower);
+          if (follower) {
+            followersSet.add(follower);
+            try {
+              const edge = JSON.parse(row.value || "{}");
+              profiles.push({ code: follower, name: edge.name || follower, handle: edge.handle || "" });
+            } catch { profiles.push({ code: follower, name: follower, handle: "" }); }
+          }
         }
 
         // Merge legacy lists (read-only fallback; never overwrites per-row data).
@@ -1185,6 +1193,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
         setFollowing(Array.from(followingSet));
         setFollowers(Array.from(followersSet));
+        setFollowerProfiles(profiles);
 
         // One-time migration: if we still have a legacy `tradr_following_<mc>`
         // row, materialize each entry as a per-row edge (both sides, owned by
@@ -1836,7 +1845,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
   async function refreshFeed() {
     const items: any[] = [];
-    for (const f of friends) { try { const r = await (window as any).storage.get(`tradr_feed_${f.code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { } }
+    // Read feeds from everyone in the new follow system (following) + old friends list
+    const allCodes = new Set([...following, ...friends.map((f: any) => f.code)]);
+    for (const code of allCodes) {
+      try { const r = await (window as any).storage.get(`tradr_feed_${code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { }
+    }
     items.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
     setFriendFeed(items);
     await (window as any).storage.set("tradr_feed", JSON.stringify(items));
@@ -2318,7 +2331,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       followHandleInput={followHandleInput} setFollowHandleInput={setFollowHandleInput}
                       followHandleMsg={followHandleMsg} followHandleLoading={followHandleLoading}
                       followByHandle={followByHandle}
-                      removeFriend={removeFriend}
+                      removeFriend={removeFriend} unfollowUser={unfollowUser}
+                      following={following} followers={followers} followerProfiles={followerProfiles}
+                      followUser={followUser}
                       publishFeed={publishFeed} refreshFeed={refreshFeed} reactToFeed={reactToFeed}
                       myFeedReactions={myFeedReactions}
                       getMyCode={getMyCode} profile={profile} C={C} inp={inp} lbl={lbl} pillGhost={pillGhost} pillPrimary={pillPrimary}
@@ -4269,11 +4284,11 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
 }
 
 // ─── FRIENDS FEED (editorial) ────────────────────────────────────────────────
-function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, followHandleInput, setFollowHandleInput, followHandleMsg, followHandleLoading, followByHandle, removeFriend, publishFeed, refreshFeed, reactToFeed, myFeedReactions, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary }: any) {
+function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, followHandleInput, setFollowHandleInput, followHandleMsg, followHandleLoading, followByHandle, followUser, removeFriend, unfollowUser, following, followers, followerProfiles, publishFeed, refreshFeed, reactToFeed, myFeedReactions, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary }: any) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
-        <SectionKicker label={`FRIENDS · ${friends.length}`} C={C} />
+        <SectionKicker label={`FRIENDS · ${following?.length || 0} following · ${followerProfiles?.length || 0} followers`} C={C} />
         <div style={{ display: "flex", gap: "10px" }}>
           {friends.length > 0 && <button onClick={async () => { await publishFeed(); await refreshFeed(); }}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>↻ Refresh</button>}
@@ -4310,18 +4325,54 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fol
               </div>
             )}
           </div>
-          {friends.length > 0 && (
+          {(following?.length > 0 || followerProfiles?.length > 0) && (
             <div style={{ marginTop: "22px", paddingTop: "16px", borderTop: `1px solid ${C.border}` }}>
-              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>FOLLOWING · {friends.length}</div>
-              {friends.map((f: any) => (
-                <div key={f.code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                  <div>
-                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{f.name}</div>
-                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>{f.handle ? `@${f.handle}` : f.code}</div>
-                  </div>
-                  <button onClick={() => removeFriend(f.code)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Unfollow</button>
+              {/* FOLLOWING */}
+              {following?.length > 0 && (
+                <div style={{ marginBottom: followerProfiles?.length > 0 ? "20px" : 0 }}>
+                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>FOLLOWING · {following.length}</div>
+                  {following.map((code: string) => {
+                    const f = friends.find((x: any) => x.code === code) || { code, name: code, handle: "" };
+                    const followsBack = followers?.includes(code);
+                    return (
+                      <div key={code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{f.name}</span>
+                            {followsBack && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.08em", border: `1px solid ${C.green}`, borderRadius: "4px", padding: "1px 5px" }}>FOLLOWS YOU</span>}
+                          </div>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>{f.handle ? `@${f.handle}` : code}</div>
+                        </div>
+                        <button onClick={() => unfollowUser(code)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Unfollow</button>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
+              {/* FOLLOWERS */}
+              {followerProfiles?.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>FOLLOWERS · {followerProfiles.length}</div>
+                  {followerProfiles.map((f: any) => {
+                    const iFollow = following?.includes(f.code);
+                    return (
+                      <div key={f.code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <div>
+                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{f.name || f.code}</div>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>{f.handle ? `@${f.handle}` : f.code}</div>
+                        </div>
+                        {!iFollow && (
+                          <button onClick={() => { setFollowHandleInput(f.handle || f.code); followByHandle(); }}
+                            style={{ background: "none", border: `1px solid ${C.text}`, color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "5px 10px", borderRadius: "4px" }}>
+                            Follow back
+                          </button>
+                        )}
+                        {iFollow && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green, letterSpacing: "0.08em" }}>MUTUAL</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
