@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import TradrAuth from "./TradrAuth";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { installStorage } from "./lib/storage";
+import "./index.css";
 
 // Install a no-op storage shim immediately so TRADR.tsx never hits an
 // undefined `window.storage` during early renders. Once the user signs in,
