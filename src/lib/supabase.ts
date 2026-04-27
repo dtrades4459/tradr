@@ -7,4 +7,4 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("[TRADR] Missing Supabase env vars. Copy .env.example → .env and fill in your project values.");
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_K

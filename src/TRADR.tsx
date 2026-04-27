@@ -1118,6 +1118,24 @@ export default function Tradr({ user }: { user?: any } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades, myCircles, loading]);
 
+  // ── Auto-publish my feed whenever trades change ───────────────────
+  // Friends see fresh data without the user ever tapping "Publish".
+  // Debounced 1 s to avoid hammering on rapid edits.
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => { publishFeed(); }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades, loading]);
+
+  // ── Periodic auto-refresh of inbound friend feed (every 2 min) ───
+  useEffect(() => {
+    if (loading || !friends.length) return;
+    const id = setInterval(() => { refreshFeed(); }, 2 * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, friends]);
+
   // ── Follows sync (every 2 min) ───────────────────────────────────
   // Load my follow lists from shared_kv and refresh periodically so counts
   // update when someone follows you back without a page reload.
@@ -1375,7 +1393,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
       setIsImportingCsv(false);
     }
   }
-  async function saveProfile(u: Profile) { setProfile(u); await (window as any).storage.set("tradr_profile", JSON.stringify(u)); }
+  async function saveProfile(u: Profile) {
+    setProfile(u);
+    await (window as any).storage.set("tradr_profile", JSON.stringify(u));
+    // Register (or update) the handle in the shared lookup table so others
+    // can follow this user by @handle. Pass the old handle so the stale row
+    // gets cleaned up if the handle changed.
+    if (u.handle) {
+      registerHandle(u.handle, profile.handle || null);
+    }
+  }
   async function saveFriends(u: any) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
   async function saveStratChecklists(u: any) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
   async function saveMyCircles(u: any) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
@@ -1515,6 +1542,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
       wins, losses, total,
       winRate: parseFloat(winRate as any),
       totalPnL: parseFloat(totalPnL),
+      weekPnL: weekPnL,
       avgRR: avgRR === "—" ? 0 : parseFloat(avgRR),
       streak: streak.count > 0 ? { type: streak.type, count: streak.count } : null,
       topStrategy: Object.entries(stratStats).sort((a: any, b: any) => b[1].w / Math.max(b[1].count, 1) - a[1].w / Math.max(a[1].count, 1))[0]?.[0] || null,
@@ -1700,6 +1728,42 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
   async function removeFriend(code: string) { await saveFriends(friends.filter(f => f.code !== code)); }
 
+  // ── Handle registry ────────────────────────────────────────────
+  // Maps @handle → { code, name } in shared_kv. Owner = the handle's user,
+  // so only they can update/delete their own handle row (RLS-safe).
+  // Key: `tradr_handle_${normalised}` where normalised = lowercase, no @.
+  function normaliseHandle(h: string): string {
+    return h.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+  }
+  async function resolveHandle(handle: string): Promise<{ code: string; name: string } | null> {
+    try {
+      const key = `tradr_handle_${normaliseHandle(handle)}`;
+      const r = await (window as any).storage.get(key, true);
+      if (!r) return null;
+      return JSON.parse(r.value);
+    } catch { return null; }
+  }
+  async function registerHandle(handle: string, oldHandle: string | null): Promise<void> {
+    const mc = getMyCode();
+    const norm = normaliseHandle(handle);
+    if (!norm) return;
+    // Clean up old handle row if the handle changed (we own it, RLS allows delete).
+    if (oldHandle && normaliseHandle(oldHandle) !== norm) {
+      try { await (window as any).storage.del(`tradr_handle_${normaliseHandle(oldHandle)}`, true); } catch {}
+    }
+    await (window as any).storage.set(
+      `tradr_handle_${norm}`,
+      JSON.stringify({ code: mc, name: profile.name || "Trader" }),
+      true
+    );
+  }
+  async function isHandleTaken(handle: string): Promise<boolean> {
+    const existing = await resolveHandle(handle);
+    if (!existing) return false;
+    // It's taken only if owned by someone else.
+    return existing.code !== getMyCode();
+  }
+
   // ── Follow system (per-row edges, one-way) ─────────────────────
   // Every follow writes TWO rows, both owned by the follower:
   //   tradr_follow_<follower>_<target>    — for prefix-listing my "following"
@@ -1731,6 +1795,36 @@ export default function Tradr({ user }: { user?: any } = {}) {
     try { await (window as any).storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
     showToast("Unfollowed");
   }
+  // ── Follow by @handle (resolves handle → code, then follows) ──
+  const [followHandleInput, setFollowHandleInput] = useState("");
+  const [followHandleMsg, setFollowHandleMsg] = useState("");
+  const [followHandleLoading, setFollowHandleLoading] = useState(false);
+  async function followByHandle() {
+    const raw = followHandleInput.trim();
+    if (!raw) return;
+    setFollowHandleLoading(true);
+    setFollowHandleMsg("");
+    try {
+      const resolved = await resolveHandle(raw);
+      if (!resolved) {
+        setFollowHandleMsg("User not found. Check the username.");
+        setTimeout(() => setFollowHandleMsg(""), 3000);
+        return;
+      }
+      if (resolved.code === getMyCode()) {
+        setFollowHandleMsg("That's you.");
+        setTimeout(() => setFollowHandleMsg(""), 2000);
+        return;
+      }
+      await followUser(resolved.code);
+      setFollowHandleInput("");
+      setFollowHandleMsg(`Now following @${normaliseHandle(raw)}.`);
+      setTimeout(() => setFollowHandleMsg(""), 2500);
+    } finally {
+      setFollowHandleLoading(false);
+    }
+  }
+
   // Friends = mutual follows (I follow them + they follow me).
   const friendCodes = following.filter(c => followers.includes(c));
   async function publishFeed() {
@@ -2118,12 +2212,72 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     </section>
                   )}
 
+                  {/* Trade of the Week trophy */}
+                  {(() => {
+                    if (!friendFeed.length) return null;
+                    const now = new Date();
+                    const day = now.getDay();
+                    const msSinceMonday = ((day === 0 ? 6 : day - 1)) * 86400000;
+                    const weekStart = new Date(now.getTime() - msSinceMonday);
+                    weekStart.setHours(0, 0, 0, 0);
+                    const weekStartStr = weekStart.toISOString().split("T")[0];
+                    const thisWeekItems = friendFeed.filter((item: any) => item.date >= weekStartStr);
+                    if (!thisWeekItems.length) return null;
+                    const counted = thisWeekItems.map((item: any) => {
+                      const total = Object.values(item.reactions || {}).reduce((s: any, v: any) =>
+                        s + (typeof v === "number" ? v : Array.isArray(v) ? v.length : 0), 0);
+                      return { ...item, _rxTotal: total };
+                    });
+                    const top = counted.reduce((best: any, item: any) => item._rxTotal > best._rxTotal ? item : best);
+                    if (top._rxTotal === 0) return null;
+                    const topPnLPos = parseFloat(top.pnl) >= 0;
+                    return (
+                      <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                          <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+                          TRADE OF THE WEEK
+                        </div>
+                        <div style={{ border: `1px solid ${C.border}`, borderRadius: "4px", padding: "20px 20px 16px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                            <div>
+                              <div style={{ fontFamily: MONO, fontSize: "12px", color: C.text, letterSpacing: "0.06em" }}>{top.authorName}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px", letterSpacing: "0.04em" }}>
+                                {top.authorHandle ? `@${top.authorHandle.replace(/^@/, "")}` : ""}{top.date ? ` · ${top.date}` : ""}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: "22px", lineHeight: 1 }}>🏆</span>
+                          </div>
+                          <div style={{ display: "flex", gap: "14px", alignItems: "baseline", marginBottom: "14px" }}>
+                            <span style={{ fontFamily: DISPLAY, fontSize: "26px", fontWeight: 600, color: C.text, letterSpacing: "-0.02em" }}>{top.pair || "—"}</span>
+                            {top.rr && <span style={{ fontFamily: MONO, fontSize: "12px", color: C.text2, letterSpacing: "0.04em" }}>{top.rr}R</span>}
+                            {top.pnl && <span style={{ fontFamily: MONO, fontSize: "13px", letterSpacing: "0.04em", color: topPnLPos ? C.green : C.red }}>{topPnLPos ? "+" : ""}{top.pnl}R</span>}
+                          </div>
+                          {top.notes && (
+                            <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, lineHeight: 1.6, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "12px" }}>
+                              {top.notes.slice(0, 120)}{top.notes.length > 120 ? "…" : ""}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                            {Object.entries(top.reactions || {}).map(([rx, v]: any) => {
+                              const count = typeof v === "number" ? v : Array.isArray(v) ? v.length : 0;
+                              if (count === 0) return null;
+                              return <span key={rx} style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "999px", padding: "4px 10px", letterSpacing: "0.04em" }}>{rx} {count}</span>;
+                            })}
+                            <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", alignSelf: "center", marginLeft: "auto" }}>{top._rxTotal} REACTIONS</span>
+                          </div>
+                        </div>
+                      </section>
+                    );
+                  })()}
+
                   {/* Friends */}
                   <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
                     <FriendsFeed
                       friends={friends} friendFeed={friendFeed} showAddFriend={showAddFriend} setShowAddFriend={setShowAddFriend}
-                      friendCodeInput={friendCodeInput} setFriendCodeInput={setFriendCodeInput}
-                      friendMsg={friendMsg} addFriend={addFriend} removeFriend={removeFriend}
+                      followHandleInput={followHandleInput} setFollowHandleInput={setFollowHandleInput}
+                      followHandleMsg={followHandleMsg} followHandleLoading={followHandleLoading}
+                      followByHandle={followByHandle}
+                      removeFriend={removeFriend}
                       publishFeed={publishFeed} refreshFeed={refreshFeed} reactToFeed={reactToFeed}
                       myFeedReactions={myFeedReactions}
                       getMyCode={getMyCode} profile={profile} C={C} inp={inp} lbl={lbl} pillGhost={pillGhost} pillPrimary={pillPrimary}
@@ -2307,6 +2461,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
                           const handle = (profileDraft.handle || "").trim();
                           if (!name) { showToast("Name can't be empty"); return; }
                           if (!handle) { showToast("Handle can't be empty"); return; }
+                          // Check handle uniqueness (skip check if unchanged)
+                          const normNew = normaliseHandle(handle);
+                          const normOld = normaliseHandle(profile.handle || "");
+                          if (normNew !== normOld) {
+                            const taken = await isHandleTaken(handle);
+                            if (taken) { showToast(`@${normNew} is already taken`); return; }
+                          }
                           await saveProfile({ ...profileDraft, name, handle });
                           setEditingProfile(false);
                           showToast("Profile saved");
@@ -2895,7 +3056,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
               publishToCircle={publishToCircle} fetchCircleLeaderboard={fetchCircleLeaderboard}
               profile={profile} getMyCode={getMyCode} showToast={showToast}
               wins={wins} losses={losses} total={total} winRate={winRate}
-              totalPnL={totalPnL} pnlPos={pnlPos} avgRR={avgRR} streak={streak}
+              totalPnL={totalPnL} pnlPos={pnlPos} weekPnL={weekPnL} weekPnLPos={weekPnLPos} weekPnLStr={weekPnLStr}
+              avgRR={avgRR} streak={streak}
               STRATEGY_NAMES={allStrategyNames} C={C} inp={inp} sel={sel} lbl={lbl}
               pillPrimary={pillPrimary} pillGhost={pillGhost}
               following={following} followUser={followUser} unfollowUser={unfollowUser}
@@ -3595,8 +3757,9 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
 }
 
 // ─── TRADING CIRCLES (editorial) ─────────────────────────────────────────────
-function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle }: any) {
+function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [lbSort, setLbSort] = useState<"all" | "week">("all");
   const [loadingLB, setLoadingLB] = useState(false);
   // Tap a row to expand a tiny member card with COPY + Follow CTA. Toggle by
   // setting to memberCode, clear on a second tap. Resets on circle switch.
@@ -3628,413 +3791,4 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
     }
     const id = setInterval(refresh, 120_000);
     // Realtime: re-fetch the leaderboard the moment any row in this circle
-    // changes (member join, entry publish, meta update).
-    let unsub = () => {};
-    try {
-      unsub = subscribeToCircle(activeCircle.code, () => { refresh(); });
-    } catch {}
-    return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
-  }, [circlesView, activeCircle, fetchCircleLeaderboard]);
-
-  return (
-    <div style={{ marginTop: "clamp(16px, 4vw, 28px)" }}>
-
-      {/* ── BROWSE ── */}
-      {circlesView === "browse" && (
-        <>
-          <section>
-            <SectionKicker label="A FEW PEOPLE WHO ACTUALLY TAKE IT SERIOUSLY" C={C} />
-            <h1 style={{ fontFamily: DISPLAY, fontSize: "clamp(44px, 11vw, 68px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 0.95, color: C.text, marginTop: "20px", marginBottom: "28px" }}>
-              Your <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>circles</span>.
-            </h1>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={() => setCirclesView("create")} style={{ ...pillPrimary(true), width: "auto", padding: "12px 20px" }}>+ Create circle</button>
-              <button onClick={() => setCirclesView("join")} style={{ ...pillGhost, padding: "12px 20px" }}>⤵ JOIN CIRCLE</button>
-            </div>
-          </section>
-
-          {/* My circles */}
-          {myCircles.length > 0 ? (
-            <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
-              <SectionKicker label={`MY CIRCLES · ${myCircles.length}`} C={C} />
-              <div style={{ marginTop: "20px", borderTop: `1px solid ${C.border}` }}>
-                {myCircles.map((circle: any) => (
-                  <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
-                    style={{ padding: "20px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px", gap: "16px" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "4px", flexWrap: "wrap" }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{circle.name}</span>
-                          {circle.isOwner && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase" }}>· OWNER</span>}
-                        </div>
-                        {circle.description && <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, lineHeight: 1.55, marginTop: "4px" }}>{circle.description}</div>}
-                      </div>
-                      <span style={{ fontFamily: MONO, fontSize: "14px", color: C.muted, flexShrink: 0 }}>›</span>
-                    </div>
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "10px" }}>
-                      <span>{circle.members?.length || 1} members</span>
-                      {circle.strategy && <span>{stratCode(circle.strategy)} · {stratShort(circle.strategy)}</span>}
-                      <span style={{ color: circle.privacy === "public" ? C.green : C.muted }}>{circle.privacy === "public" ? "Public" : "Private"}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : (
-            <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "48px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontStyle: "italic", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em", marginBottom: "8px" }}>No circles yet.</div>
-              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6 }}>Create one or join with a code.</div>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* ── CREATE ── */}
-      {circlesView === "create" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button onClick={() => setCirclesView("browse")} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
-            <SectionKicker label="CREATE A CIRCLE" C={C} />
-          </div>
-          <h2 style={{ fontFamily: DISPLAY, fontSize: "clamp(32px, 7vw, 44px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, color: C.text, marginTop: "8px" }}>
-            Start <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>something small</span>.
-          </h2>
-          <div><label style={lbl}>Circle name</label><input value={circleForm.name} onChange={e => setCircleForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="e.g. London ICT Traders" style={inp} /></div>
-          <div><label style={lbl}>Description (optional)</label><textarea value={circleForm.description} onChange={e => setCircleForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="What's this circle about?" rows={2} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
-          <div>
-            <label style={lbl}>Strategy focus (optional)</label>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
-              <button onClick={() => setCircleForm((f: any) => ({ ...f, strategy: "" }))}
-                style={{ background: circleForm.strategy === "" ? C.text : "transparent", border: `1px solid ${circleForm.strategy === "" ? C.text : C.border2}`, borderRadius: "999px", padding: "7px 13px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.06em", color: circleForm.strategy === "" ? C.bg : C.muted, textTransform: "uppercase" }}>
-                Any
-              </button>
-              {STRATEGY_NAMES.map((s: string) => (
-                <StrategyPill key={s} name={s} selected={circleForm.strategy === s} onClick={() => setCircleForm((f: any) => ({ ...f, strategy: s }))} C={C} />
-              ))}
-            </div>
-          </div>
-          <div>
-            <label style={lbl}>Privacy</label>
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              {[["public", "Public"], ["private", "Private"]].map(([val, label]) => (
-                <button key={val} onClick={() => setCircleForm((f: any) => ({ ...f, privacy: val }))}
-                  style={{ background: circleForm.privacy === val ? C.text : "transparent", border: `1px solid ${circleForm.privacy === val ? C.text : C.border2}`, borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", color: circleForm.privacy === val ? C.bg : C.text, textTransform: "uppercase" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.55 }}>
-              {circleForm.privacy === "public" ? "Anyone with the code can join." : "Invite only."}
-            </div>
-          </div>
-          <button onClick={createCircle} disabled={isCreatingCircle || !circleForm.name.trim()} style={{ ...pillPrimary(!!circleForm.name.trim() && !isCreatingCircle), marginTop: "8px" }}>
-            {isCreatingCircle ? "Creating…" : "Create circle →"}
-          </button>
-        </div>
-      )}
-
-      {/* ── JOIN ── */}
-      {circlesView === "join" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button onClick={() => setCirclesView("browse")} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
-            <SectionKicker label="JOIN A CIRCLE" C={C} />
-          </div>
-          <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: "clamp(28px, 6vw, 38px)", fontWeight: 500, letterSpacing: "-0.02em", color: C.text, marginBottom: "32px", fontStyle: "italic" }}>
-              Enter the code.
-            </div>
-            <input value={circleJoinCode} onChange={e => setCircleJoinCode(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === "Enter" && joinCircle()}
-              placeholder="TRADR-ABCD-EFGH"
-              style={{ ...inp, textAlign: "center", fontFamily: MONO, fontSize: "22px", letterSpacing: "0.14em", padding: "16px 0" }} />
-            <button onClick={joinCircle} disabled={isJoiningCircle || !circleJoinCode.trim()} style={{ ...pillPrimary(!!circleJoinCode.trim() && !isJoiningCircle), marginTop: "20px" }}>
-              {isJoiningCircle ? "Joining…" : "Join →"}
-            </button>
-            {circleMsg && <div style={{ fontFamily: BODY, fontSize: "13px", color: circleMsg.toLowerCase().includes("joined") ? C.green : C.red, marginTop: "14px" }}>{circleMsg}</div>}
-          </div>
-          <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, textAlign: "center", maxWidth: "32ch", margin: "0 auto" }}>
-            Ask the circle owner for their invite code, then paste it above.
-          </div>
-        </div>
-      )}
-
-      {/* ── CIRCLE DETAIL / LEADERBOARD ── */}
-      {circlesView === "detail" && activeCircle && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "clamp(28px, 4vw, 44px)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px" }}>
-            <button onClick={() => { setCirclesView("browse"); setActiveCircle(null); setLeaderboard([]); }} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
-            {/* Non-owners can leave; owners cannot leave their own circle */}
-            {!activeCircle.isOwner && (
-              <button
-                onClick={() => {
-                  if (window.confirm(`Leave "${activeCircle.name}"? You can rejoin with the code.`)) {
-                    leaveCircle(activeCircle.code);
-                  }
-                }}
-                style={{ background: "transparent", color: C.muted, border: `0.5px solid ${C.border2}`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}
-              >
-                Leave
-              </button>
-            )}
-          </div>
-          {/* Circle title */}
-          <section>
-            <h1 style={{ fontFamily: DISPLAY, fontSize: "clamp(40px, 10vw, 60px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 0.95, color: C.text, marginBottom: "8px" }}>
-              {activeCircle.name}
-            </h1>
-            <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              {activeCircle.members?.length || 1} members · {activeCircle.code}
-            </div>
-            {activeCircle.description && (
-              <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginTop: "14px", maxWidth: "48ch" }}>{activeCircle.description}</div>
-            )}
-          </section>
-
-          {/* Publish */}
-          <section style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "22px 0" }}>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "18px" }}>YOUR STATS TO PUBLISH</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "0", marginBottom: "18px" }}>
-              {[["W/L", `${wins}/${losses}`], ["WR", `${winRate}%`], ["P&L", `${pnlPos ? "+" : ""}${totalPnL}R`], ["R:R", avgRR === "—" ? "—" : `${avgRR}R`]].map(([k, v], i) => (
-                <div key={k} style={{ padding: "4px 10px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
-                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "6px" }}>{k}</div>
-                  <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em" }}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => publishToCircle(activeCircle.code)} style={{ ...pillGhost, width: "100%", padding: "14px 20px" }}>PUBLISH MY STATS →</button>
-          </section>
-
-          {/* Leaderboard */}
-          <section>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
-              <SectionKicker label="LEADERBOARD" C={C} />
-              <button onClick={async () => { setLoadingLB(true); const e = await fetchCircleLeaderboard(activeCircle); setLeaderboard(e); setLoadingLB(false); }}
-                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>↻ Refresh</button>
-            </div>
-            {loadingLB ? (
-              <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
-            ) : leaderboard.length === 0 ? (
-              <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>No stats published yet. Be the first.</div>
-            ) : (
-              <div style={{ borderTop: `1px solid ${C.border}` }}>
-                {leaderboard.map((entry: any, i: number) => {
-                  const isMe = entry.memberCode === getMyCode();
-                  const pPos = entry.totalPnL >= 0;
-                  const pnlCol = i === 0 && pPos ? C.green : pPos ? C.text : C.red;
-                  const isExpanded = expandedMember === entry.memberCode;
-                  const isFollowing = (following || []).includes(entry.memberCode);
-                  return (
-                    <div key={entry.memberCode}
-                      style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <div
-                        onClick={() => setExpandedMember(isExpanded ? null : entry.memberCode)}
-                        style={{ padding: "16px 0", display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px", cursor: "pointer", background: isExpanded ? C.surface : "transparent", paddingLeft: isExpanded ? "10px" : 0, paddingRight: isExpanded ? "10px" : 0, transition: "background 120ms ease" }}>
-                        <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted, letterSpacing: "0.08em", minWidth: "28px" }}>{String(i + 1).padStart(2, "0")}</span>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
-                            <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                            {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>· You</span>}
-                          </div>
-                          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "3px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                            <span>{entry.total} trades</span>
-                            <span style={{ color: entry.winRate >= 50 ? C.green : entry.winRate > 0 ? C.red : C.muted }}>{entry.winRate.toFixed(0)}% WR</span>
-                            {entry.topStrategy && <span>{stratCode(entry.topStrategy)}</span>}
-                            {entry.streak && entry.streak.count >= 2 && <span style={{ color: entry.streak.type === "Win" ? C.green : C.red }}>{entry.streak.count}{entry.streak.type === "Win" ? "W" : "L"}</span>}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                          <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{pPos ? "+" : ""}{entry.totalPnL.toFixed(1)}R</div>
-                          {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R AVG</div> : null}
-                        </div>
-                      </div>
-                      {isExpanded && (
-                        <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: "12px", background: C.surface }}>
-                          <div>
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "4px" }}>
-                              {entry.alias && entry.alias !== entry.memberCode ? "ALIAS · USER CODE" : "USER CODE"}
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.10em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                                {entry.alias && entry.alias !== entry.memberCode ? `${entry.alias} · ${entry.memberCode}` : entry.memberCode}
-                              </span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(entry.memberCode); showToast("Code copied"); }}
-                                style={{ ...pillGhost, padding: "6px 12px", fontSize: "9px" }}>COPY</button>
-                            </div>
-                          </div>
-                          {!isMe && (
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); isFollowing ? unfollowUser(entry.memberCode) : followUser(entry.memberCode); }}
-                                style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "8px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", flex: 1 }}>
-                                {isFollowing ? "✓ Following" : "+ Follow"}
-                              </button>
-                              {/* Only circle owner sees kick button */}
-                              {activeCircle?.isOwner && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await kickMember(activeCircle.code, entry.memberCode);
-                                    // Remove the kicked member from the local leaderboard immediately.
-                                    setLeaderboard(prev => prev.filter(r => r.memberCode !== entry.memberCode));
-                                    setExpandedMember(null);
-                                  }}
-                                  style={{ background: "transparent", color: C.red, border: `1px solid ${C.red}44`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
-                                  KICK
-                                </button>
-                              )}
-                            </div>
-                          )}
-                          {entry.updatedAt && (
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.10em", textTransform: "uppercase" }}>
-                              Last published · {new Date(entry.updatedAt).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Invite */}
-          <section style={{ borderTop: `1px solid ${C.border}`, paddingTop: "22px" }}>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "10px" }}>INVITE CODE</div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <div style={{ flex: 1, borderBottom: `1px solid ${C.border2}`, padding: "14px 0", fontFamily: MONO, fontSize: "18px", color: C.text, letterSpacing: "0.14em" }}>{activeCircle.code}</div>
-              <button onClick={() => { navigator.clipboard?.writeText(activeCircle.code); showToast("Code copied"); }}
-                style={{ ...pillGhost, padding: "10px 18px" }}>COPY</button>
-              <button
-                onClick={() => {
-                  const msg = `Join my TRADR circle "${activeCircle.name}" — use code ${activeCircle.code} on the Circles tab.`;
-                  if (navigator.share) {
-                    navigator.share({ title: "Join my TRADR circle", text: msg }).catch(() => {});
-                  } else {
-                    navigator.clipboard?.writeText(msg);
-                    showToast("Invite message copied");
-                  }
-                }}
-                style={{ ...pillGhost, padding: "10px 18px" }}>
-                SHARE
-              </button>
-            </div>
-            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.5 }}>
-              COPY copies just the code. SHARE sends a ready-made invite message — or copies it on desktop.
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── FRIENDS FEED (editorial) ────────────────────────────────────────────────
-function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, friendCodeInput, setFriendCodeInput, friendMsg, addFriend, removeFriend, publishFeed, refreshFeed, reactToFeed, myFeedReactions, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary }: any) {
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
-        <SectionKicker label={`FRIENDS · ${friends.length}`} C={C} />
-        <div style={{ display: "flex", gap: "10px" }}>
-          {friends.length > 0 && <button onClick={async () => { await publishFeed(); await refreshFeed(); }}
-            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>↻ Refresh</button>}
-          <button onClick={() => setShowAddFriend(!showAddFriend)}
-            style={{ background: "none", border: "none", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", borderBottom: `1px solid ${C.text}`, paddingBottom: "2px" }}>
-            {showAddFriend ? "Close" : "+ Add friend"}
-          </button>
-        </div>
-      </div>
-
-      {showAddFriend && (
-        <div style={{ padding: "18px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, marginBottom: "18px" }}>
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "6px" }}>YOUR CODE</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontFamily: MONO, fontSize: "15px", color: C.text, letterSpacing: "0.12em" }}>{getMyCode()}</span>
-              <button onClick={async () => { await publishFeed(); }} style={{ ...pillGhost, padding: "8px 14px" }}>PUBLISH</button>
-            </div>
-          </div>
-          <div>
-            <label style={lbl}>Friend's code</label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <input value={friendCodeInput} onChange={e => setFriendCodeInput(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === "Enter" && addFriend()}
-                placeholder="HANDLE-XXXXXX" style={{ ...inp, flex: 1, letterSpacing: "0.1em", fontFamily: MONO, fontSize: "15px" }} />
-              <button onClick={addFriend} style={{ ...pillPrimary(!!friendCodeInput.trim()), width: "auto", padding: "10px 18px" }}>Add</button>
-            </div>
-            {friendMsg && <div style={{ fontFamily: BODY, fontSize: "12px", color: C.green, marginTop: "8px" }}>{friendMsg}</div>}
-          </div>
-          {friends.length > 0 && (
-            <div style={{ marginTop: "22px", paddingTop: "16px", borderTop: `1px solid ${C.border}` }}>
-              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>FOLLOWING · {friends.length}</div>
-              {friends.map((f: any) => (
-                <div key={f.code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                  <div>
-                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{f.name}</div>
-                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>{f.code}</div>
-                  </div>
-                  <button onClick={() => removeFriend(f.code)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Remove</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {friends.length === 0 && !showAddFriend && (
-        <div style={{ padding: "36px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontStyle: "italic", color: C.text2, fontWeight: 500, marginBottom: "6px" }}>No friends yet.</div>
-          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.55 }}>Add a friend to see their trades here.</div>
-        </div>
-      )}
-
-      {friendFeed.length > 0 && (
-        <div style={{ borderTop: `1px solid ${C.border}` }}>
-          {friendFeed.map((item: any, i: number) => {
-            return (
-              <div key={item.authorCode + "-" + item.tradeId + "-" + i} style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-                  <div>
-                    <div style={{ fontFamily: MONO, fontSize: "12px", color: C.text, letterSpacing: "0.06em" }}>{item.authorName}</div>
-                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px" }}>{item.authorHandle || "@trader"} · {item.date}</div>
-                  </div>
-                  {item.strategy && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em" }}>{stratCode(item.strategy)}</span>}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", marginBottom: item.notes ? "12px" : "14px" }}>
-                  <span style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{item.pair || "—"}</span>
-                  {item.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{item.rr}R</span>}
-                  {item.pnl && <span style={{ fontFamily: MONO, fontSize: "12px", color: parseFloat(item.pnl) >= 0 ? C.green : C.red, letterSpacing: "0.04em" }}>{parseFloat(item.pnl) >= 0 ? "+" : ""}{item.pnl}R</span>}
-                </div>
-                {item.notes && <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.6, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "14px" }}>{item.notes.slice(0, 140)}{item.notes.length > 140 ? "…" : ""}</div>}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {REACTIONS.map(rx => {
-                    const raw = (item.reactions || {})[rx];
-                    const count = typeof raw === "number" ? raw : (Array.isArray(raw) ? raw.length : 0);
-                    const iMine = myFeedReactions?.has(`${item.authorCode}_${item.tradeId}_${rx}`);
-                    const active = iMine || count > 0;
-                    return (
-                      <button key={rx} onClick={() => reactToFeed(item.authorCode, item.tradeId, rx)}
-                        style={{ background: iMine ? C.text : "transparent", color: iMine ? C.bg : C.text, border: `1px solid ${active ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 11px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>{rx}</span>
-                        {count > 0 && <span>{count}</span>}
-                      </button>
-                    );
-                  })}
-                  {item.comments > 0 && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", alignSelf: "center" }}>{item.comments} NOTES</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {friends.length > 0 && friendFeed.length === 0 && !showAddFriend && (
-        <div style={{ padding: "24px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Ask friends to publish, then hit refresh.</div>
-        </div>
-      )}
-    </div>
-  );
-}
+    // changes (member join, entry
