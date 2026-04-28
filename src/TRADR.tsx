@@ -2360,63 +2360,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
                             {Object.entries(top.reactions || {}).map(([rx, v]: any) => {
                               const count = typeof v === "number" ? v : Array.isArray(v) ? v.length : 0;
                               if (count === 0) return null;
-                              return <span key={rx} style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "999px", padding: "4px 10px", letterSpacing: "0.04em" }}>{rx} {count}</span>;
+                              return <span key={rx} style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, background: C.panel, border: `1px solid ${C.border}`, borderRadius: "999px", padding: "4px 10px", letterSpacing: "0.04em" }}>{rx} {count}</span>;
                             })}
                             <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", alignSelf: "center", marginLeft: "auto" }}>{top._rxTotal} REACTIONS</span>
                           </div>
-                        </div>
-                      </section>
-                    );
-                  })()}
-
-                  {/* Monthly report card */}
-                  {(() => {
-                    const now = new Date();
-                    const monthKey = now.toISOString().slice(0, 7);
-                    const monthName = now.toLocaleString("default", { month: "long" });
-                    const monthTrades = trades.filter(t => t.date?.startsWith(monthKey));
-                    if (monthTrades.length < 2) return null;
-                    const mWins = monthTrades.filter(t => t.outcome === "Win").length;
-                    const mTotal = monthTrades.length;
-                    const mPnl = monthTrades.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0);
-                    const mWr = Math.round((mWins / mTotal) * 100);
-                    const byDay: Record<string, number> = {};
-                    monthTrades.forEach(t => { byDay[t.date] = (byDay[t.date] || 0) + (parseFloat(t.pnl as string) || 0); });
-                    const days = Object.entries(byDay);
-                    const bestDay = days.reduce((a, b) => b[1] > a[1] ? b : a, ["—", -Infinity]);
-                    const worstDay = days.reduce((a, b) => b[1] < a[1] ? b : a, ["—", Infinity]);
-                    const stratPnl: Record<string, number> = {};
-                    monthTrades.forEach(t => { if (t.strategy) stratPnl[t.strategy] = (stratPnl[t.strategy] || 0) + (parseFloat(t.pnl as string) || 0); });
-                    const bestStrat = Object.entries(stratPnl).sort((a, b) => b[1] - a[1])[0];
-                    return (
-                      <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "20px", border: `1px solid ${C.border}`, borderRadius: "12px", background: C.bg }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
-                          <SectionKicker label={`${monthName.toUpperCase()} REPORT`} C={C} />
-                          <span style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 700, color: mPnl >= 0 ? C.green : C.red, letterSpacing: "-0.02em" }}>{mPnl >= 0 ? "+" : ""}{mPnl.toFixed(2)}R</span>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WIN RATE</div>
-                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: mWr >= 50 ? C.green : C.red }}>{mWr}%</div>
-                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{mTotal} trades</div>
-                          </div>
-                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>BEST DAY</div>
-                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.green }}>{bestDay[1] !== -Infinity ? `+${(bestDay[1] as number).toFixed(2)}R` : "—"}</div>
-                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{bestDay[0]}</div>
-                          </div>
-                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
-                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WORST DAY</div>
-                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.red }}>{worstDay[1] !== Infinity ? `${(worstDay[1] as number).toFixed(2)}R` : "—"}</div>
-                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{worstDay[0]}</div>
-                          </div>
-                          {bestStrat && (
-                            <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
-                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>BEST STRATEGY</div>
-                              <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, lineHeight: 1.2 }}>{stratShort(bestStrat[0])}</div>
-                              <div style={{ fontFamily: MONO, fontSize: "10px", color: bestStrat[1] >= 0 ? C.green : C.red, marginTop: "2px" }}>{bestStrat[1] >= 0 ? "+" : ""}{bestStrat[1].toFixed(2)}R</div>
-                            </div>
-                          )}
                         </div>
                       </section>
                     );
@@ -4363,7 +4310,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                               <div key={msg.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: isMe ? "flex-end" : "flex-start" }}>
                                 <div style={{ maxWidth: "80%" }}>
                                   {!isMe && <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em", marginBottom: "4px" }}>{msg.sender_name}{msg.sender_handle ? ` · @${msg.sender_handle}` : ""}</div>}
-                                  <div style={{ background: isMe ? C.text : C.surface, color: isMe ? C.bg : C.text, borderRadius: isMe ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "9px 13px", fontFamily: BODY, fontSize: "14px", lineHeight: 1.5, wordBreak: "break-word" }}>{msg.text}</div>
+                                  <div style={{ background: isMe ? C.text : C.panel, color: isMe ? C.bg : C.text, borderRadius: isMe ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "9px 13px", fontFamily: BODY, fontSize: "14px", lineHeight: 1.5, wordBreak: "break-word" }}>{msg.text}</div>
                                   <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, marginTop: "4px", display: "flex", gap: "10px", justifyContent: isMe ? "flex-end" : "flex-start", alignItems: "center" }}>
                                     <span>{fmtMsgTime(msg.created_at)}</span>
                                     {isMe && <button onClick={() => deleteChatMessage(msg.id)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "9px", padding: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>Delete</button>}
@@ -4409,7 +4356,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                       style={{ borderBottom: `1px solid ${C.border}` }}>
                       <div
                         onClick={() => setExpandedMember(isExpanded ? null : entry.memberCode)}
-                        style={{ padding: "16px 0", display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px", cursor: "pointer", background: isExpanded ? C.surface : "transparent", paddingLeft: isExpanded ? "10px" : 0, paddingRight: isExpanded ? "10px" : 0, transition: "background 120ms ease" }}>
+                        style={{ padding: "16px 0", display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px", cursor: "pointer", background: isExpanded ? C.panel : "transparent", paddingLeft: isExpanded ? "10px" : 0, paddingRight: isExpanded ? "10px" : 0, transition: "background 120ms ease" }}>
                         <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted, letterSpacing: "0.08em", minWidth: "28px" }}>{String(i + 1).padStart(2, "0")}</span>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
@@ -4429,7 +4376,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                         </div>
                       </div>
                       {isExpanded && (
-                        <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: "12px", background: C.surface }}>
+                        <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: "12px", background: C.panel }}>
                           <div>
                             <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "4px" }}>
                               {entry.alias && entry.alias !== entry.memberCode ? "ALIAS · USER CODE" : "USER CODE"}
