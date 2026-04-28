@@ -1073,6 +1073,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [followerProfiles, setFollowerProfiles] = useState<Array<{ code: string; name: string; handle: string }>>([]);
   const [viewProfile, setViewProfile] = useState<string | null>(null);
   function openProfile(handle: string) { if (handle) setViewProfile(handle.replace(/^@/, "")); }
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -1886,6 +1889,28 @@ export default function Tradr({ user }: { user?: any } = {}) {
     a.click();
     URL.revokeObjectURL(url);
     showToast("CSV downloaded");
+  }
+
+  async function submitFeedback() {
+    if (!feedbackText.trim() || feedbackSending) return;
+    setFeedbackSending(true);
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: feedbackText.trim(), name: profile.name, handle: profile.handle }),
+      });
+      if (res.ok) {
+        showToast("Feedback sent — thanks!");
+        setFeedbackText("");
+        setFeedbackOpen(false);
+      } else {
+        showToast("Failed to send — try again");
+      }
+    } catch {
+      showToast("Failed to send — try again");
+    }
+    setFeedbackSending(false);
   }
 
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -3467,6 +3492,44 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 {tab.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* ── Feedback floating button ── */}
+        <button
+          onClick={() => setFeedbackOpen(true)}
+          style={{ position: "fixed", bottom: isDesktop ? "28px" : "80px", right: "16px", zIndex: 998, background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", boxShadow: "0 2px 12px rgba(0,0,0,0.25)" }}>
+          Feedback
+        </button>
+
+        {/* ── Feedback modal ── */}
+        {feedbackOpen && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+            onClick={() => setFeedbackOpen(false)}>
+            <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", padding: "10px 24px 40px" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 24px" }} />
+              <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, marginBottom: "6px" }}>Send feedback</div>
+              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginBottom: "20px" }}>Found a bug? Got an idea? Dylon reads every message.</div>
+              <textarea
+                value={feedbackText}
+                onChange={e => setFeedbackText(e.target.value)}
+                placeholder="What's on your mind…"
+                rows={5}
+                style={{ width: "100%", background: C.panel, border: `1px solid ${C.border2}`, borderRadius: "10px", padding: "14px", fontFamily: BODY, fontSize: "14px", color: C.text, resize: "none", lineHeight: 1.6, outline: "none" }}
+              />
+              <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
+                <button onClick={() => setFeedbackOpen(false)}
+                  style={{ flex: 1, padding: "12px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  Cancel
+                </button>
+                <button onClick={submitFeedback}
+                  disabled={!feedbackText.trim() || feedbackSending}
+                  style={{ flex: 2, padding: "12px", border: "none", borderRadius: "8px", background: feedbackText.trim() && !feedbackSending ? C.text : C.border2, color: feedbackText.trim() && !feedbackSending ? C.bg : C.muted, cursor: feedbackText.trim() && !feedbackSending ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  {feedbackSending ? "Sending…" : "Send to Dylon"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
