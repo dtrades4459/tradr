@@ -1010,6 +1010,25 @@ function EditInline({ val, onSave, onCancel, C }: any) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+const EMOTION_TAGS = [
+  { id: "disciplined", label: "Disciplined", color: "#22c55e" },
+  { id: "patient",     label: "Patient",     color: "#22c55e" },
+  { id: "fomo",        label: "FOMO",        color: "#ef4444" },
+  { id: "revenge",     label: "Revenge",     color: "#ef4444" },
+  { id: "overtrading", label: "Overtrading", color: "#ef4444" },
+  { id: "hesitated",   label: "Hesitated",   color: "#f59e0b" },
+  { id: "earlyexit",   label: "Early Exit",  color: "#f59e0b" },
+  { id: "movedsl",     label: "Moved SL",    color: "#f59e0b" },
+  { id: "chased",      label: "Chased",      color: "#f59e0b" },
+];
+
+function getEmotionTags(emotions: string | string[] | undefined): string[] {
+  if (!emotions) return [];
+  if (Array.isArray(emotions)) return emotions;
+  const lower = emotions.toLowerCase();
+  return EMOTION_TAGS.filter(t => lower.includes(t.id) || lower.includes(t.label.toLowerCase())).map(t => t.id);
+}
+
 const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
 const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2" };
 
