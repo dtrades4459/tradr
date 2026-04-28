@@ -4644,24 +4644,43 @@ function ProfileModal({ handle, myCode, following, followUser, unfollowUser, onC
       setLoading(true);
       try {
         const norm = handle.replace(/^@/, "").toLowerCase();
+        // Resolve handle → code first
+        let code: string | null = null;
+        const handleRow = await (window as any).storage.get(`tradr_handle_${norm}`, true);
+        if (handleRow) {
+          try { code = JSON.parse(handleRow.value)?.code || null; } catch {}
+          if (!code) code = handleRow.owner_id || null;
+          setTargetCode(code);
+        }
+        // Try to load published public profile
         const profileRow = await (window as any).storage.get(`tradr_profile_pub_${norm}`, true);
         if (profileRow) {
           const p = JSON.parse(profileRow.value);
           setPubProfile(p);
-          // Resolve handle → code
-          const handleRow = await (window as any).storage.get(`tradr_handle_${norm}`, true);
-          if (handleRow) {
-            let code: string | null = null;
-            try { code = JSON.parse(handleRow.value)?.code || null; } catch {}
-            if (!code) code = handleRow.owner_id || null;
-            setTargetCode(code);
-            // Load feed trades if public
-            if (p.publicTrades && code) {
-              const feedRow = await (window as any).storage.get(`tradr_feed_${code}`, true);
-              if (feedRow) {
-                try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
-              }
+          if (p.publicTrades && code) {
+            const feedRow = await (window as any).storage.get(`tradr_feed_${code}`, true);
+            if (feedRow) {
+              try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
             }
+          }
+        } else if (code) {
+          // Fallback: build a minimal profile from feed data so the modal isn't empty
+          const feedRow = await (window as any).storage.get(`tradr_feed_${code}`, true);
+          if (feedRow) {
+            try {
+              const t = JSON.parse(feedRow.value);
+              const trades = Array.isArray(t) ? t : [];
+              setFeedTrades(trades);
+              if (trades.length > 0) {
+                // Infer name/handle from feed entries
+                const first = trades[0];
+                setPubProfile({ name: first.authorName || norm, handle: norm, avatar: first.authorAvatar || "", bio: "", publicTrades: true });
+              } else {
+                setPubProfile({ name: norm, handle: norm, avatar: "", bio: "", publicTrades: false });
+              }
+            } catch { setPubProfile({ name: norm, handle: norm, avatar: "", bio: "", publicTrades: false }); }
+          } else {
+            setPubProfile({ name: norm, handle: norm, avatar: "", bio: "", publicTrades: false });
           }
         }
       } catch {}
@@ -4764,7 +4783,7 @@ function ProfileModal({ handle, myCode, following, followUser, unfollowUser, onC
 
           {!pubProfile.publicTrades && (
             <div style={{ padding: "16px", background: C.panel, borderRadius: "10px", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted }}>
-              This trader hasn't made their trades public.
+              This trader's trades are private.
             </div>
           )}
         </>)}
