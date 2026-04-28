@@ -562,7 +562,8 @@ function AvatarCircle({ name, avatar, size = 40, color, onClick, C }: any) {
   const border = C?.border2 ?? "#3A3A34";
   const bg = C?.panel ?? "#161614";
   const style: React.CSSProperties = { width: size, height: size, borderRadius: "50%", border: `1px solid ${border}`, flexShrink: 0, cursor: onClick ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", objectFit: "cover" };
-  if (avatar) return <img src={avatar} alt="av" style={style} onClick={onClick} />;
+  const safeAvatar = avatar && (avatar.startsWith("data:image/") || avatar.startsWith("https://")) ? avatar : null;
+  if (safeAvatar) return <img src={safeAvatar} alt="av" style={style} onClick={onClick} />;
   return (
     <div style={{ ...style, background: bg }} onClick={onClick}>
       <span style={{ fontSize: size * 0.34, color: col, letterSpacing: "0.04em", fontFamily: MONO }}>{initials}</span>
@@ -1331,7 +1332,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }, [loading, profile.uid]);
 
   async function loadAll() {
-    try { const t = await (window as any).storage.get("tradr_trades"); if (t) setTrades(JSON.parse(t.value)); } catch { }
+    try {
+      const t = await (window as any).storage.get("tradr_trades");
+      if (t) {
+        const parsed = JSON.parse(t.value);
+        setTrades(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch { setTrades([]); }
     try {
       const pr = await (window as any).storage.get("tradr_profile");
       let p = pr ? JSON.parse(pr.value) : { ...DEF_PROFILE };
@@ -1693,6 +1700,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Screenshot upload
   async function handleScreenshotUpload(e: any, tradeId: any) {
     const file = e.target.files?.[0]; if (!file) return;
+    if (file.size > 15 * 1024 * 1024) { showToast("Image too large — max 15MB"); return; }
+    if (!file.type.startsWith("image/")) { showToast("File must be an image"); return; }
     const compressed = await compressImage(file, 800);
     if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: compressed } : t); await saveTrades(u); }
     else setForm((f: any) => ({ ...f, screenshot: compressed }));
@@ -1705,6 +1714,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Avatar upload
   async function handleAvatarUpload(e: any) {
     const file = e.target.files?.[0]; if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast("Avatar too large — max 5MB"); return; }
+    if (!file.type.startsWith("image/")) { showToast("File must be an image"); return; }
     const compressed = await compressImage(file, 300);
     setProfileDraft((d: any) => ({ ...d, avatar: compressed }));
   }
@@ -1825,6 +1836,73 @@ export default function Tradr({ user }: { user?: any } = {}) {
     try { await (window as any).storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
     showToast("Unfollowed");
   }
+  // ── Data export ──────────────────────────────────────────────────────────
+  function exportData() {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      profile: { name: profile.name, handle: profile.handle, bio: profile.bio, broker: profile.broker, timezone: profile.timezone },
+      trades: trades.map(t => ({
+        date: t.date, pair: t.pair, session: t.session, bias: t.bias, strategy: t.strategy,
+        setup: t.setup, entryPrice: t.entryPrice, slPrice: t.slPrice, tpPrice: t.tpPrice,
+        rr: t.rr, outcome: t.outcome, pnl: t.pnl, pnlDollar: t.pnlDollar,
+        notes: t.notes, emotions: t.emotions,
+      })),
+      tradeCount: trades.length,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tradr-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Export downloaded");
+  }
+
+  function exportCSV() {
+    const headers = ["Date","Pair","Session","Bias","Strategy","Setup","Entry","SL","TP","R:R","Outcome","P&L (R)","P&L ($)","Notes","Emotions"];
+    const rows = trades.map(t => [
+      t.date, t.pair, t.session, t.bias, t.strategy, t.setup,
+      t.entryPrice, t.slPrice, t.tpPrice, t.rr, t.outcome, t.pnl, t.pnlDollar,
+      `"${(t.notes || "").replace(/"/g, '""')}"`,
+      `"${(Array.isArray(t.emotions) ? t.emotions.join(", ") : t.emotions || "").replace(/"/g, '""')}"`
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tradr-trades-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("CSV downloaded");
+  }
+
+  const [deleteConfirm, setDeleteConfirm] = React.useState("");
+  const [deletingAccount, setDeletingAccount] = React.useState(false);
+  async function deleteAccount() {
+    if (deleteConfirm.toUpperCase() !== "DELETE") { showToast("Type DELETE to confirm"); return; }
+    setDeletingAccount(true);
+    try {
+      const mc = getMyCode();
+      // Wipe all user_kv rows (trades, profile, checklists, etc)
+      const keys = ["tradr_trades","tradr_profile","tradr_friends","tradr_feed","tradr_checklists","tradr_rules","tradr_dark","tradr_circles","tradr_thresholds","tradr_custom_strategies"];
+      await Promise.all(keys.map(k => (window as any).storage.del(k).catch(() => {})));
+      // Wipe shared_kv rows we own (circle entries, feed, handle, follows)
+      await Promise.all([
+        `tradr_feed_${mc}`,
+        `tradr_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
+      ].map(k => (window as any).storage.del(k, true).catch(() => {})));
+      // Sign out and let Supabase handle auth deletion
+      await supabase.auth.signOut();
+      showToast("Account data wiped. Goodbye.");
+    } catch (e) {
+      showToast("Error deleting account. Please contact support.");
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
   // ── Follow by @handle (resolves handle → code, then follows) ──
   const [followHandleInput, setFollowHandleInput] = useState("");
   const [followHandleMsg, setFollowHandleMsg] = useState("");
@@ -2455,6 +2533,46 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       myFeedReactions={myFeedReactions}
                       getMyCode={getMyCode} profile={profile} C={C} inp={inp} lbl={lbl} pillGhost={pillGhost} pillPrimary={pillPrimary}
                     />
+                  </section>
+                  {/* Data & Privacy */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
+                    <SectionKicker label="DATA & PRIVACY" C={C} />
+                    <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button onClick={exportCSV}
+                          style={{ flex: 1, padding: "12px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          Export CSV
+                        </button>
+                        <button onClick={exportData}
+                          style={{ flex: 1, padding: "12px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          Export JSON
+                        </button>
+                      </div>
+                      <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.55 }}>
+                        Download all your trades and profile data. Your data belongs to you.
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Danger zone */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.red}44` }}>
+                    <SectionKicker label="DANGER ZONE" C={C} />
+                    <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, lineHeight: 1.6 }}>
+                        Permanently delete your account and all associated data. This cannot be undone.
+                      </div>
+                      <input
+                        value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
+                        placeholder='Type DELETE to confirm'
+                        style={{ padding: "11px 14px", background: "transparent", border: `1px solid ${C.red}66`, borderRadius: "8px", color: C.text, fontFamily: MONO, fontSize: "13px", letterSpacing: "0.04em" }}
+                      />
+                      <button
+                        onClick={deleteAccount}
+                        disabled={deletingAccount || deleteConfirm.toUpperCase() !== "DELETE"}
+                        style={{ padding: "12px", border: `1px solid ${C.red}`, borderRadius: "8px", background: deleteConfirm.toUpperCase() === "DELETE" ? C.red + "22" : "transparent", color: C.red, cursor: deleteConfirm.toUpperCase() === "DELETE" ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: deletingAccount ? 0.6 : 1 }}>
+                        {deletingAccount ? "Deleting…" : "Delete My Account"}
+                      </button>
+                    </div>
                   </section>
                 </div>
               )}
