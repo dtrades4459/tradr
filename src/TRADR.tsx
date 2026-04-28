@@ -1878,8 +1878,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
     showToast("CSV downloaded");
   }
 
-  const [deleteConfirm, setDeleteConfirm] = React.useState("");
-  const [deletingAccount, setDeletingAccount] = React.useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
   async function deleteAccount() {
     if (deleteConfirm.toUpperCase() !== "DELETE") { showToast("Type DELETE to confirm"); return; }
     setDeletingAccount(true);
