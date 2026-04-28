@@ -1994,6 +1994,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     { id: "overview", label: "Overview" },
     { id: "strategies", label: "Strategies" },
     { id: "calendar", label: "Calendar" },
+    { id: "psychology", label: "Psychology" },
   ];
   const CHECKLIST_SECTIONS = [
     { id: "pretrade", label: "Pre-trade" },
@@ -2192,6 +2193,50 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     </div>
                   )}
 
+                  {/* Daily risk dashboard */}
+                  {(() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    const todayTrades = trades.filter(t => t.date === today);
+                    const maxTrades = parseInt(profile.maxTradesPerDay) || 0;
+                    const todayPnl = todayTrades.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0);
+                    const targetRR = parseFloat(profile.targetRR) || 0;
+                    const atLimit = maxTrades > 0 && todayTrades.length >= maxTrades;
+                    const nearLimit = maxTrades > 0 && todayTrades.length === maxTrades - 1;
+                    if (todayTrades.length === 0 && maxTrades === 0) return null;
+                    return (
+                      <section style={{ marginTop: "28px", padding: "16px", border: `1px solid ${atLimit ? C.red + "66" : C.border}`, borderRadius: "10px", background: atLimit ? C.red + "08" : "transparent" }}>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>TODAY</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                          <div>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>TRADES</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: atLimit ? C.red : nearLimit ? "#f59e0b" : C.text }}>
+                              {todayTrades.length}{maxTrades > 0 ? `/${maxTrades}` : ""}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>P&L TODAY</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: todayPnl >= 0 ? C.green : C.red }}>
+                              {todayPnl >= 0 ? "+" : ""}{todayPnl.toFixed(2)}R
+                            </div>
+                          </div>
+                          {targetRR > 0 && (
+                            <div>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>TARGET</div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: todayPnl >= targetRR ? C.green : C.muted }}>
+                                {targetRR}R
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {atLimit && (
+                          <div style={{ marginTop: "12px", fontFamily: MONO, fontSize: "10px", color: C.red, letterSpacing: "0.08em" }}>
+                            ⚠ Daily trade limit reached. Step back and review.
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })()}
+
                   {/* Equity curve */}
                   {trades.length > 1 && (
                     <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
@@ -2319,6 +2364,112 @@ export default function Tradr({ user }: { user?: any } = {}) {
                             })}
                             <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", alignSelf: "center", marginLeft: "auto" }}>{top._rxTotal} REACTIONS</span>
                           </div>
+                        </div>
+                      </section>
+                    );
+                  })()}
+
+                  {/* Monthly report card */}
+                  {(() => {
+                    const now = new Date();
+                    const monthKey = now.toISOString().slice(0, 7);
+                    const monthName = now.toLocaleString("default", { month: "long" });
+                    const monthTrades = trades.filter(t => t.date?.startsWith(monthKey));
+                    if (monthTrades.length < 2) return null;
+                    const mWins = monthTrades.filter(t => t.outcome === "Win").length;
+                    const mTotal = monthTrades.length;
+                    const mPnl = monthTrades.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0);
+                    const mWr = Math.round((mWins / mTotal) * 100);
+                    const byDay: Record<string, number> = {};
+                    monthTrades.forEach(t => { byDay[t.date] = (byDay[t.date] || 0) + (parseFloat(t.pnl as string) || 0); });
+                    const days = Object.entries(byDay);
+                    const bestDay = days.reduce((a, b) => b[1] > a[1] ? b : a, ["—", -Infinity]);
+                    const worstDay = days.reduce((a, b) => b[1] < a[1] ? b : a, ["—", Infinity]);
+                    const stratPnl: Record<string, number> = {};
+                    monthTrades.forEach(t => { if (t.strategy) stratPnl[t.strategy] = (stratPnl[t.strategy] || 0) + (parseFloat(t.pnl as string) || 0); });
+                    const bestStrat = Object.entries(stratPnl).sort((a, b) => b[1] - a[1])[0];
+                    return (
+                      <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "20px", border: `1px solid ${C.border}`, borderRadius: "12px", background: C.bg }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
+                          <SectionKicker label={`${monthName.toUpperCase()} REPORT`} C={C} />
+                          <span style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 700, color: mPnl >= 0 ? C.green : C.red, letterSpacing: "-0.02em" }}>{mPnl >= 0 ? "+" : ""}{mPnl.toFixed(2)}R</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WIN RATE</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: mWr >= 50 ? C.green : C.red }}>{mWr}%</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{mTotal} trades</div>
+                          </div>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>BEST DAY</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.green }}>{bestDay[1] !== -Infinity ? `+${(bestDay[1] as number).toFixed(2)}R` : "—"}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{bestDay[0]}</div>
+                          </div>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WORST DAY</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.red }}>{worstDay[1] !== Infinity ? `${(worstDay[1] as number).toFixed(2)}R` : "—"}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{worstDay[0]}</div>
+                          </div>
+                          {bestStrat && (
+                            <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>BEST STRATEGY</div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, lineHeight: 1.2 }}>{stratShort(bestStrat[0])}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: bestStrat[1] >= 0 ? C.green : C.red, marginTop: "2px" }}>{bestStrat[1] >= 0 ? "+" : ""}{bestStrat[1].toFixed(2)}R</div>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })()}
+
+                  {/* Monthly report card */}
+                  {(() => {
+                    const now = new Date();
+                    const monthKey = now.toISOString().slice(0, 7);
+                    const monthName = now.toLocaleString("default", { month: "long" });
+                    const monthTrades = trades.filter(t => t.date?.startsWith(monthKey));
+                    if (monthTrades.length < 2) return null;
+                    const mWins = monthTrades.filter(t => t.outcome === "Win").length;
+                    const mTotal = monthTrades.length;
+                    const mPnl = monthTrades.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0);
+                    const mWr = Math.round((mWins / mTotal) * 100);
+                    const byDay: Record<string, number> = {};
+                    monthTrades.forEach(t => { byDay[t.date] = (byDay[t.date] || 0) + (parseFloat(t.pnl as string) || 0); });
+                    const days = Object.entries(byDay);
+                    const bestDay = days.reduce((a, b) => b[1] > a[1] ? b : a, ["—", -Infinity]);
+                    const worstDay = days.reduce((a, b) => b[1] < a[1] ? b : a, ["—", Infinity]);
+                    const stratPnl: Record<string, number> = {};
+                    monthTrades.forEach(t => { if (t.strategy) stratPnl[t.strategy] = (stratPnl[t.strategy] || 0) + (parseFloat(t.pnl as string) || 0); });
+                    const bestStrat = Object.entries(stratPnl).sort((a, b) => b[1] - a[1])[0];
+                    return (
+                      <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "20px", border: `1px solid ${C.border}`, borderRadius: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "18px" }}>
+                          <SectionKicker label={`${monthName.toUpperCase()} REPORT`} C={C} />
+                          <span style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 700, color: mPnl >= 0 ? C.green : C.red, letterSpacing: "-0.02em" }}>{mPnl >= 0 ? "+" : ""}{mPnl.toFixed(2)}R</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WIN RATE</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: mWr >= 50 ? C.green : C.red }}>{mWr}%</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{mTotal} trades</div>
+                          </div>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>BEST DAY</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.green }}>{bestDay[1] !== -Infinity ? `+${(bestDay[1] as number).toFixed(2)}R` : "—"}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{String(bestDay[0])}</div>
+                          </div>
+                          <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>WORST DAY</div>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.red }}>{worstDay[1] !== Infinity ? `${(worstDay[1] as number).toFixed(2)}R` : "—"}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>{String(worstDay[0])}</div>
+                          </div>
+                          {bestStrat && (
+                            <div style={{ padding: "12px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>TOP STRATEGY</div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, lineHeight: 1.2 }}>{stratShort(bestStrat[0])}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: bestStrat[1] >= 0 ? C.green : C.red, marginTop: "2px" }}>{bestStrat[1] >= 0 ? "+" : ""}{bestStrat[1].toFixed(2)}R</div>
+                            </div>
+                          )}
                         </div>
                       </section>
                     );
@@ -2599,7 +2750,25 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 </div>
               </div>
               <div><label style={lbl}>Notes</label><textarea name="notes" value={form.notes} onChange={handleChange} placeholder="What did price do? Why did you enter?" rows={3} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
-              <div><label style={lbl}>Emotional State</label><input name="emotions" value={form.emotions} onChange={handleChange} placeholder="Calm, FOMO, disciplined..." style={inp} /></div>
+              <div>
+                <label style={lbl}>Emotional State</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
+                  {EMOTION_TAGS.map(tag => {
+                    const active = getEmotionTags(form.emotions).includes(tag.id);
+                    return (
+                      <button key={tag.id} type="button"
+                        onClick={() => {
+                          const current = getEmotionTags(form.emotions);
+                          const next = active ? current.filter(t => t !== tag.id) : [...current, tag.id];
+                          setForm((f: any) => ({ ...f, emotions: next }));
+                        }}
+                        style={{ background: active ? tag.color + "22" : "transparent", color: active ? tag.color : C.muted, border: `1px solid ${active ? tag.color : C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", transition: "all 0.15s ease" }}>
+                        {tag.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
                 <label style={lbl}>Screenshot</label>
                 {form.screenshot ? (
@@ -2737,7 +2906,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
                               </label>
                             )}
                             {t.notes && <div style={{ fontSize: "14px", color: C.text, lineHeight: 1.65, marginBottom: "14px", borderLeft: `1px solid ${C.border2}`, paddingLeft: "14px", fontFamily: BODY }}>{t.notes}</div>}
-                            {t.emotions && <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginBottom: "16px", letterSpacing: "0.06em", textTransform: "uppercase" }}>MIND — {t.emotions}</div>}
+                            {getEmotionTags(t.emotions).length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
+                                {getEmotionTags(t.emotions).map(id => {
+                                  const tag = EMOTION_TAGS.find(e => e.id === id);
+                                  if (!tag) return null;
+                                  return <span key={id} style={{ background: tag.color + "22", color: tag.color, border: `1px solid ${tag.color}44`, borderRadius: "999px", padding: "3px 10px", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{tag.label}</span>;
+                                })}
+                              </div>
+                            )}
 
                             {/* Reactions */}
                             <div style={{ marginBottom: "16px" }}>
@@ -2945,6 +3122,58 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       ))}
                     </div>
                   )}
+                </section>
+              )}
+
+              {statsTab === "psychology" && (
+                <section>
+                  {(() => {
+                    const tagStats = EMOTION_TAGS.map(tag => {
+                      const tagged = trades.filter(t => getEmotionTags(t.emotions).includes(tag.id));
+                      const wins = tagged.filter(t => t.outcome === "Win").length;
+                      const losses = tagged.filter(t => t.outcome === "Loss").length;
+                      const wr = tagged.length ? Math.round((wins / tagged.length) * 100) : null;
+                      const avgPnl = tagged.length ? tagged.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0) / tagged.length : null;
+                      return { ...tag, count: tagged.length, wins, losses, wr, avgPnl };
+                    }).filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+
+                    if (!tagStats.length) return (
+                      <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: "13px", fontStyle: "italic" }}>
+                        Tag your emotional state when logging trades to see patterns here.
+                      </div>
+                    );
+
+                    return (
+                      <div>
+                        <SectionKicker label="EMOTION × OUTCOME" C={C} />
+                        <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                          {tagStats.map(tag => (
+                            <div key={tag.id} style={{ padding: "14px 16px", border: `1px solid ${C.border}`, borderRadius: "8px", background: tag.color + "0a" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <span style={{ fontFamily: MONO, fontSize: "11px", color: tag.color, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tag.label}</span>
+                                <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}>{tag.count} trade{tag.count !== 1 ? "s" : ""}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+                                <div>
+                                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "3px" }}>WIN RATE</div>
+                                  <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: (tag.wr ?? 0) >= 50 ? C.green : C.red }}>{tag.wr !== null ? `${tag.wr}%` : "—"}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "3px" }}>AVG P&L</div>
+                                  <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: (tag.avgPnl ?? 0) >= 0 ? C.green : C.red }}>{tag.avgPnl !== null ? `${tag.avgPnl >= 0 ? "+" : ""}${tag.avgPnl.toFixed(2)}R` : "—"}</div>
+                                </div>
+                                <div style={{ flex: 1, textAlign: "right" }}>
+                                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green }}>{tag.wins}W</span>
+                                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}> / </span>
+                                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.red }}>{tag.losses}L</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </section>
               )}
             </div>
