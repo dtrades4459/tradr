@@ -2148,12 +2148,17 @@ export default function Tradr({ user }: { user?: any } = {}) {
   );
 
   // Show onboarding for new users who haven't completed the flow yet.
-  if (!profile.onboarded) {
+  // Also check localStorage as a backup in case the Supabase write failed mid-onboarding.
+  const _localOnboarded = typeof window !== "undefined" && localStorage.getItem("tradr_onboarded") === "1";
+  if (!profile.onboarded && !_localOnboarded) {
     return (
       <OnboardingFlow
         C={C}
         allStrategyNames={allStrategyNames}
         onComplete={async (name: string, handle: string, strategy: string) => {
+          // Set localStorage immediately so a refresh won't re-show onboarding
+          // even if the Supabase write hasn't completed yet.
+          try { localStorage.setItem("tradr_onboarded", "1"); } catch {}
           const updated: Profile = {
             ...profile,
             name: name.trim(),
