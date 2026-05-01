@@ -1076,6 +1076,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [friendCodeInput, setFriendCodeInput] = useState("");
   const [friendMsg, setFriendMsg] = useState("");
@@ -1892,7 +1893,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
 
   async function submitFeedback() {
-    if (!feedbackText.trim() || feedbackSending) return;
+    if (!feedbackText.trim() || feedbackSending || feedbackSent) return;
     setFeedbackSending(true);
     try {
       const res = await fetch("/api/feedback", {
@@ -1901,9 +1902,14 @@ export default function Tradr({ user }: { user?: any } = {}) {
         body: JSON.stringify({ feedback: feedbackText.trim(), name: profile.name, handle: profile.handle }),
       });
       if (res.ok) {
-        showToast("Feedback sent — thanks!");
-        setFeedbackText("");
-        setFeedbackOpen(false);
+        setFeedbackSent(true);
+        setFeedbackSending(false);
+        setTimeout(() => {
+          setFeedbackOpen(false);
+          setFeedbackText("");
+          setFeedbackSent(false);
+        }, 1500);
+        return;
       } else {
         showToast("Failed to send — try again");
       }
@@ -3531,9 +3537,9 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   Cancel
                 </button>
                 <button onClick={submitFeedback}
-                  disabled={!feedbackText.trim() || feedbackSending}
-                  style={{ flex: 2, padding: "12px", border: "none", borderRadius: "8px", background: feedbackText.trim() && !feedbackSending ? C.text : C.border2, color: feedbackText.trim() && !feedbackSending ? C.bg : C.muted, cursor: feedbackText.trim() && !feedbackSending ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  {feedbackSending ? "Sending…" : "Send to Dylon"}
+                  disabled={!feedbackText.trim() || feedbackSending || feedbackSent}
+                  style={{ flex: 2, padding: "12px", border: "none", borderRadius: "8px", background: feedbackSent ? "#22c55e" : feedbackText.trim() && !feedbackSending ? C.text : C.border2, color: feedbackSent ? "#fff" : feedbackText.trim() && !feedbackSending ? C.bg : C.muted, cursor: feedbackText.trim() && !feedbackSending && !feedbackSent ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", transition: "background 0.2s, color 0.2s" }}>
+                  {feedbackSent ? "Sent! ✓" : feedbackSending ? "Sending…" : "Send to Dylon"}
                 </button>
               </div>
             </div>
