@@ -38,6 +38,9 @@ export interface Trade {
   emotions: string;
   screenshot: string;
   pnlDollar: string;
+  entryTime?: string;
+  exitTime?: string;
+  direction?: string;
   comments: TradeComment[];
   reactions: ReactionMap;
   createdAt?: string;
@@ -520,6 +523,269 @@ function WinRateChart({ trades, C }: any) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+
+// ─── DURATION HELPERS ────────────────────────────────────────────────────────
+const DURATION_BUCKETS = [
+  { label: "Under 15 sec", min: 0, max: 15 },
+  { label: "15-45 sec", min: 15, max: 45 },
+  { label: "45 sec - 1 min", min: 45, max: 60 },
+  { label: "1 min - 2 min", min: 60, max: 120 },
+  { label: "2 min - 5 min", min: 120, max: 300 },
+  { label: "5 min - 10 min", min: 300, max: 600 },
+  { label: "10 min - 30 min", min: 600, max: 1800 },
+  { label: "30 min - 1 hour", min: 1800, max: 3600 },
+  { label: "1 hour - 2 hours", min: 3600, max: 7200 },
+  { label: "2 hours - 4 hours", min: 7200, max: 14400 },
+  { label: "4 hours and up", min: 14400, max: Infinity },
+];
+function parseDurationSec(entryTime: string | undefined, exitTime: string | undefined): number | null {
+  if (!entryTime || !exitTime) return null;
+  const ep = entryTime.split(":"); const xp = exitTime.split(":");
+  const eh = parseInt(ep[0]); const em = parseInt(ep[1]);
+  const xh = parseInt(xp[0]); const xm = parseInt(xp[1]);
+  if (isNaN(eh)||isNaN(em)||isNaN(xh)||isNaN(xm)) return null;
+  const en = eh * 3600 + em * 60; let ex = xh * 3600 + xm * 60;
+  if (ex < en) ex += 86400;
+  return ex - en;
+}
+function fmtDuration(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec/60)}m ${sec%60}s`;
+  return `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m`;
+}
+
+// ─── TRADE DURATION CHART ─────────────────────────────────────────────────────
+function TradeDurationChart({ trades, C }: any) {
+  const withDur = trades.map((t: any) => ({ ...t, _dur: parseDurationSec(t.entryTime, t.exitTime) })).filter((t: any) => t._dur !== null);
+  if (!withDur.length) return <div style={{ textAlign:"center", padding:"40px 0", color:C.muted, fontSize:"11px", fontFamily:MONO, letterSpacing:"0.06em" }}>ADD ENTRY + EXIT TIME WHEN LOGGING TRADES TO SEE DURATION ANALYSIS</div>;
+  const bd = DURATION_BUCKETS.map(b => {
+    const bk = withDur.filter((t: any) => t._dur >= b.min && t._dur < b.max);
+    const w = bk.filter((t: any) => t.outcome === "Win").length;
+    const l = bk.filter((t: any) => t.outcome === "Loss").length;
+    return { ...b, count: bk.length, wr: (w+l) > 0 ? Math.round(w/(w+l)*100) : null };
+  });
+  const mx = Math.max(...bd.map(b => b.count), 1);
+  const LW = 124;
+  const barRow = (label: string, pct: number, val: string, color: string) => (
+    <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"7px" }}>
+      <div style={{ width:`${LW}px`, fontSize:"9px", color:C.muted, fontFamily:MONO, textAlign:"right", flexShrink:0 }}>{label}</div>
+      <div style={{ flex:1, height:"22px", background:C.panel2, borderRadius:"3px", overflow:"hidden" }}>
+        {pct > 0 && <div style={{ height:"100%", width:`${Math.max(pct,5)}%`, background:color, borderRadius:"3px", display:"flex", alignItems:"center", paddingLeft:"6px" }}>
+          <span style={{ fontFamily:MONO, fontSize:"10px", color:"#0C0C0B", fontWeight:700 }}>{val}</span>
+        </div>}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px" }}>
+      <div style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+        <div style={{ fontFamily:BODY, fontWeight:700, fontSize:"14px", marginBottom:"12px", color:C.text }}>Trade Count</div>
+        {bd.map(b => barRow(b.label, b.count/mx*100, String(b.count), "#5BC2E7"))}
+      </div>
+      <div style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+        <div style={{ fontFamily:BODY, fontWeight:700, fontSize:"14px", marginBottom:"12px", color:C.text }}>Win Rate</div>
+        {bd.map(b => barRow(b.label, b.wr ?? 0, b.wr !== null && b.count > 0 ? String(b.wr) : "", C.green))}
+      </div>
+    </div>
+  );
+}
+
+// ─── NET DAILY P&L ───────────────────────────────────────────────────────────
+function NetDailyPnLChart({ trades, C, useDollar }: any) {
+  const dm: Record<string,number> = {};
+  trades.forEach((t: any) => { if (!t.date) return; dm[t.date] = (dm[t.date]||0) + (useDollar ? parseFloat(t.pnlDollar)||0 : parseFloat(t.pnl)||0); });
+  const days = Object.keys(dm).sort().slice(-30);
+  if (!days.length) return null;
+  const vals = days.map(d => dm[d]);
+  const maxA = Math.max(...vals.map(v => Math.abs(v)), 0.1);
+  const bW = Math.max(12, Math.min(40, Math.floor(560/days.length)-3));
+  return (
+    <div style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+      <div style={{ fontFamily:BODY, fontWeight:700, fontSize:"14px", color:C.text, marginBottom:"4px" }}>Net Daily P&L</div>
+      <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, marginBottom:"12px", letterSpacing:"0.06em" }}>{useDollar?"DOLLAR":"R-MULTIPLE"} · LAST {days.length} DAYS</div>
+      <div style={{ overflowX:"auto" }}>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:"3px", height:"100px", minWidth:`${days.length*(bW+3)}px` }}>
+          {vals.map((v,i) => {
+            const h = Math.max(Math.abs(v)/maxA*90,2);
+            return <div key={days[i]} title={`${days[i]}: ${v>=0?"+":""}${v.toFixed(2)}`} style={{ flex:`0 0 ${bW}px`, height:"100%", display:"flex", alignItems:v>=0?"flex-end":"flex-start" }}>
+              <div style={{ width:"100%", height:`${h}%`, background:v>=0?C.green:C.red, borderRadius:v>=0?"3px 3px 0 0":"0 0 3px 3px" }} />
+            </div>;
+          })}
+        </div>
+        <div style={{ display:"flex", gap:"3px", marginTop:"4px", minWidth:`${days.length*(bW+3)}px` }}>
+          {days.map((d,i) => <div key={d} style={{ flex:`0 0 ${bW}px`, textAlign:"center", fontSize:"8px", color:C.muted, fontFamily:MONO }}>{i%Math.max(1,Math.floor(days.length/7))===0?d.slice(5):""}</div>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CUMULATIVE P&L LINE ─────────────────────────────────────────────────────
+function DailyCumulativePnLChart({ trades, C, useDollar }: any) {
+  const dm: Record<string,number> = {};
+  trades.forEach((t: any) => { if (!t.date) return; dm[t.date] = (dm[t.date]||0) + (useDollar ? parseFloat(t.pnlDollar)||0 : parseFloat(t.pnl)||0); });
+  const days = Object.keys(dm).sort();
+  if (days.length < 2) return null;
+  let cum = 0;
+  const pts = days.map(d => { cum += dm[d]; return cum; });
+  const minV = Math.min(...pts, 0); const maxV = Math.max(...pts, 0.01); const range = maxV - minV || 1;
+  const W=520,H=100,P=6;
+  const toX = (i: number) => P + i*(W-P*2)/Math.max(pts.length-1,1);
+  const toY = (v: number) => P + (maxV-v)/range*(H-P*2);
+  const ln = pts.map((v,i)=>`${i===0?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const z0 = toY(0);
+  const fill = `${ln} L${toX(pts.length-1).toFixed(1)},${z0.toFixed(1)} L${toX(0).toFixed(1)},${z0.toFixed(1)} Z`;
+  const last = pts[pts.length-1]; const pos = last >= 0;
+  return (
+    <div style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"4px" }}>
+        <div style={{ fontFamily:BODY, fontWeight:700, fontSize:"14px", color:C.text }}>Daily Cumulative PnL</div>
+        <div style={{ fontFamily:MONO, fontSize:"12px", color:pos?C.green:C.red }}>{pos?"+":""}{last.toFixed(2)}{useDollar?"$":"R"}</div>
+      </div>
+      <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, marginBottom:"10px", letterSpacing:"0.06em" }}>{useDollar?"DOLLAR":"R-MULTIPLE"}</div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display:"block", height:"100px" }}>
+        <line x1={P} y1={z0} x2={W-P} y2={z0} stroke={C.border2} strokeWidth="1" strokeDasharray="4,3"/>
+        <path d={fill} fill={pos?C.green:C.red} fillOpacity="0.12"/>
+        <path d={ln} fill="none" stroke={pos?C.green:C.red} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        <circle cx={toX(pts.length-1)} cy={toY(last)} r="3.5" fill={pos?C.green:C.red}/>
+      </svg>
+    </div>
+  );
+}
+
+// ─── TRADE STAT CARDS ────────────────────────────────────────────────────────
+function TradeStatCards({ trades, C }: any) {
+  const withDur = trades.map((t: any) => ({...t, _d: parseDurationSec(t.entryTime,t.exitTime)})).filter((t: any) => t._d !== null);
+  const avgSec = withDur.length ? Math.round(withDur.reduce((a: number,t: any)=>a+t._d,0)/withDur.length) : null;
+  const dm: Record<string,number> = {};
+  trades.forEach((t: any) => { if (t.date) dm[t.date] = (dm[t.date]||0)+(parseFloat(t.pnl)||0); });
+  const tot = Object.values(dm).reduce((a,v)=>a+v,0);
+  const best = Math.max(...Object.values(dm),0);
+  const pct = tot>0 ? Math.round(best/tot*100) : 0;
+  const DNS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const dc: Record<string,number> = {};
+  trades.forEach((t: any) => { if (!t.date) return; const n=DNS[new Date(t.date+"T12:00:00").getDay()]; dc[n]=(dc[n]||0)+1; });
+  const mad = Object.keys(dc).sort((a,b)=>dc[b]-dc[a])[0]||"—";
+  const bde = Object.entries(dm).sort((a,b)=>b[1]-a[1])[0];
+  const bdt = bde ? trades.filter((t: any)=>t.date===bde[0]) : [];
+  const cards: Array<{label:string;value:string;sub?:string}> = [
+    {label:"Total Number Of Trades",value:String(trades.length)},
+    {label:"Avg. Trade Duration",value:avgSec!==null?fmtDuration(avgSec):"—"},
+    {label:"Best Day % Of Total Profit",value:String(pct)},
+    {label:"Most Active Day",value:mad,sub:bde?`Date: ${bde[0]}  Trades: ${bdt.length}  Winning: ${bdt.filter((t: any)=>t.outcome==="Win").length}`:""},
+  ];
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:"10px" }}>
+      {cards.map(c=>(
+        <div key={c.label} style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+          <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:"8px", lineHeight:1.4 }}>{c.label}</div>
+          <div style={{ fontSize:"24px", fontWeight:700, fontFamily:DISPLAY, color:C.text, letterSpacing:"-0.02em", lineHeight:1 }}>{c.value}</div>
+          {c.sub && <div style={{ fontSize:"9px", color:C.muted, fontFamily:MONO, marginTop:"7px", lineHeight:1.5 }}>{c.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── AVERAGE STATS CARDS ─────────────────────────────────────────────────────
+function AvgStatsCards({ trades, C }: any) {
+  const wins = trades.filter((t: any)=>t.outcome==="Win");
+  const losses = trades.filter((t: any)=>t.outcome==="Loss");
+  const gp = wins.reduce((a: number,t: any)=>a+Math.max(parseFloat(t.pnl)||0,0),0);
+  const gl = Math.abs(losses.reduce((a: number,t: any)=>a+Math.min(parseFloat(t.pnl)||0,0),0));
+  const pfN = gl>0?gp/gl:(gp>0?99:0);
+  const pfS = gl>0?pfN.toFixed(2):(gp>0?"∞":"0");
+  const el = trades.filter((t: any)=>t.outcome==="Win"||t.outcome==="Loss");
+  const wr = el.length ? Math.round(wins.length/el.length*100) : 0;
+  const aw = wins.length ? wins.reduce((a: number,t: any)=>a+(parseFloat(t.pnl)||0),0)/wins.length : 0;
+  const al = losses.length ? Math.abs(losses.reduce((a: number,t: any)=>a+(parseFloat(t.pnl)||0),0)/losses.length) : 0;
+  const wlS = al>0?(aw/al).toFixed(2):(aw>0?"∞":"0");
+  const lo = trades.filter((t: any)=>t.direction==="Long"||(!t.direction&&t.bias==="Bullish")).length;
+  const sh = trades.filter((t: any)=>t.direction==="Short"||(!t.direction&&t.bias==="Bearish")).length;
+  const td = lo+sh||1;
+  const lp = Math.round(lo/td*100); const sp = 100-lp;
+  const ring = (pct: number, col: string) => {
+    const r=22,c=2*Math.PI*r,d=pct/100*c;
+    return <svg width="52" height="52" viewBox="0 0 52 52" style={{flexShrink:0}}>
+      <circle cx="26" cy="26" r={r} fill="none" stroke={C.panel2} strokeWidth="5"/>
+      <circle cx="26" cy="26" r={r} fill="none" stroke={col} strokeWidth="5" strokeDasharray={`${d} ${c-d}`} strokeDashoffset={c/4} strokeLinecap="round"/>
+    </svg>;
+  };
+  const cards = [
+    {label:"Profit Factor",val:pfS,pct:Math.min(pfN/4*100,100),col:C.green,subs:[{l:"Total Profit",v:`${gp.toFixed(1)}R`,c:C.green},{l:"Total Loss",v:`${gl.toFixed(1)}R`,c:C.red}],dir:null},
+    {label:"Trade Win",val:String(wr),pct:wr,col:C.green,subs:[{l:"Win Count",v:String(wins.length),c:C.green},{l:"Loss Count",v:String(losses.length),c:C.red}],dir:null},
+    {label:"Avg. Win To Loss",val:wlS,pct:Math.min(parseFloat(wlS)/4*100,100)||0,col:C.green,subs:[{l:"Avg. Win",v:`${aw.toFixed(2)}R`,c:C.green},{l:"Avg. Loss",v:`${al.toFixed(2)}R`,c:C.red}],dir:null},
+    {label:"Trade Direction",val:String(lp),pct:null,col:C.green,subs:[{l:"Long",v:String(lo),c:C.green},{l:"Short",v:String(sh),c:C.red}],dir:{lo:lp,sh:sp}},
+  ];
+  return (
+    <div>
+      <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"12px" }}>Additional Averages</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:"10px" }}>
+        {cards.map(c=>(
+          <div key={c.label} style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+            <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:"10px" }}>{c.label}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"10px" }}>
+              <div style={{ fontSize:"26px", fontWeight:700, fontFamily:DISPLAY, color:C.text, letterSpacing:"-0.02em", lineHeight:1 }}>{c.val}</div>
+              {c.pct!==null && ring(c.pct, c.col)}
+              {c.dir && <div style={{ flex:1, display:"flex", flexDirection:"column", gap:"4px" }}>
+                <div style={{ height:"14px", borderRadius:"3px", overflow:"hidden", background:C.panel2 }}><div style={{ width:`${c.dir.lo}%`, height:"100%", background:C.green }}/></div>
+                <div style={{ height:"14px", borderRadius:"3px", overflow:"hidden", background:C.panel2 }}><div style={{ width:`${c.dir.sh}%`, height:"100%", background:C.red }}/></div>
+              </div>}
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:"3px" }}>
+              {c.subs.map((s: any)=>(
+                <div key={s.l} style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                  <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:s.c, flexShrink:0 }}/>
+                  <span style={{ fontSize:"9px", color:C.muted, fontFamily:MONO }}>{s.l}</span>
+                  <span style={{ fontSize:"9px", color:C.text2, fontFamily:MONO, marginLeft:"auto" }}>{s.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── DAILY INSIGHTS ───────────────────────────────────────────────────────────
+function DailyInsights({ trades, C, useDollar }: any) {
+  if (!trades.length) return null;
+  const dm: Record<string,{pnl:number;dlr:number}> = {};
+  trades.forEach((t: any) => { if (!t.date) return; if (!dm[t.date]) dm[t.date]={pnl:0,dlr:0}; dm[t.date].pnl+=parseFloat(t.pnl)||0; dm[t.date].dlr+=parseFloat(t.pnlDollar)||0; });
+  const days = Object.keys(dm).sort(); if (!days.length) return null;
+  const fday = (d: string) => { try { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"}); } catch { return d; } };
+  const fval = (d: string) => useDollar&&dm[d].dlr ? `$${dm[d].dlr.toFixed(2)}` : `${dm[d].pnl.toFixed(2)}R`;
+  const best = days.reduce((a,b)=>dm[a].pnl>=dm[b].pnl?a:b,days[0]);
+  const worst = days.reduce((a,b)=>dm[a].pnl<=dm[b].pnl?a:b,days[0]);
+  const wt = trades.filter((t: any)=>t.outcome==="Win"&&parseFloat(t.pnl)>0);
+  const lt = trades.filter((t: any)=>t.outcome==="Loss"&&parseFloat(t.pnl)<0);
+  const bt = wt.length ? wt.reduce((a: any,b: any)=>parseFloat(a.pnl)>=parseFloat(b.pnl)?a:b) : null;
+  const wort = lt.length ? lt.reduce((a: any,b: any)=>parseFloat(a.pnl)<=parseFloat(b.pnl)?a:b) : null;
+  const ftv = (t: any) => useDollar&&t.pnlDollar ? `$${Math.abs(parseFloat(t.pnlDollar)).toFixed(1)}` : `${Math.abs(parseFloat(t.pnl)).toFixed(1)}R`;
+  const cards = [
+    {label:"Most Profitable Day",primary:fval(best),secondary:fday(best),sub:"",color:C.green},
+    {label:"Less Profitable Day",primary:fval(worst),secondary:fday(worst),sub:"",color:C.red},
+    bt?{label:"Best Trade",primary:ftv(bt),secondary:`${bt.direction||bt.bias||""} ${bt.pair}`.trim(),sub:bt.date,color:C.green}:null,
+    wort?{label:"Worst Trade",primary:ftv(wort),secondary:`${wort.direction||wort.bias||""} ${wort.pair}`.trim(),sub:wort.date,color:C.red}:null,
+  ].filter(Boolean);
+  return (
+    <div>
+      <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"12px" }}>Daily Insights</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:"10px" }}>
+        {cards.map((c: any)=>(
+          <div key={c.label} style={{ background:C.panel, borderRadius:"10px", padding:"16px 14px" }}>
+            <div style={{ fontSize:"10px", color:C.muted, fontFamily:MONO, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:"10px" }}>{c.label}</div>
+            <div style={{ fontSize:"24px", fontWeight:700, fontFamily:DISPLAY, color:c.color, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:"5px" }}>{c.primary}</div>
+            <div style={{ fontSize:"13px", fontWeight:600, color:C.text, fontFamily:BODY }}>{c.secondary}</div>
+            {c.sub && <div style={{ fontSize:"9px", color:C.muted, fontFamily:MONO, marginTop:"4px" }}>{c.sub}</div>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1044,7 +1310,7 @@ function getEmotionTags(emotions: string | string[] | undefined): string[] {
   return EMOTION_TAGS.filter(t => lower.includes(t.id) || lower.includes(t.label.toLowerCase())).map(t => t.id);
 }
 
-const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
+const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
 const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false };
 
 export default function Tradr({ user }: { user?: any } = {}) {
@@ -1107,6 +1373,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [addingRule, setAddingRule] = useState(false);
   const [calDayTrades, setCalDayTrades] = useState<any>(null);
   const [statsTab, setStatsTab] = useState("overview");
+  const [perfPnlMode, setPerfPnlMode] = useState<"r" | "$">("r");
   const [savingTrade, setSavingTrade] = useState(false);
 
   // Custom strategies: user-defined, same shape as built-ins (name, code, setups, checklist, rules).
@@ -2249,6 +2516,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   ];
   const STATS_SECTIONS = [
     { id: "overview", label: "Overview" },
+    { id: "performance", label: "Performance" },
     { id: "strategies", label: "Strategies" },
     { id: "calendar", label: "Calendar" },
     { id: "psychology", label: "Psychology" },
@@ -2328,7 +2596,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
       {/* ── PAGE FRAME (responsive: 480px canvas on mobile, up to 960px on desktop) ── */}
       <div className="tradr-app" ref={swipeRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-        style={{ maxWidth: isDesktop ? "960px" : "480px", margin: "0 auto", paddingBottom: isDesktop ? "32px" : "84px", minHeight: "100vh", background: C.bg, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
+        style={{ maxWidth: isDesktop ? "1280px" : "480px", margin: "0 auto", paddingBottom: isDesktop ? "32px" : "84px", minHeight: "100vh", background: C.bg, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
 
         {/* ── MASTHEAD ── */}
         <header style={{ padding: isDesktop ? "18px 40px 0" : "14px 22px 12px", borderBottom: `0.5px solid ${C.border}`, position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
@@ -2344,8 +2612,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
               </button>
             </div>
           </div>
-          {/* Desktop top-nav: main tabs left, current section's sub-nav dropdown right. One row. */}
-          {isDesktop && (
+          {/* Desktop nav is in the sidebar — masthead just shows the logo/handle */}
+          {false && (
             <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px", borderTop: `0.5px solid ${C.border}`, paddingTop: "12px", paddingBottom: "12px" }}>
               <div style={{ display: "flex", gap: "24px", overflowX: "auto", minWidth: 0 }}>
                 {NAV_TABS.map(tab => (
@@ -2363,8 +2631,39 @@ export default function Tradr({ user }: { user?: any } = {}) {
           )}
         </header>
 
-        {/* ── CONTENT ── */}
-        <div style={{ padding: isDesktop ? "32px 40px 0" : "24px 22px 0" }} className="fade-in" key={view}>
+        {/* ── CONTENT — desktop: sidebar+main grid; mobile: single column ── */}
+        <div style={{ display:isDesktop?"grid":"block", gridTemplateColumns:isDesktop?"220px 1fr":undefined }} className="fade-in" key={view}>
+          {isDesktop && (
+            <aside style={{ borderRight:`1px solid ${C.border}`, padding:"28px 0 32px", position:"sticky", top:"64px", height:"calc(100vh - 64px)", overflowY:"auto", display:"flex", flexDirection:"column" }}>
+              <div style={{ flex:1 }}>
+                {NAV_TABS.map(tab => {
+                  const sn = subNavFor(tab.id); const ia = view === tab.id;
+                  return (
+                    <div key={tab.id}>
+                      <button onClick={()=>setView(tab.id)} style={{ display:"flex", alignItems:"center", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                        {tab.label}
+                      </button>
+                      {ia && sn && (
+                        <div style={{ paddingLeft:"28px", paddingBottom:"4px" }}>
+                          {sn.sections.map((sec: any)=>(
+                            <button key={sec.id} onClick={()=>sn.onChange(sec.id)} style={{ display:"block", width:"100%", background:"none", border:"none", padding:"6px 0", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.07em", color:sn.value===sec.id?C.text:C.muted, textAlign:"left", textTransform:"uppercase", transition:"color 0.12s" }}>
+                              {sec.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ padding:"20px 22px 0", borderTop:`1px solid ${C.border}` }}>
+                <button onClick={toggleDark} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"7px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.08em", color:C.muted, textTransform:"uppercase" }}>
+                  {darkMode?"Light Mode":"Dark Mode"}
+                </button>
+              </div>
+            </aside>
+          )}
+          <div style={{ padding:isDesktop?"32px 48px 0":"24px 22px 0", minWidth:0 }}>
 
           {/* ══════════════════════════ HOME ══════════════════════════ */}
           {view === "home" && (
@@ -3010,6 +3309,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 <div><label style={lbl}>Session</label><select name="session" value={form.session} onChange={handleChange} style={sel}><option value="">Select</option>{SESSIONS.map(s => <option key={s}>{s}</option>)}</select></div>
                 <div><label style={lbl}>Bias</label><select name="bias" value={form.bias} onChange={handleChange} style={sel}><option value="">Select</option>{BIAS.map(b => <option key={b}>{b}</option>)}</select></div>
               </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                <div><label style={lbl}>Entry Time</label><input type="time" name="entryTime" value={form.entryTime || ""} onChange={handleChange} style={inp} /></div>
+                <div><label style={lbl}>Exit Time</label><input type="time" name="exitTime" value={form.exitTime || ""} onChange={handleChange} style={inp} /></div>
+                <div><label style={lbl}>Direction</label><select name="direction" value={form.direction || ""} onChange={handleChange} style={sel}><option value="">Select</option><option>Long</option><option>Short</option></select></div>
+              </div>
               <div>
                 <label style={lbl}>Setup {form.strategy && <span style={{ color: C.muted, marginLeft: "6px" }}>· {stratCode(form.strategy)}</span>}</label>
                 <select name="setup" value={form.setup} onChange={handleChange} style={sel}>
@@ -3290,8 +3594,14 @@ export default function Tradr({ user }: { user?: any } = {}) {
               {statsTab === "overview" && total > 0 && (
                 <>
                   <section>
-                    <SectionKicker label="OVERVIEW" C={C} />
-                    <div style={{ marginTop: "14px", borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
+                      <SectionKicker label="OVERVIEW" C={C}/>
+                      <button onClick={()=>{ const txt=`${profile.handle||"Trader"} · ${total} trades · ${winRate}% WR · ${pnlPos?"+":""}${totalPnL}R\n\n@tradrjournal https://tradrjournal.xyz`; window.open(`https://x.com/intent/post?text=${encodeURIComponent(txt)}`,"_blank","noopener"); }} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 12px", cursor:"pointer", fontFamily:MONO, fontSize:"9px", letterSpacing:"0.08em", color:C.muted, display:"flex", alignItems:"center", gap:"5px" }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        Share Stats
+                      </button>
+                    </div>
+                    <div style={{ borderTop:`1px solid ${C.border}` }}>
                       {[
                         ["Total Trades", total],
                         ["Win Rate", `${winRate}%`],
@@ -3343,6 +3653,41 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     </section>
                   )}
                 </>
+              )}
+
+
+              {statsTab === "performance" && (
+                <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
+                  <div style={{ display:"flex", gap:"8px" }}>
+                    {(["r","$"] as const).map(m=>(
+                      <button key={m} onClick={()=>setPerfPnlMode(m)} style={{ background:perfPnlMode===m?C.text:"transparent", color:perfPnlMode===m?C.bg:C.muted, border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                        {m==="r"?"R-Multiple":"Dollar"}
+                      </button>
+                    ))}
+                  </div>
+                  {total===0
+                    ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted, fontSize:"13px", fontFamily:MONO }}>LOG TRADES TO SEE PERFORMANCE</div>
+                    : <>
+                        <section>
+                          <SectionKicker label="TRADE STATISTICS" C={C}/>
+                          <div style={{ marginTop:"14px" }}><TradeStatCards trades={trades} C={C}/></div>
+                        </section>
+                        <section><AvgStatsCards trades={trades} C={C}/></section>
+                        <section><DailyInsights trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/></section>
+                        <section>
+                          <SectionKicker label="DAILY P&L" C={C}/>
+                          <div style={{ marginTop:"14px", display:"grid", gridTemplateColumns:isDesktop?"1fr 1fr":"1fr", gap:"14px" }}>
+                            <DailyCumulativePnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                            <NetDailyPnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                          </div>
+                        </section>
+                        <section>
+                          <SectionKicker label="TRADE DURATION ANALYSIS" C={C}/>
+                          <div style={{ marginTop:"14px" }}><TradeDurationChart trades={trades} C={C}/></div>
+                        </section>
+                      </>
+                  }
+                </div>
               )}
 
               {statsTab === "strategies" && (
@@ -3640,7 +3985,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
               isCreatingCircle={isCreatingCircle}
             />
           )}
-        </div>
+          </div>{/* end main */}
+        </div>{/* end grid */}
 
         {/* ── BOTTOM NAV (mobile only — desktop uses the top-nav strip inside the masthead) ── */}
         {!isDesktop && (
@@ -5181,7 +5527,17 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fol
                       </button>
                     );
                   })}
-                  {item.comments > 0 && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", alignSelf: "center" }}>{item.comments} NOTES</span>}
+                  {item.comments > 0 && <span style={{ fontFamily:MONO, fontSize:"10px", color:C.muted, letterSpacing:"0.06em", alignSelf:"center" }}>{item.comments} NOTES</span>}
+                  <div style={{ marginLeft:"auto", display:"flex", gap:"6px", alignItems:"center" }}>
+                    <button title="Share on X" onClick={()=>{ const o=item.outcome==="Win"?"WIN":item.outcome==="Loss"?"LOSS":"BE"; const p=item.pnl?` ${parseFloat(item.pnl)>=0?"+":""}${item.pnl}R`:""; window.open(`https://x.com/intent/post?text=${encodeURIComponent(`${o} ${item.pair||""}${p}${item.rr?" | "+item.rr+"R":""} — @tradrjournal\nhttps://tradrjournal.xyz`)}`,"_blank","noopener"); }} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"4px 10px", cursor:"pointer", fontFamily:MONO, fontSize:"9px", letterSpacing:"0.08em", color:C.muted, display:"flex", alignItems:"center", gap:"4px" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                      Share
+                    </button>
+                    <button title="Copy caption for Instagram" onClick={()=>{ const o=item.outcome==="Win"?"WIN":item.outcome==="Loss"?"LOSS":"BE"; const p=item.pnl?` ${parseFloat(item.pnl)>=0?"+":""}${item.pnl}R`:""; navigator.clipboard.writeText(`${o} | ${item.pair||""}${p}${item.rr?" | "+item.rr+"R setup":""}\n\ntradrjournal.xyz\n#tradingjournal #propfirm #daytrading`).then(()=>window.open("https://www.instagram.com/","_blank","noopener")); }} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"4px 10px", cursor:"pointer", fontFamily:MONO, fontSize:"9px", letterSpacing:"0.08em", color:C.muted, display:"flex", alignItems:"center", gap:"4px" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                      IG
+                    </button>
+                  </div>
                 </div>
               </div>
             );
