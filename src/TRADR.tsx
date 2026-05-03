@@ -1123,6 +1123,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Circle action loading states
   const [isCreatingCircle, setIsCreatingCircle] = useState(false);
   const [isJoiningCircle, setIsJoiningCircle] = useState(false);
+  const [showLiveModal, setShowLiveModal] = useState(false);
 
   // Swipe
   const swipeRef = useRef<any>(null);
@@ -2312,7 +2313,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
         .row-hvr{cursor:pointer;transition:opacity 0.15s;}
         .row-hvr:hover{opacity:0.75;}
         .check-row:hover .ca{opacity:1!important;}
-        @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes livePulse{0%,100%{transform:scale(1);opacity:0.4}50%{transform:scale(2.2);opacity:0}}
         .fade-in{animation:rise 0.25s ease;}
         input[type=file]{display:none;}
       `}</style>
@@ -2490,6 +2491,49 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       </section>
                     );
                   })()}
+
+                  {/* Live trade card — Tradovate integration (coming soon) */}
+                  <section style={{ marginTop: "28px" }}>
+                    <button
+                      onClick={() => setShowLiveModal(true)}
+                      style={{ width: "100%", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "10px", padding: "0", cursor: "pointer", textAlign: "left", overflow: "hidden", position: "relative" }}>
+                      {/* top accent bar */}
+                      <div style={{ height: "2px", background: `linear-gradient(90deg, ${C.green}88 0%, ${C.green}22 100%)` }} />
+                      <div style={{ padding: "16px 18px 18px" }}>
+                        {/* header row */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {/* pulsing live dot */}
+                            <span style={{ position: "relative", display: "inline-flex", width: "8px", height: "8px" }}>
+                              <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.green, opacity: 0.4, animation: "livePulse 2s ease-in-out infinite" }} />
+                              <span style={{ position: "relative", display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: C.green }} />
+                            </span>
+                            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.green, letterSpacing: "0.18em", textTransform: "uppercase" }}>Live Positions</span>
+                          </div>
+                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", border: `1px solid ${C.border2}`, borderRadius: "4px", padding: "3px 7px" }}>Coming Soon</span>
+                        </div>
+                        {/* mock position rows */}
+                        {[
+                          { pair: "NQ /MNQ", dir: "LONG", pnl: "+2.4R", pnlPos: true },
+                          { pair: "ES /MES",  dir: "SHORT", pnl: "−0.8R", pnlPos: false },
+                        ].map((row, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderTop: i === 0 ? `1px solid ${C.border}` : undefined, opacity: 0.45, filter: "blur(1.5px)", userSelect: "none" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <span style={{ fontFamily: "Syne, Inter, system-ui, sans-serif", fontSize: "15px", fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>{row.pair}</span>
+                              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: row.dir === "LONG" ? C.green : C.red, letterSpacing: "0.1em", border: `1px solid ${row.dir === "LONG" ? C.green + "55" : C.red + "55"}`, borderRadius: "3px", padding: "2px 6px" }}>{row.dir}</span>
+                            </div>
+                            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "13px", color: row.pnlPos ? C.green : C.red, letterSpacing: "0.04em" }}>{row.pnl}</span>
+                          </div>
+                        ))}
+                        {/* tradovate attribution */}
+                        <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ flex: 1, height: "1px", background: C.border }} />
+                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "8px", color: C.dim, letterSpacing: "0.16em", textTransform: "uppercase" }}>via Tradovate</span>
+                          <div style={{ flex: 1, height: "1px", background: C.border }} />
+                        </div>
+                      </div>
+                    </button>
+                  </section>
 
                   {/* Equity curve */}
                   {trades.length > 1 && (
@@ -3625,6 +3669,58 @@ export default function Tradr({ user }: { user?: any } = {}) {
           style={{ position: "fixed", bottom: isDesktop ? "28px" : "80px", right: "16px", zIndex: 998, background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "10px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", boxShadow: "0 2px 12px rgba(0,0,0,0.25)" }}>
           Feedback
         </button>
+
+        {/* ── Live trade coming-soon sheet ── */}
+        {showLiveModal && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+            onClick={() => setShowLiveModal(false)}>
+            <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", padding: "10px 24px calc(40px + env(safe-area-inset-bottom))" }}
+              onClick={e => e.stopPropagation()}>
+              {/* drag handle */}
+              <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 28px" }} />
+              {/* live dot + title */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <span style={{ position: "relative", display: "inline-flex", width: "10px", height: "10px" }}>
+                  <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.green, opacity: 0.35, animation: "livePulse 2s ease-in-out infinite" }} />
+                  <span style={{ position: "relative", display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", background: C.green }} />
+                </span>
+                <span style={{ fontFamily: "Syne, Inter, system-ui, sans-serif", fontSize: "22px", fontWeight: 600, color: C.text, letterSpacing: "-0.02em" }}>Live Positions</span>
+              </div>
+              <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.green, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: "20px" }}>Tradovate Integration · Coming Soon</div>
+              {/* feature list */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "28px" }}>
+                {[
+                  { icon: "⚡", label: "Real-time P&L", desc: "Watch your open positions update live, straight from your Tradovate account." },
+                  { icon: "📋", label: "Auto-import trades", desc: "Closed trades sync automatically into your journal — no manual entry required." },
+                  { icon: "📊", label: "Unified stats", desc: "Tradovate fills feed directly into your win rate, avg R, and circle leaderboard." },
+                  { icon: "🔔", label: "Risk alerts", desc: "Get notified when you're approaching your daily drawdown or trade limit." },
+                ].map(f => (
+                  <div key={f.label} style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                    <span style={{ fontSize: "18px", lineHeight: 1, marginTop: "1px" }}>{f.icon}</span>
+                    <div>
+                      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px", color: C.text, letterSpacing: "0.08em", marginBottom: "3px" }}>{f.label}</div>
+                      <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>{f.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* divider */}
+              <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: "20px" }} />
+              {/* cta row */}
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => setShowLiveModal(false)}
+                  style={{ flex: 1, padding: "13px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.muted, cursor: "pointer", fontFamily: "IBM Plex Mono, monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  Close
+                </button>
+                <button
+                  onClick={() => { setShowLiveModal(false); showToast("We'll let you know when it's ready!"); }}
+                  style={{ flex: 2, padding: "13px", border: "none", borderRadius: "8px", background: C.text, color: C.bg, cursor: "pointer", fontFamily: "IBM Plex Mono, monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  Notify Me
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Feedback modal ── */}
         {feedbackOpen && (
