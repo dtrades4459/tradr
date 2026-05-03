@@ -2492,44 +2492,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     );
                   })()}
 
-                  {/* Live trade card — Tradovate integration (coming soon) */}
-                  <section style={{ marginTop: "28px" }}>
-                    <button
-                      onClick={() => setShowLiveModal(true)}
-                      style={{ width: "100%", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "10px", padding: "0", cursor: "pointer", textAlign: "left", overflow: "hidden", position: "relative" }}>
-                      {/* top accent bar */}
-                      <div style={{ height: "2px", background: `linear-gradient(90deg, ${C.green}88 0%, ${C.green}22 100%)` }} />
-                      <div style={{ padding: "16px 18px 18px" }}>
-                        {/* header row */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            {/* pulsing live dot */}
-                            <span style={{ position: "relative", display: "inline-flex", width: "8px", height: "8px" }}>
-                              <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.green, opacity: 0.4, animation: "livePulse 2s ease-in-out infinite" }} />
-                              <span style={{ position: "relative", display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: C.green }} />
-                            </span>
-                            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.green, letterSpacing: "0.18em", textTransform: "uppercase" }}>Live Positions</span>
-                          </div>
-                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", border: `1px solid ${C.border2}`, borderRadius: "4px", padding: "3px 7px" }}>Coming Soon</span>
+                  {/* Live positions — Tradovate integration (coming soon) */}
+                  <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
+                    <button onClick={() => setShowLiveModal(true)}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: "0", cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+                        LIVE POSITIONS
+                        {/* pulsing dot */}
+                        <span style={{ position: "relative", display: "inline-flex", width: "6px", height: "6px", marginLeft: "2px" }}>
+                          <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.muted, opacity: 0.35, animation: "livePulse 2.4s ease-in-out infinite" }} />
+                          <span style={{ position: "relative", display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: C.muted }} />
+                        </span>
+                      </div>
+                      <div style={{ border: `1px solid ${C.border}`, padding: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em" }}>Tradovate sync</div>
+                          <div style={{ fontFamily: MONO, fontSize: "9px", color: C.dim, letterSpacing: "0.14em", textTransform: "uppercase" }}>Coming soon</div>
                         </div>
-                        {/* mock position rows */}
-                        {[
-                          { pair: "NQ /MNQ", dir: "LONG", pnl: "+2.4R", pnlPos: true },
-                          { pair: "ES /MES",  dir: "SHORT", pnl: "−0.8R", pnlPos: false },
-                        ].map((row, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderTop: i === 0 ? `1px solid ${C.border}` : undefined, opacity: 0.45, filter: "blur(1.5px)", userSelect: "none" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <span style={{ fontFamily: "Syne, Inter, system-ui, sans-serif", fontSize: "15px", fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>{row.pair}</span>
-                              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: row.dir === "LONG" ? C.green : C.red, letterSpacing: "0.1em", border: `1px solid ${row.dir === "LONG" ? C.green + "55" : C.red + "55"}`, borderRadius: "3px", padding: "2px 6px" }}>{row.dir}</span>
-                            </div>
-                            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "13px", color: row.pnlPos ? C.green : C.red, letterSpacing: "0.04em" }}>{row.pnl}</span>
-                          </div>
-                        ))}
-                        {/* tradovate attribution */}
-                        <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <div style={{ flex: 1, height: "1px", background: C.border }} />
-                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "8px", color: C.dim, letterSpacing: "0.16em", textTransform: "uppercase" }}>via Tradovate</span>
-                          <div style={{ flex: 1, height: "1px", background: C.border }} />
+                        <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginTop: "6px", lineHeight: 1.5 }}>
+                          Real-time positions and auto-imported fills, straight into your journal.
                         </div>
                       </div>
                     </button>
@@ -3674,50 +3656,30 @@ export default function Tradr({ user }: { user?: any } = {}) {
         {showLiveModal && (
           <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
             onClick={() => setShowLiveModal(false)}>
-            <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", padding: "10px 24px calc(40px + env(safe-area-inset-bottom))" }}
+            <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", padding: "10px 24px 40px" }}
               onClick={e => e.stopPropagation()}>
-              {/* drag handle */}
               <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 28px" }} />
-              {/* live dot + title */}
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                <span style={{ position: "relative", display: "inline-flex", width: "10px", height: "10px" }}>
-                  <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.green, opacity: 0.35, animation: "livePulse 2s ease-in-out infinite" }} />
-                  <span style={{ position: "relative", display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", background: C.green }} />
-                </span>
-                <span style={{ fontFamily: "Syne, Inter, system-ui, sans-serif", fontSize: "22px", fontWeight: 600, color: C.text, letterSpacing: "-0.02em" }}>Live Positions</span>
+              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: "10px" }}>Tradovate · Coming Soon</div>
+              <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: "14px" }}>Live Positions</div>
+              <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.65, marginBottom: "28px" }}>
+                Connect your Tradovate account to see open positions in real time and have closed fills auto-imported into your journal — win rate, avg R, and circle stats update automatically.
               </div>
-              <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "9px", color: C.green, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: "20px" }}>Tradovate Integration · Coming Soon</div>
-              {/* feature list */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "28px" }}>
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
                 {[
-                  { icon: "⚡", label: "Real-time P&L", desc: "Watch your open positions update live, straight from your Tradovate account." },
-                  { icon: "📋", label: "Auto-import trades", desc: "Closed trades sync automatically into your journal — no manual entry required." },
-                  { icon: "📊", label: "Unified stats", desc: "Tradovate fills feed directly into your win rate, avg R, and circle leaderboard." },
-                  { icon: "🔔", label: "Risk alerts", desc: "Get notified when you're approaching your daily drawdown or trade limit." },
-                ].map(f => (
-                  <div key={f.label} style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
-                    <span style={{ fontSize: "18px", lineHeight: 1, marginTop: "1px" }}>{f.icon}</span>
-                    <div>
-                      <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px", color: C.text, letterSpacing: "0.08em", marginBottom: "3px" }}>{f.label}</div>
-                      <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>{f.desc}</div>
-                    </div>
+                  ["Real-time P&L", "Open positions update live from your account."],
+                  ["Auto-import", "Closed fills land in your journal without manual entry."],
+                  ["Unified stats", "Win rate, avg R, and leaderboard stay current automatically."],
+                ].map(([label, desc]) => (
+                  <div key={label} style={{ display: "flex", gap: "10px", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.text2, letterSpacing: "0.08em", minWidth: "110px", paddingTop: "1px" }}>{label}</div>
+                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>{desc}</div>
                   </div>
                 ))}
               </div>
-              {/* divider */}
-              <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: "20px" }} />
-              {/* cta row */}
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={() => setShowLiveModal(false)}
-                  style={{ flex: 1, padding: "13px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.muted, cursor: "pointer", fontFamily: "IBM Plex Mono, monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Close
-                </button>
-                <button
-                  onClick={() => { setShowLiveModal(false); showToast("We'll let you know when it's ready!"); }}
-                  style={{ flex: 2, padding: "13px", border: "none", borderRadius: "8px", background: C.text, color: C.bg, cursor: "pointer", fontFamily: "IBM Plex Mono, monospace", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  Notify Me
-                </button>
-              </div>
+              <button onClick={() => setShowLiveModal(false)}
+                style={{ marginTop: "24px", width: "100%", padding: "13px", border: `1px solid ${C.border2}`, borderRadius: "4px", background: "transparent", color: C.text2, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                Got it
+              </button>
             </div>
           </div>
         )}
