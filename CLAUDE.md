@@ -8,7 +8,7 @@
 
 A trading journal PWA for retail traders. Users log trades, track stats (P&L, win rate, avg R), follow friends, and compete in Trading Circles. Built for mobile-first, installable as a home screen app on iOS and Android.
 
-**Live URL:** https://tradrjournal.xyz (custom domain via GoDaddy → Vercel)
+**Live URL:** https://tradrjournal.xyz and https://www.tradrjournal.xyz (both active, custom domain via GoDaddy → Vercel)
 **Vercel project:** tradr.dt (dylnyland4459-1994s-projects)
 **Supabase project ID:** vifwjwsndchnrpvfgrmg
 **GitHub:** public repo, auto-deploys to Vercel on push to main
@@ -153,7 +153,9 @@ Nameservers: ns39.domaincontrol.com / ns40.domaincontrol.com
 
 GoDaddy DNS records:
 - A record `@` → `76.76.21.21` (Vercel IP)
-- CNAME `www` → `f084cb49980fd15b.vercel-dns-017.com` (Vercel CNAME — check Vercel for exact value)
+- CNAME `www` → `f084cb49980fd15b.vercel-dns-017.com` (Vercel CNAME — confirmed working)
+
+Both `tradrjournal.xyz` and `www.tradrjournal.xyz` are verified and live in Vercel.
 
 Vercel project: domain `tradrjournal.xyz` added and verified.
 
