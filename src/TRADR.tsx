@@ -1145,6 +1145,19 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
   useEffect(() => { loadAll(); }, []);
 
+  // ── Stats fingerprint — cheap memo so auto-publish only fires when the
+  //    numbers actually change, not on every render triggered by unrelated state.
+  const statsFingerprint = useMemo(() => {
+    const w    = trades.filter(t => t.outcome === "Win").length;
+    const l    = trades.filter(t => t.outcome === "Loss").length;
+    const pnl  = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
+    const rrTs = trades.filter(t => t.rr);
+    const avgRR = rrTs.length
+      ? (rrTs.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTs.length).toFixed(2)
+      : "0";
+    return `${w}:${l}:${pnl.toFixed(2)}:${avgRR}`;
+  }, [trades]);
+
   // ── Auto-publish to circles ──────────────────────────────────────
   // Circles are the product pillar: any time trades change, every circle
   // the user is in must reflect the latest stats without a manual tap.
@@ -1157,7 +1170,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
     }, 800);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades, myCircles, loading]);
+  }, [statsFingerprint, myCircles, loading]);
 
   // ── Auto-publish my feed whenever trades change ───────────────────
   // Friends see fresh data without the user ever tapping "Publish".
@@ -1350,76 +1363,91 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }, [loading, profile.uid]);
 
   async function loadAll() {
+    const store = (window as any).storage;
+    const [t, pr, fr, ff, sc, sr, dm, ci, st, cs, tv, v2ProfileRes] = await Promise.all([
+      store.get("tradr_trades").catch(() => null),
+      store.get("tradr_profile").catch(() => null),
+      store.get("tradr_friends").catch(() => null),
+      store.get("tradr_feed", true).catch(() => null),
+      store.get("tradr_checklists").catch(() => null),
+      store.get("tradr_rules").catch(() => null),
+      store.get("tradr_dark").catch(() => null),
+      store.get("tradr_circles").catch(() => null),
+      store.get("tradr_thresholds").catch(() => null),
+      store.get("tradr_custom_strategies").catch(() => null),
+      store.get("tradr_tradovate").catch(() => null),
+      (isFlagOn("newProfile") && user?.id)
+        ? getProfile(user.id).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    // Trades
     try {
-      const t = await (window as any).storage.get("tradr_trades");
-      if (t) {
-        const parsed = JSON.parse(t.value);
-        setTrades(Array.isArray(parsed) ? parsed : []);
-      }
+      const parsed = t ? JSON.parse(t.value) : null;
+      setTrades(Array.isArray(parsed) ? parsed : []);
     } catch (e) { log.error("loadAll.trades", e); setTrades([]); }
 
-    // ── Profile load ──────────────────────────────────────────────
-    // V2 path: read from public.profiles when the newProfile flag is on.
-    // V1 path (default): read from user_kv tradr_profile JSON blob.
-    // The KV row is still authoritative until the flag flip + a confirmed
-    // dual-write window has caught up everyone's data.
+    // Profile (v2 → KV fallback)
     try {
       let p: any = null;
-      if (isFlagOn("newProfile") && user?.id) {
-        const v2 = await getProfile(user.id);
-        if (v2) {
-          // Map v2 row → legacy Profile shape so the rest of TRADR.tsx is unchanged.
-          p = {
-            ...DEF_PROFILE,
-            ...(v2.prefs || {}),
-            uid: v2.userId,
-            handle: v2.handle ? `@${v2.handle}` : "",
-            name: v2.name,
-            avatar: v2.avatar,
-            bio: v2.bio,
-            broker: v2.broker,
-            timezone: v2.timezone,
-            onboarded: v2.onboarded,
-            publicTrades: v2.publicTrades,
-          };
-        }
+      if (v2ProfileRes) {
+        const v2 = v2ProfileRes;
+        p = {
+          ...DEF_PROFILE,
+          ...(v2.prefs || {}),
+          uid: v2.userId,
+          handle: v2.handle ? `@${v2.handle}` : "",
+          name: v2.name,
+          avatar: v2.avatar,
+          bio: v2.bio,
+          broker: v2.broker,
+          timezone: v2.timezone,
+          onboarded: v2.onboarded,
+          publicTrades: v2.publicTrades,
+        };
       }
       if (!p) {
-        const pr = await (window as any).storage.get("tradr_profile");
         p = pr ? JSON.parse(pr.value) : { ...DEF_PROFILE };
       }
       if (user?.id && p.uid !== user.id) {
         p = { ...p, uid: user.id };
-        try { await (window as any).storage.set("tradr_profile", JSON.stringify(p)); }
+        try { await store.set("tradr_profile", JSON.stringify(p)); }
         catch (e) { log.error("loadAll.profile.uidStamp", e); }
       }
       setProfile(p); setProfileDraft(p);
     } catch (e) { log.error("loadAll.profile", e); }
 
-    try { const fr = await (window as any).storage.get("tradr_friends"); if (fr) setFriends(JSON.parse(fr.value)); }
+    try { if (fr) setFriends(JSON.parse(fr.value)); }
     catch (e) { log.error("loadAll.friends", e); }
-    try { const ff = await (window as any).storage.get("tradr_feed", true); if (ff) setFriendFeed(JSON.parse(ff.value)); }
+    try { if (ff) setFriendFeed(JSON.parse(ff.value)); }
     catch (e) { log.error("loadAll.feed", e); }
-    try { const sc = await (window as any).storage.get("tradr_checklists"); if (sc) setStratChecklists(JSON.parse(sc.value)); }
+    try { if (sc) setStratChecklists(JSON.parse(sc.value)); }
     catch (e) { log.error("loadAll.checklists", e); }
-    try { const sr = await (window as any).storage.get("tradr_rules"); if (sr) setStratRules(JSON.parse(sr.value)); }
+    try { if (sr) setStratRules(JSON.parse(sr.value)); }
     catch (e) { log.error("loadAll.rules", e); }
-    try { const dm = await (window as any).storage.get("tradr_dark"); if (dm) setDarkMode(JSON.parse(dm.value)); }
+    try { if (dm) setDarkMode(JSON.parse(dm.value)); }
     catch (e) { log.error("loadAll.dark", e); }
-    try { const ci = await (window as any).storage.get("tradr_circles"); if (ci) setMyCircles(JSON.parse(ci.value)); }
+    try { if (ci) setMyCircles(JSON.parse(ci.value)); }
     catch (e) { log.error("loadAll.circles", e); }
-    try { const st = await (window as any).storage.get("tradr_thresholds"); if (st) setStratThresholds(JSON.parse(st.value)); }
+    try { if (st) setStratThresholds(JSON.parse(st.value)); }
     catch (e) { log.error("loadAll.thresholds", e); }
     try {
-      const cs = await (window as any).storage.get("tradr_custom_strategies");
       if (cs) {
         const parsed = JSON.parse(cs.value);
         setCustomStrategies(parsed);
-        // Merge into _extraStrategies so stratCode/setup lookups work without
-        // mutating the immutable STRATEGIES const.
         _extraStrategies = Object.fromEntries(parsed.map((s: any) => [s.name, s]));
       }
     } catch (e) { log.error("loadAll.customStrategies", e); }
+    try {
+      if (tv) {
+        const tvData = JSON.parse(tv.value);
+        if (tvData?.apiKey) setTradovateApiKey(tvData.apiKey);
+        if (tvData?.secretKey) setTradovateSecretKey(tvData.secretKey);
+        if (tvData?.accountId) setTradovateAccountId(tvData.accountId);
+        if (tvData?.environment) setTradovateEnvironment(tvData.environment);
+        if (tvData?.enabled !== undefined) setTradovateEnabled(tvData.enabled);
+      }
+    } catch (e) { log.error("loadAll.tradovate", e); }
     setLoading(false);
   }
 
@@ -2088,13 +2116,16 @@ export default function Tradr({ user }: { user?: any } = {}) {
     }));
   }
 
-  // Stats
-  const wins = trades.filter(t => t.outcome === "Win").length;
-  const losses = trades.filter(t => t.outcome === "Loss").length;
-  const bes = trades.filter(t => t.outcome === "Breakeven").length;
-  const total = trades.length;
-  const winRate: any = total ? ((wins / total) * 100).toFixed(1) : 0;
-  const totalPnL = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0).toFixed(2);
+  // Stats — memoised so derived values only recompute when `trades` changes.
+  const { wins, losses, bes, total, winRate, totalPnL } = useMemo(() => {
+    const wins    = trades.filter(t => t.outcome === "Win").length;
+    const losses  = trades.filter(t => t.outcome === "Loss").length;
+    const bes     = trades.filter(t => t.outcome === "Breakeven").length;
+    const total   = trades.length;
+    const winRate: any = total ? ((wins / total) * 100).toFixed(1) : 0;
+    const totalPnL = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0).toFixed(2);
+    return { wins, losses, bes, total, winRate, totalPnL };
+  }, [trades]);
 
   // ── This-week trades (Mon 00:00 local → now) ──────────────────────────────
   const weekTrades = (() => {
@@ -2121,7 +2152,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const stratStats = trades.reduce((acc: any, t: any) => { if (t.strategy) { if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 }; acc[t.strategy].count++; if (t.outcome === "Win") acc[t.strategy].w++; if (t.outcome === "Loss") acc[t.strategy].l++; if (t.outcome === "Breakeven") acc[t.strategy].be++; acc[t.strategy].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
   const sessionStats = trades.reduce((acc: any, t: any) => { if (t.session) { if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.session].w++; if (t.outcome === "Loss") acc[t.session].l++; acc[t.session].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
   const pairStats = trades.reduce((acc: any, t: any) => { if (t.pair) { if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.pair].w++; if (t.outcome === "Loss") acc[t.pair].l++; acc[t.pair].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
-  const filteredTrades = trades.filter(t => {
+  const filteredTrades = useMemo(() => trades.filter(t => {
     if (filter.outcome && t.outcome !== filter.outcome) return false;
     if (filter.setup && t.setup !== filter.setup) return false;
     if (filter.pair && !t.pair.toLowerCase().includes(filter.pair.toLowerCase())) return false;
@@ -2129,12 +2160,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
     if (filter.dateFrom && t.date < filter.dateFrom) return false;
     if (filter.dateTo && t.date > filter.dateTo) return false;
     return true;
-  });
+  }), [trades, filter]);
 
   const checkedCount = checkItems.filter((i: any) => isChecked(i.id)).length;
   const totalItems = checkItems.length;
   const scorePct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
-  const insights = generateInsights(trades);
+  const insights = useMemo(() => generateInsights(trades), [trades]);
   const _allStratMap = getAllStrategiesMap();
   const allSetups = allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 

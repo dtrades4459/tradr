@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from "../lib/supabase";
+import { log } from "../lib/log";
 
 export interface FollowEdge {
   follower: string;
@@ -72,11 +73,11 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
 
     if (legacyFg) {
       try { (JSON.parse(legacyFg.value) || []).forEach((c: string) => followingSet.add(c)); }
-      catch (e) { console.error("[TRADR][follows.readFollowGraph][legacyFg]", e); }
+      catch (e) { log.error("follows.readFollowGraph.legacyFg", e); }
     }
     if (legacyFr) {
       try { (JSON.parse(legacyFr.value) || []).forEach((c: string) => followersSet.add(c)); }
-      catch (e) { console.error("[TRADR][follows.readFollowGraph][legacyFr]", e); }
+      catch (e) { log.error("follows.readFollowGraph.legacyFr", e); }
     }
 
     return {
@@ -84,7 +85,7 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
       followers: Array.from(followersSet),
     };
   } catch (e) {
-    console.error("[TRADR][follows.readFollowGraph]", myCode, e);
+    log.error("follows.readFollowGraph", e, { myCode });
     return { following: [], followers: [] };
   }
 }
@@ -104,14 +105,14 @@ export async function migrateLegacyFollows(myCode: string): Promise<void> {
       if (!target || target === myCode) return;
       const edge: FollowEdge = { follower: myCode, target, at: new Date().toISOString() };
       try { await store().set(followKeys.follow(myCode, target), JSON.stringify(edge), true); }
-      catch (e) { console.error("[TRADR][follows.migrateLegacyFollows][follow]", target, e); }
+      catch (e) { log.error("follows.migrateLegacyFollows.follow", e, { target }); }
       try { await store().set(followKeys.follower(target, myCode), JSON.stringify(edge), true); }
-      catch (e) { console.error("[TRADR][follows.migrateLegacyFollows][follower]", target, e); }
+      catch (e) { log.error("follows.migrateLegacyFollows.follower", e, { target }); }
     }));
     try { await store().del(followKeys.legacyFollowing(myCode), true); }
-    catch (e) { console.error("[TRADR][follows.migrateLegacyFollows][delete]", e); }
+    catch (e) { log.error("follows.migrateLegacyFollows.delete", e); }
   } catch (e) {
-    console.error("[TRADR][follows.migrateLegacyFollows]", myCode, e);
+    log.error("follows.migrateLegacyFollows", e, { myCode });
   }
 }
 
@@ -122,9 +123,9 @@ export async function followUser(input: { myCode: string; target: string }): Pro
   if (!target || target === input.myCode) return;
   const edge: FollowEdge = { follower: input.myCode, target, at: new Date().toISOString() };
   try { await store().set(followKeys.follow(input.myCode, target), JSON.stringify(edge), true); }
-  catch (e) { console.error("[TRADR][follows.followUser][follow]", target, e); }
+  catch (e) { log.error("follows.followUser.follow", e, { target }); }
   try { await store().set(followKeys.follower(target, input.myCode), JSON.stringify(edge), true); }
-  catch (e) { console.error("[TRADR][follows.followUser][follower]", target, e); }
+  catch (e) { log.error("follows.followUser.follower", e, { target }); }
 }
 
 export async function unfollowUser(input: { myCode: string; target: string }): Promise<void> {
@@ -132,9 +133,9 @@ export async function unfollowUser(input: { myCode: string; target: string }): P
   if (!target) return;
   // We own both edges, so RLS lets us delete them.
   try { await store().del(followKeys.follow(input.myCode, target), true); }
-  catch (e) { console.error("[TRADR][follows.unfollowUser][follow]", target, e); }
+  catch (e) { log.error("follows.unfollowUser.follow", e, { target }); }
   try { await store().del(followKeys.follower(target, input.myCode), true); }
-  catch (e) { console.error("[TRADR][follows.unfollowUser][follower]", target, e); }
+  catch (e) { log.error("follows.unfollowUser.follower", e, { target }); }
 }
 
 export function mutualFriends(graph: FollowGraph): string[] {

@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from "../lib/supabase";
+import { log } from "../lib/log";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export async function readCircleMeta(code: string): Promise<CircleMeta | null> {
     if (!res) return null;
     return JSON.parse(res.value);
   } catch (e) {
-    console.error("[TRADR][circles.readCircleMeta]", code, e);
+    log.error("circles.readCircleMeta", e, { code });
     return null;
   }
 }
@@ -104,7 +105,7 @@ export async function readCircleMembers(code: string, fallback: MemberRecord[] =
     }
     return out.length ? out : fallback;
   } catch (e) {
-    console.error("[TRADR][circles.readCircleMembers]", code, e);
+    log.error("circles.readCircleMembers", e, { code });
     return fallback;
   }
 }
@@ -113,20 +114,20 @@ export async function readLeaderboard(circle: Pick<Circle, "code" | "members">):
   // Always refresh members first — a new member may have joined since the
   // cached circle object was last set on this client.
   const members = await readCircleMembers(circle.code, circle.members || []);
-  const entries: LeaderboardEntry[] = [];
-  for (const m of members) {
-    try {
-      const r = await store().get(circleKeys.entry(circle.code, m.code), true);
-      if (r) {
-        entries.push(JSON.parse(r.value));
-      } else {
-        entries.push(blankEntry(m));
-      }
-    } catch (e) {
-      console.error("[TRADR][circles.readLeaderboard]", circle.code, m.code, e);
-      entries.push(blankEntry(m));
-    }
-  }
+  // Fetch all member entries in parallel (was a sequential for..of — O(n) round trips).
+  const rows = await Promise.all(
+    members.map(m =>
+      store().get(circleKeys.entry(circle.code, m.code), true).catch(e => {
+        log.error("circles.readLeaderboard", e, { code: circle.code, memberCode: m.code });
+        return null;
+      })
+    )
+  );
+  const entries: LeaderboardEntry[] = rows.map((r, i) => {
+    if (!r) return blankEntry(members[i]);
+    try { return JSON.parse(r.value) as LeaderboardEntry; }
+    catch { return blankEntry(members[i]); }
+  });
   entries.sort((a, b) => b.totalPnL - a.totalPnL);
   return entries;
 }
@@ -187,7 +188,7 @@ export async function leaveCircle(input: { code: string; myCode: string }): Prom
   try {
     await store().del(circleKeys.member(input.code, input.myCode), true);
   } catch (e) {
-    console.error("[TRADR][circles.leaveCircle]", input.code, input.myCode, e);
+    log.error("circles.leaveCircle", e, { code: input.code, myCode: input.myCode });
   }
 }
 
@@ -197,7 +198,7 @@ export async function ensureMyMemberRow(input: { code: string; me: MemberRecord 
   try {
     await store().set(circleKeys.member(input.code, input.me.code), JSON.stringify(input.me), true);
   } catch (e) {
-    console.error("[TRADR][circles.ensureMyMemberRow]", input.code, e);
+    log.error("circles.ensureMyMemberRow", e, { code: input.code });
   }
 }
 
@@ -208,7 +209,7 @@ export async function publishLeaderboardEntry(input: {
   try {
     await store().set(circleKeys.entry(input.code, input.entry.memberCode), JSON.stringify(input.entry), true);
   } catch (e) {
-    console.error("[TRADR][circles.publishLeaderboardEntry]", input.code, e);
+    log.error("circles.publishLeaderboardEntry", e, { code: input.code });
     throw e;
   }
 }
