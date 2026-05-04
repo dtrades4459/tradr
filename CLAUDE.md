@@ -20,7 +20,7 @@ A trading journal PWA for retail traders. Users log trades, track stats (P&L, wi
 - React 19 + TypeScript + Vite
 - Supabase (auth + two KV tables: `user_kv` and `shared_kv`)
 - Vercel (hosting + serverless functions in `api/`)
-- Single-file app: `src/TRADR.tsx` (~5000+ lines, all UI + logic)
+- Single-file app: `src/TRADR.tsx` (~5700+ lines, all UI + logic)
 - Auth wrapper: `src/TradrAuth.tsx`
 - Storage shim: `src/lib/storage.ts` (window.storage — wraps Supabase KV + localStorage cache)
 
@@ -84,19 +84,23 @@ A trading journal PWA for retail traders. Users log trades, track stats (P&L, wi
 ```tsx
 interface Profile {
   name: string;
-  handle: string;       // @username
-  avatar: string;       // emoji or URL
+  handle: string;         // @username — auto-filled from name during onboarding
+  avatar: string;         // emoji (e.g. "🎯") or data:image/ or https:// URL
   bio: string;
   broker: string;
   timezone: string;
   onboarded: boolean;
   publicTrades?: boolean; // toggle in settings — controls if trades show on public profile
+  instruments?: string[]; // futures they trade: ["ES", "NQ", "CL", ...]
+  socialLinks?: { twitter?: string }; // social handles collected at onboarding
   uid?: string;
   // ... targets, rules, checklist, etc.
 }
 ```
 
-`DEF_PROFILE` = default profile object with all fields.
+`DEF_PROFILE` = default profile object with all fields, including `instruments: []` and `socialLinks: {}`.
+
+**AvatarCircle** renders emoji avatars natively — if `avatar` is a short string (≤8 chars) that isn't a URL or data URI, it renders as an emoji at 50% of the circle size.
 
 ---
 
@@ -119,7 +123,7 @@ interface Profile {
 - Friend feed — follow by handle, see friends' trades
 - Clickable public profiles — tap any name/avatar to see ProfileModal (stats, trades, follow/unfollow)
 - "Public trades" privacy toggle in Settings
-- Onboarding flow with localStorage backup (`tradr_onboarded = "1"`) to prevent re-loop on network failure
+- **5-step onboarding** — (1) name + handle (auto-fill + auto-@ fix) + emoji avatar picker, (2) bio + Twitter/X, (3) futures instruments multi-select, (4) strategy + custom strategy option, (5) ready/summary. localStorage backup prevents re-loop on network failure.
 - React Error Boundary wrapping the whole app
 - Feedback button (floating) → modal → POST `/api/feedback` → Telegram bot
 - Custom domain tradrjournal.xyz live via GoDaddy DNS → Vercel
@@ -178,7 +182,7 @@ Vercel project: domain `tradrjournal.xyz` added and verified.
 ## Code Patterns
 
 ### Writing to Python (large file edits)
-TRADR.tsx is ~5000 lines. OneDrive can truncate large writes. Always use Python atomic writes:
+TRADR.tsx is ~5700 lines. OneDrive can truncate large writes. Always use Python atomic writes:
 ```python
 import os, tempfile
 tmp = path + ".tmp"
@@ -279,13 +283,40 @@ On success: sets `feedbackSent(true)`, button turns green and shows "Sent! ✓",
 - [ ] Replace N+1 `fetchCircleLeaderboard` (TRADR.tsx:1607) with a single SQL query against the v2 schema
 - [ ] Add a Playwright smoke test (sign in → log trade → join circle) that runs on every preview deploy
 
+### Competitive roadmap (from `COMPETITIVE_ANALYSIS.md` — May 2026)
+
+Key competitors: TraderSync ($30–80/mo), Tradezella ($29–89/mo), Edgewonk ($197/yr), TradesViz ($0–30/mo).
+TRADR target pricing: Free tier · Pro $5.99/mo · Elite $9.99/mo.
+
+**Sprint 1 — Close the core gap**
+- [ ] Wire Tradovate auto-import UI — `api/tradovate.ts` proxy is already built; need account connect screen + fill → trade sync
+- [ ] Rithmic CSV parser — covers Apex, TopstepX, most US prop firm accounts without full API
+- [ ] Session time-of-day heatmap + day-of-week breakdown (analytics quick win)
+
+**Sprint 2 — Psychology + Prop Firm**
+- [ ] Per-trade emotional state field (Calm / FOMO / Revenge / Confident) + rule-adherence Y/N + mistake tag
+- [ ] Prop firm account mode — evaluation targets (profit target, daily loss limit, max drawdown), live progress bars
+- [ ] Discipline score card — "You followed your rules on 71% of trades this month"
+
+**Sprint 3 — Advanced Analytics**
+- [ ] Setup P&L breakdown — which setups actually make money
+- [ ] MAE/MFE per trade (needs broker data — wire after Tradovate/Rithmic)
+- [ ] Commission/fee tracking — gross vs. net P&L
+- [ ] Weekly report card — in-app summary, shareable image
+
+**Sprint 4 — Monetisation**
+- [ ] Stripe billing integration — Free / Pro / Elite tiers
+- [ ] Basic AI insights — rule-based pattern detection ("You make 80% of profit before 11am ET")
+- [ ] TradingView chart embed on trade detail view (entry/exit markers)
+
 ### Other backlog
 
 - Real-time circle updates (Supabase broadcast — currently manual refresh)
 - Push notifications / email for circle activity
-- Roadmap progress widget (TRADR vs TraderSync / Tradezella / Edgewonk)
 - Google OAuth (wired but not configured in Supabase — remove button or configure)
 - Landing on Circles tab by default (change `useState("home")` → `useState("circles")`)
+- Multiple accounts (prop eval 1, prop eval 2, personal)
+- Weekly/monthly auto-generated report card (shareable)
 
 ---
 

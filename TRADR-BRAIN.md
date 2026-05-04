@@ -3,7 +3,7 @@
 > Single source of truth for what TRADR is, how it's built, what's been fixed, and where it's going.
 > Paste this into a new Claude conversation to get fully up to speed in one shot.
 >
-> Last updated: 2026-04-27
+> Last updated: 2026-05-04
 
 ---
 
@@ -27,7 +27,8 @@ Three product loops:
 ## 2. Current Features
 
 - **Auth** — Supabase email/password + password reset (magic link). No OAuth.
-- **Profile** — Name, handle, avatar (emoji or image), bio, strategy tags, custom circle alias (3-12 alphanumeric, uppercased). Auto-generated 6-char trader code, stable across devices.
+- **Profile** — Name, handle (auto-filled + auto-@ during onboarding), avatar (emoji or image — AvatarCircle renders emoji natively), bio, broker, timezone, strategy tags, custom circle alias (3-12 alphanumeric, uppercased). Auto-generated 6-char trader code, stable across devices. New fields: `instruments` (futures they trade, e.g. `["ES","NQ"]`) and `socialLinks` (`{ twitter? }`) — collected at onboarding, stored in profile blob.
+- **Onboarding** — 5-step flow: (1) name + handle + emoji avatar picker, (2) bio + Twitter/X (optional, skippable), (3) futures instruments multi-select (ES, NQ, MES, MNQ, YM, RTY, CL, GC, SI, NG, ZB, 6E), (4) strategy selection + "Custom strategy…" option, (5) summary + "Log my first trade →". Handle auto-fills from name as user types; @ prefix enforced automatically. localStorage backup prevents re-loop on Supabase write failure.
 - **Trade journal** — Add/edit/delete trades. Confirmation dialog on delete. Timestamps (`createdAt` + `updatedAt`). CSV import with djb2 dedup hash (7-field key — immune to single-field edits). Filter by strategy/outcome/pair.
 - **Stats** — Win rate, total P&L, avg R, expectancy, current streak, best/worst trade, per-strategy breakdown, equity curve.
 - **Insights** — AI-style pattern detection, minimum 10 trades per strategy before a signal fires; consistency threshold 20 trades.
@@ -44,7 +45,7 @@ Three product loops:
 
 ## 3. Tech Stack
 
-**Frontend.** React 19, Vite 8, TypeScript ~5.9. Single monolithic component (`src/TRADR.tsx`, ~3600 lines).
+**Frontend.** React 19, Vite 8, TypeScript ~5.9. Single monolithic component (`src/TRADR.tsx`, ~5700 lines).
 
 **Data layer.** All reads/writes via `window.storage` shim (`src/lib/storage.ts`), wrapping:
 - `user_kv (user_id, key, value)` — private per-user data. RLS: `auth.uid() = user_id`.
@@ -131,26 +132,40 @@ If you ever find yourself needing to UPDATE a row owned by someone else — stop
 
 ## 8. Roadmap
 
-**Next (polish + correctness):**
-- Migrate Supabase credentials to env vars.
-- `og:image` + Twitter card meta tags so shared URLs preview.
-- Onboarding flow for first-time users (currently lands on empty journal).
-- Empty states across journal, friends, circles.
-- Loading skeletons instead of blank flashes.
+Full competitive analysis in `COMPETITIVE_ANALYSIS.md`. Key competitors: TraderSync ($30–80/mo), Tradezella ($29–89/mo), Edgewonk ($197/yr). TRADR target: Free / Pro $5.99/mo / Elite $9.99/mo.
 
-**v1.0 (things that justify a launch post):**
-- Service worker + offline-first journal.
-- Component extraction from `TRADR.tsx` into `src/screens/*` + `src/components/*`.
-- Minimal test suite covering the per-row RLS pattern and data-layer modules.
-- Sentry integration for production error visibility.
-- Public read-only trader profile pages (shareable by code).
+**TRADR's moat (competitors cannot easily copy):**
+Trading Circles with leaderboards + chat, friend feed, public profiles — no competitor has a social layer.
 
-**v1.1+ (the moat):**
-- Circle-level analytics (best strategy across the group, who's hot this week).
-- Weekly digest emails per circle.
-- Discord webhook — auto-post leaderboard to the circle's server.
-- Trade-of-the-week voting.
-- Prop-firm PDF export.
+**Sprint 1 — Close the core data gap:**
+- Wire Tradovate auto-import UI (`api/tradovate.ts` proxy already built)
+- Rithmic CSV parser (covers Apex, TopstepX, most US prop firms)
+- Session heatmap + day-of-week breakdown
+
+**Sprint 2 — Psychology + Prop Firm:**
+- Per-trade emotional state, rule-adherence Y/N, mistake tags
+- Prop firm mode: evaluation targets, daily loss limit tracker, multi-account
+- Discipline score dashboard card
+
+**Sprint 3 — Advanced Analytics:**
+- Setup P&L breakdown, MAE/MFE, commission tracking
+- Weekly report card (in-app + shareable)
+
+**Sprint 4 — Monetisation:**
+- Stripe billing (Free / Pro / Elite tiers)
+- Basic AI insights (rule-based pattern detection)
+- TradingView chart embed on trade detail
+
+**Tech debt / infrastructure:**
+- Migrate Supabase credentials to env vars
+- `og:image` + Twitter card meta tags
+- Empty states across journal, friends, circles
+- Loading skeletons instead of blank flashes
+- Service worker + offline-first journal
+- Component extraction: `TRADR.tsx` → `src/screens/*` + `src/components/*`
+- Minimal test suite for data-layer modules
+- Sentry integration (`VITE_SENTRY_DSN` in Vercel)
+- Playwright smoke test on every preview deploy
 
 ---
 
@@ -160,7 +175,7 @@ If you ever find yourself needing to UPDATE a row owned by someone else — stop
 src/
   main.tsx              — entry, installs window.storage shim, mounts TradrAuth
   TradrAuth.tsx         — auth gate (sign-in / sign-up / reset / new-password)
-  TRADR.tsx             — the app (~3600 lines)
+  TRADR.tsx             — the app (~5700 lines)
   ErrorBoundary.tsx     — class component, catches uncaught React errors
   lib/
     supabase.ts         — Supabase client (hardcoded creds — known issue)

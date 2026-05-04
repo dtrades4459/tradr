@@ -58,7 +58,7 @@ If you need to modify a row owned by someone else, stop — add a new row you ow
 ## Known issues
 
 - **Hardcoded Supabase credentials** in `src/lib/supabase.ts`. Low security risk (anon key is RLS-bounded), but should move to `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` env vars.
-- **Monolithic TRADR.tsx** (~3600 lines). Extraction into `src/screens/` + `src/components/` is on the roadmap.
+- **Monolithic TRADR.tsx** (~5700 lines). Extraction into `src/screens/` + `src/components/` is on the roadmap.
 - **No test suite.** The data-layer modules (`circles.ts`, `follows.ts`) are the natural place to start.
 - **No error monitoring.** No Sentry, no Vercel Analytics on errors.
 - **No offline mode.** PWA installs but requires network.
