@@ -65,6 +65,18 @@ const lbl: React.CSSProperties = {
   fontFamily: BODY,
 };
 
+// ─── TR MARK ─────────────────────────────────────────────────────────────────
+function TrMark({ size = 28, bg = C.bg }: { size?: number; bg?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
+      <rect width="100" height="100" rx="20" fill={bg}/>
+      <text x="50" y="67" textAnchor="middle" fill="#EDEDE8"
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+        fontWeight="700" fontSize="52" letterSpacing="-2">tr</text>
+    </svg>
+  );
+}
+
 // ─── PRINCIPLE LIST ───────────────────────────────────────────────────────────
 // Replaces the old emoji "features" grid. Short, specific, no marketing.
 const PRINCIPLES: { kicker: string; title: string; body: string }[] = [
@@ -382,9 +394,10 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
       <div className="tradr-shell" style={{ animation: "rise 0.5s ease" }}>
 
         {/* ───────── MASTHEAD ───────── */}
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.01em", color: C.text }}>
-            TRADR<span style={{ color: C.blue }}>.</span>
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <TrMark size={28} bg={C.panel} />
+            <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
           </div>
           <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>
             BETA / 2026
@@ -477,7 +490,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
 
         {/* ───────── FOOTER ───────── */}
         <footer style={{ marginTop: "clamp(80px, 10vw, 128px)", paddingTop: "28px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "12px", fontFamily: MONO, fontSize: "11px", color: C.dim, letterSpacing: "0.06em" }}>
-          <span>TRADR · KEEP THE EDGE YOU EARNED.</span>
+          <span>TRADR · KEEP THE EDGE YOU EARNED</span>
           <span>v0.1 / {new Date().getFullYear()}</span>
         </footer>
 
@@ -487,11 +500,14 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
 }
 
 // ─── LOADING SCREEN ───────────────────────────────────────────────────────────
+const PULSE_CSS = "@keyframes tradr-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.96)}}";
+
 function LoadingScreen() {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: BODY }}>
-      <div style={{ fontFamily: DISPLAY, fontSize: "32px", fontWeight: 700, color: C.text, letterSpacing: "-0.02em" }}>
-        TRADR<span style={{ color: C.blue }}>.</span>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px" }}>
+      <style dangerouslySetInnerHTML={{ __html: PULSE_CSS }} />
+      <div style={{ animation: "tradr-pulse 1.8s ease-in-out infinite" }}>
+        <TrMark size={80} bg={C.panel} />
       </div>
     </div>
   );

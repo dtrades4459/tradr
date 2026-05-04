@@ -92,6 +92,7 @@ export interface CircleMember {
 }
 
 export interface Circle {
+  metric?: "dollar" | "r" | "winrate" | "trades" | "avgr";
   id: number;
   code: string;
   name: string;
@@ -442,6 +443,18 @@ function generateInsights(trades: Trade[]): Insight[] {
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
+// ─── TR MARK ─────────────────────────────────────────────────────────────────
+function TrMark({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
+      <rect width="100" height="100" rx="20" fill={bg}/>
+      <text x="50" y="67" textAnchor="middle" fill="#EDEDE8"
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+        fontWeight="700" fontSize="52" letterSpacing="-2">tr</text>
+    </svg>
+  );
+}
+
 function Toast({ message, onDone, C }: any) {
   useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
   return (
@@ -1422,7 +1435,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [myCircles, setMyCircles] = useState<Circle[]>([]);
   const [circlesView, setCirclesView] = useState<string>("browse");
   const [activeCircle, setActiveCircle] = useState<Circle | null>(null);
-  const [circleForm, setCircleForm] = useState<{ name: string; description: string; strategy: string; privacy: string; emoji: string }>({ name: "", description: "", strategy: "", privacy: "public", emoji: "🎯" });
+  const [circleForm, setCircleForm] = useState<{ name: string; description: string; strategy: string; privacy: string; emoji: string; metric: string }>({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
   const [circleJoinCode, setCircleJoinCode] = useState<string>("");
   const [circleMsg, setCircleMsg] = useState<string>("");
   const [darkMode, setDarkMode] = useState(true);
@@ -1444,7 +1457,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Key format: `${authorCode}_${tradeId}_${reaction}`. Prevents spam and gives
   // true toggle semantics even though feed reactions aren't persisted remotely.
   const [myFeedReactions, setMyFeedReactions] = useState<Set<string>>(new Set());
-  const [pnlMode, setPnlMode] = useState<"r" | "$">("r");
+  const [pnlMode, setPnlMode] = useState<"r" | "$">("$");
   const [timeMode, setTimeMode] = useState<"week" | "all">("week");
   // Follow system: one-way. following = codes I follow, followers = codes following me.
   // Friends = intersect(following, followers) — i.e. mutual follows.
@@ -1475,7 +1488,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [addingRule, setAddingRule] = useState(false);
   const [calDayTrades, setCalDayTrades] = useState<any>(null);
   const [statsTab, setStatsTab] = useState("overview");
-  const [perfPnlMode, setPerfPnlMode] = useState<"r" | "$">("r");
+  const [perfPnlMode, setPerfPnlMode] = useState<"r" | "$">("$");
   const [savingTrade, setSavingTrade] = useState(false);
 
   // Custom strategies: user-defined, same shape as built-ins (name, code, setups, checklist, rules).
@@ -2107,7 +2120,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
         id: Date.now(), code, name: circleForm.name.trim(),
         description: circleForm.description.trim(),
         strategy: circleForm.strategy, privacy: circleForm.privacy,
-        emoji: circleForm.emoji || "🎯",
+        emoji: circleForm.emoji || "◆",
+        metric: circleForm.metric || "dollar",
         createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
       };
       // Write metadata (owned by me) + my own member row.
@@ -2115,7 +2129,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
       await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
       const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
       await saveMyCircles(updated);
-      setCircleForm({ name: "", description: "", strategy: "", privacy: "public", emoji: "🎯" });
+      setCircleForm({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
       setCirclesView("browse");
       showToast("Circle created");
     } finally {
@@ -2200,6 +2214,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
       wins, losses, total,
       winRate: parseFloat(winRate as any),
       totalPnL: parseFloat(totalPnL),
+      totalPnLDollar: totalPnlDollar,
       weekPnL: weekPnL,
       avgRR: avgRR === "—" ? 0 : parseFloat(avgRR),
       streak: streak.count > 0 ? { type: streak.type, count: streak.count } : null,
@@ -2224,7 +2239,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
         else entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null });
       } catch { entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null }); }
     }
-    entries.sort((a, b) => b.totalPnL - a.totalPnL);
+    const m = circle.metric || "dollar";
+    entries.sort((a, b) => {
+      if (m === "dollar")  return (b.totalPnLDollar || 0) - (a.totalPnLDollar || 0);
+      if (m === "r")       return (b.totalPnL || 0) - (a.totalPnL || 0);
+      if (m === "winrate") return (b.winRate || 0) - (a.winRate || 0);
+      if (m === "trades")  return (b.total || 0) - (a.total || 0);
+      if (m === "avgr")    return (b.avgRR || 0) - (a.avgRR || 0);
+      return (b.totalPnLDollar || 0) - (a.totalPnLDollar || 0);
+    });
     return entries;
   }
 
@@ -2762,10 +2785,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
   };
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: DARK.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DISPLAY, color: DARK.text }}>
-      <div style={{ fontSize: "32px", letterSpacing: "-0.02em", fontWeight: 700 }}>
-        TRADR<span style={{ color: DARK.blue }}>.</span>
-      </div>
+    <div style={{ minHeight: "100vh", background: DARK.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px" }}>
+      <TrMark size={72} bg={DARK.panel} />
     </div>
   );
 
@@ -2833,9 +2854,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
         {/* ── MASTHEAD ── */}
         <header style={{ padding: isDesktop ? "18px 40px 0" : "14px 22px 12px", borderBottom: `0.5px solid ${C.border}`, position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "22px" : "19px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>
-              TRADR<span style={{ color: C.blue }}>.</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <TrMark size={isDesktop ? 26 : 24} bg={C.panel} />
+              <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "17px" : "15px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "14px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
               <span>{profile.handle || "@trader"}</span>
@@ -4419,6 +4441,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
               openProfile={openProfile}
               isJoiningCircle={isJoiningCircle}
               isCreatingCircle={isCreatingCircle}
+              totalPnlDollar={totalPnlDollar}
+              hasDollarData={hasDollarData}
             />
           )}
           </div>{/* end main */}
@@ -5149,11 +5173,9 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
       <div style={{ width: "100%", maxWidth: "420px" }}>
 
         {/* Wordmark */}
-        <div style={{
-          fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700,
-          letterSpacing: "-0.01em", color: C.text, marginBottom: "48px",
-        }}>
-          TRADR<span style={{ color: C.blue }}>.</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "48px" }}>
+          <TrMark size={28} bg={C.panel} />
+          <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
         </div>
 
         {/* Progress indicator */}
@@ -5451,7 +5473,7 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
 }
 
 // ─── TRADING CIRCLES (editorial) ─────────────────────────────────────────────
-function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle }: any) {
+function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [lbSort, setLbSort] = useState<"all" | "week">("all");
   const [loadingLB, setLoadingLB] = useState(false);
@@ -5463,8 +5485,22 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
 
-  const CIRCLE_EMOJIS = ["🎯","🔥","💎","🚀","🏆","📈","⚡","🎪","🦅","🐉"];
+  const CIRCLE_EMOJIS = ["◆","▲","●","■","⬡","◈","△","○","□","✦"];
   const MEDALS = ["🥇","🥈","🥉"];
+
+  // Returns the primary metric label + formatted value for a leaderboard entry
+  function metricDisplay(entry: any, circle: any): { val: string; raw: number; label: string } {
+    const m = circle?.metric || "dollar";
+    if (m === "dollar") { const v = entry.totalPnLDollar || 0; return { val: `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)}`, raw: v, label: "$ P&L" }; }
+    if (m === "r")       { const v = entry.totalPnL || 0; return { val: `${v >= 0 ? "+" : ""}${v.toFixed(1)}R`, raw: v, label: "R P&L" }; }
+    if (m === "winrate") { const v = entry.winRate || 0; return { val: `${v.toFixed(0)}%`, raw: v, label: "WIN RATE" }; }
+    if (m === "trades")  { const v = entry.total || 0; return { val: `${v}`, raw: v, label: "TRADES" }; }
+    if (m === "avgr")    { const v = entry.avgRR || 0; return { val: `${v.toFixed(2)}R`, raw: v, label: "AVG R" }; }
+    const v = entry.totalPnLDollar || 0; return { val: `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)}`, raw: v, label: "$ P&L" };
+  }
+
+  // Label for the circle's competition metric
+  const METRIC_LABELS: Record<string, string> = { dollar: "$ DOLLAR P&L", r: "R-MULTIPLE", winrate: "WIN RATE", trades: "MOST TRADES", avgr: "AVG R" };
 
   async function loadChatMessages(circleCode: string) {
     setChatLoading(true);
@@ -5598,9 +5634,9 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                   <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
                     style={{ padding: "20px", background: C.panel, borderRadius: "14px", cursor: "pointer", border: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                      {/* Emoji icon */}
-                      <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", flexShrink: 0, border: `1px solid ${C.border}` }}>
-                        {circle.emoji || "🎯"}
+                      {/* Symbol mark */}
+                      <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: "22px", color: C.text2, flexShrink: 0, border: `1px solid ${C.border2}` }}>
+                        {circle.emoji || "◆"}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px", marginBottom: "4px" }}>
@@ -5622,7 +5658,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
             </section>
           ) : (
             <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "48px 24px", background: C.panel, borderRadius: "16px", textAlign: "center", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: "40px", marginBottom: "16px" }}>🎯</div>
+              <div style={{ fontFamily: MONO, fontSize: "32px", color: C.border2, marginBottom: "16px", letterSpacing: "-0.02em" }}>◆</div>
               <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontStyle: "italic", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em", marginBottom: "8px" }}>No circles yet.</div>
               <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6 }}>Create one or join with a code from a friend.</div>
             </section>
@@ -5640,16 +5676,19 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
           <h2 style={{ fontFamily: DISPLAY, fontSize: "clamp(32px, 7vw, 44px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, color: C.text, marginTop: "8px" }}>
             Start <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>something small</span>.
           </h2>
-          {/* Emoji picker */}
+          {/* Symbol picker */}
           <div>
-            <label style={lbl}>Icon</label>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
-              {CIRCLE_EMOJIS.map(em => (
-                <button key={em} onClick={() => setCircleForm((f: any) => ({ ...f, emoji: em }))}
-                  style={{ width: "44px", height: "44px", borderRadius: "10px", fontSize: "22px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: (circleForm.emoji || "🎯") === em ? C.text + "22" : C.panel, border: `1px solid ${(circleForm.emoji || "🎯") === em ? C.text : C.border}`, transition: "all 120ms" }}>
-                  {em}
-                </button>
-              ))}
+            <label style={lbl}>Symbol</label>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
+              {CIRCLE_EMOJIS.map(em => {
+                const active = (circleForm.emoji || "◆") === em;
+                return (
+                  <button key={em} onClick={() => setCircleForm((f: any) => ({ ...f, emoji: em }))}
+                    style={{ width: "36px", height: "36px", borderRadius: "8px", fontSize: "16px", fontFamily: MONO, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: active ? C.text : "transparent", color: active ? C.bg : C.muted, border: `1px solid ${active ? C.text : C.border2}`, transition: "all 100ms", lineHeight: 1 }}>
+                    {em}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div><label style={lbl}>Circle name</label><input value={circleForm.name} onChange={e => setCircleForm((f: any) => ({ ...f, name: e.target.value }))} placeholder="e.g. London ICT Traders" style={inp} /></div>
@@ -5680,6 +5719,33 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
               {circleForm.privacy === "public" ? "Anyone with the invite code can join." : "Invite only — you share the code."}
             </div>
           </div>
+          {/* Competition metric */}
+          <div>
+            <label style={lbl}>Competition metric</label>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
+              {([
+                ["dollar", "$ Dollar P&L"],
+                ["r",      "R-Multiple"],
+                ["winrate","Win Rate"],
+                ["trades", "Most Trades"],
+                ["avgr",   "Avg R"],
+              ] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setCircleForm((f: any) => ({ ...f, metric: val }))}
+                  style={{ background: (circleForm.metric || "dollar") === val ? C.text : "transparent", border: `1px solid ${(circleForm.metric || "dollar") === val ? C.text : C.border2}`, borderRadius: "999px", padding: "7px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", color: (circleForm.metric || "dollar") === val ? C.bg : C.muted, textTransform: "uppercase", transition: "all 100ms" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "8px", lineHeight: 1.55 }}>
+              {{
+                dollar:  "Leaderboard ranks by total dollar P&L.",
+                r:       "Leaderboard ranks by total R gained/lost.",
+                winrate: "Leaderboard ranks by win percentage.",
+                trades:  "Leaderboard ranks by number of trades logged.",
+                avgr:    "Leaderboard ranks by average R per trade.",
+              }[circleForm.metric as string] || "Leaderboard ranks by total dollar P&L."}
+            </div>
+          </div>
           <button onClick={createCircle} disabled={isCreatingCircle || !circleForm.name.trim()} style={{ ...pillPrimary(!!circleForm.name.trim() && !isCreatingCircle), marginTop: "8px" }}>
             {isCreatingCircle ? "Creating…" : "Create circle →"}
           </button>
@@ -5694,7 +5760,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
             <SectionKicker label="JOIN A CIRCLE" C={C} />
           </div>
           <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div style={{ fontSize: "48px", marginBottom: "20px" }}>⤵</div>
+            <div style={{ fontFamily: MONO, fontSize: "28px", color: C.muted, marginBottom: "20px", letterSpacing: "-0.02em" }}>⤵</div>
             <div style={{ fontFamily: DISPLAY, fontSize: "clamp(28px, 6vw, 38px)", fontWeight: 500, letterSpacing: "-0.02em", color: C.text, marginBottom: "32px", fontStyle: "italic" }}>
               Enter the code.
             </div>
@@ -5730,8 +5796,8 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
           {/* Circle hero */}
           <section>
             <div style={{ display: "flex", alignItems: "center", gap: "18px", marginBottom: "16px" }}>
-              <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "32px", flexShrink: 0, border: `1px solid ${C.border}` }}>
-                {activeCircle.emoji || "🎯"}
+              <div style={{ width: "56px", height: "56px", borderRadius: "12px", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: "28px", color: C.text, flexShrink: 0, border: `1px solid ${C.border2}` }}>
+                {activeCircle.emoji || "◆"}
               </div>
               <div>
                 <h1 style={{ fontFamily: DISPLAY, fontSize: "clamp(32px, 8vw, 48px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 0.95, color: C.text, marginBottom: "6px" }}>
@@ -5765,11 +5831,11 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
           {leader && (
             <div style={{ background: `${C.green}11`, border: `1px solid ${C.green}33`, borderRadius: "12px", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
               <div>
-                <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.14em", marginBottom: "4px" }}>🏆 CURRENT LEADER</div>
+                <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.14em", marginBottom: "4px" }}>🏆 {METRIC_LABELS[activeCircle?.metric || "dollar"] || "$ DOLLAR P&L"}</div>
                 <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{leader.name}</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 700, color: C.green, letterSpacing: "-0.02em" }}>{leader.totalPnL >= 0 ? "+" : ""}{leader.totalPnL.toFixed(1)}R</div>
+                <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 700, color: C.green, letterSpacing: "-0.02em" }}>{metricDisplay(leader, activeCircle).val}</div>
                 <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em" }}>{leader.winRate.toFixed(0)}% WR · {leader.total} trades</div>
               </div>
             </div>
@@ -5788,9 +5854,14 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
 
           {/* Publish strip */}
           <section style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "20px 0" }}>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>YOUR STATS TO PUBLISH</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em" }}>YOUR STATS TO PUBLISH</div>
+              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.text2, letterSpacing: "0.1em", background: C.panel, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "3px 10px" }}>
+                RANKED BY {METRIC_LABELS[activeCircle?.metric || "dollar"] || "$ P&L"}
+              </div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "0", marginBottom: "14px" }}>
-              {[["W/L", `${wins}/${losses}`], ["WR", `${winRate}%`], ["P&L", `${pnlPos ? "+" : ""}${totalPnL}R`], ["R:R", avgRR === "—" ? "—" : `${avgRR}R`]].map(([k, v], i) => (
+              {[["W/L", `${wins}/${losses}`], ["WR", `${winRate}%`], hasDollarData ? ["$ P&L", `${totalPnlDollar >= 0 ? "+" : ""}$${Math.abs(totalPnlDollar).toFixed(0)}`] : ["P&L", `${pnlPos ? "+" : ""}${totalPnL}R`], ["AVG R", avgRR === "—" ? "—" : `${avgRR}R`]].map(([k, v], i) => (
                 <div key={k} style={{ padding: "4px 10px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
                   <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "6px" }}>{k}</div>
                   <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em" }}>{v}</div>
@@ -5833,7 +5904,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                   <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
                 ) : leaderboard.length === 0 ? (
                   <div style={{ padding: "40px 24px", textAlign: "center", background: C.panel, borderRadius: "12px" }}>
-                    <div style={{ fontSize: "32px", marginBottom: "12px" }}>📊</div>
+                    <div style={{ fontFamily: MONO, fontSize: "24px", color: C.border2, marginBottom: "12px" }}>—</div>
                     <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontStyle: "italic", color: C.text2, marginBottom: "6px" }}>No stats published yet.</div>
                     <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted }}>Be the first — hit "Publish My Stats" above.</div>
                   </div>
@@ -5841,7 +5912,8 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                   <div style={{ borderTop: `1px solid ${C.border}` }}>
                     {leaderboard.map((entry: any, i: number) => {
                       const isMe = entry.memberCode === getMyCode();
-                      const pPos = entry.totalPnL >= 0;
+                      const md = metricDisplay(entry, activeCircle);
+                      const pPos = md.raw >= 0;
                       const isFirst = i === 0;
                       const pnlCol = isFirst && pPos ? C.green : pPos ? C.text : C.red;
                       const isExpanded = expandedMember === entry.memberCode;
@@ -5868,8 +5940,8 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                               </div>
                             </div>
                             <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                              <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 700, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{pPos ? "+" : ""}{entry.totalPnL.toFixed(1)}R</div>
-                              {entry.avgRR ? <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{entry.avgRR.toFixed(1)}R avg</div> : null}
+                              <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 700, color: pnlCol, letterSpacing: "-0.01em", lineHeight: 1 }}>{md.val}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>{md.label}</div>
                             </div>
                           </div>
                           {isExpanded && (
@@ -5929,7 +6001,7 @@ function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, 
                       ? <div style={{ padding: "40px 0", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
                       : chatMessages.length === 0
                         ? <div style={{ padding: "48px 0", textAlign: "center" }}>
-                            <div style={{ fontSize: "32px", marginBottom: "10px" }}>💬</div>
+                            <div style={{ fontFamily: MONO, fontSize: "22px", color: C.border2, marginBottom: "10px", letterSpacing: "0.14em" }}>· · ·</div>
                             <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontStyle: "italic", color: C.text2, marginBottom: "6px" }}>No messages yet.</div>
                             <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted }}>Be the first to say something.</div>
                           </div>
