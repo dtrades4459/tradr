@@ -158,7 +158,7 @@ const BIAS = ["Bullish","Bearish","Neutral"];
 const OUTCOMES = ["Win","Loss","Breakeven"];
 // Text reaction markers — no emoji.
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
-const TABS = ["home","log","history","stats","checklist","circles"];
+const TABS = ["home","log","history","stats","import","circles"];
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 // Warm editorial palette — dark primary, light secondary.
@@ -2710,12 +2710,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
   };
 
   const NAV_TABS = [
-    { id: "home", label: "HOME" },
-    { id: "log", label: "LOG" },
-    { id: "history", label: "TRADES" },
-    { id: "stats", label: "STATS" },
-    { id: "checklist", label: "CHECK" },
-    { id: "profile", label: "PROFILE" },
+    { id: "home",    label: "HOME"    },
+    { id: "log",     label: "LOG"     },
+    { id: "history", label: "JOURNAL" },
+    { id: "stats",   label: "STATS"   },
+    { id: "import",  label: "IMPORT"  },
     { id: "circles", label: "CIRCLES" },
   ];
 
@@ -4223,6 +4222,163 @@ export default function Tradr({ user }: { user?: any } = {}) {
               setCirclesView={setCirclesView}
             />
           )}
+
+          {/* ══════════════════════════ IMPORT ══════════════════════════ */}
+          {view === "import" && (() => {
+            const COMING_SOON_BROKERS = [
+              { name: "NinjaTrader",        desc: "Live sync for NinjaTrader 8 accounts.",           tag: "FUTURES" },
+              { name: "Interactive Brokers", desc: "IBKR TWS — equities, futures, FX.",              tag: "MULTI-ASSET" },
+              { name: "TopstepX Direct",     desc: "Live eval stats without CSV exports.",           tag: "PROP FIRM" },
+              { name: "Apex Trader Funding", desc: "Direct API sync. No more manual statements.",    tag: "PROP FIRM" },
+              { name: "Earn2Trade",          desc: "Auto-import from your Gauntlet/Trader Career.",  tag: "PROP FIRM" },
+              { name: "MT5 Live",            desc: "Real-time sync from MetaTrader 5 accounts.",     tag: "FOREX / CFD" },
+              { name: "Tradier",             desc: "US equities and options broker sync.",            tag: "EQUITIES" },
+              { name: "Coinbase Advanced",   desc: "Spot and futures crypto trade import.",          tag: "CRYPTO" },
+            ];
+            return (
+              <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
+                {!isDesktop && (
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
+                  </div>
+                )}
+
+                {/* ── Coming soon teaser banner ── */}
+                <section style={{ border: `1px solid ${C.border2}`, padding: "20px 24px", position: "relative", overflow: "hidden" }}>
+                  {/* subtle background grid */}
+                  <div style={{ position: "absolute", inset: 0, backgroundImage: `repeating-linear-gradient(0deg, ${C.border} 0px, ${C.border} 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, ${C.border} 0px, ${C.border} 1px, transparent 1px, transparent 32px)`, opacity: 0.35, pointerEvents: "none" }} />
+                  <div style={{ position: "relative" }}>
+                    <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.20em", textTransform: "uppercase", marginBottom: "10px" }}>Integrations · Roadmap</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "clamp(20px, 4vw, 26px)", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: "10px" }}>
+                      More brokers.<br />Zero manual entry.
+                    </div>
+                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.65, maxWidth: "360px", marginBottom: "18px" }}>
+                      We're building direct sync for every major prop firm and broker. Log trades the moment they close — no CSV, no copy-paste.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ fontFamily: MONO, fontSize: "10px", color: C.text, letterSpacing: "0.12em", textTransform: "uppercase", border: `1px solid ${C.border2}`, padding: "8px 16px" }}>
+                        Launching soon — stay tuned
+                      </div>
+                      <div style={{ fontFamily: MONO, fontSize: "9px", color: C.dim, letterSpacing: "0.10em", textTransform: "uppercase" }}>
+                        {COMING_SOON_BROKERS.length} integrations in progress
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* ── Live connections ── */}
+                <section>
+                  <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+                    LIVE NOW
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+                    {/* Tradovate tile */}
+                    <button onClick={() => setShowLiveModal(true)}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ border: `1px solid ${tradovateSession ? C.green + "66" : C.border}`, padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", transition: "border-color 0.2s" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>Tradovate</div>
+                            <span style={{ fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "2px 7px", border: `1px solid ${C.border2}`, color: C.muted }}>FUTURES</span>
+                          </div>
+                          {tradovateSession ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: C.green, flexShrink: 0 }} />
+                              <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green, letterSpacing: "0.06em" }}>
+                                {tradovateSession.accountName ?? "Connected"} · {tradovateSession.env.toUpperCase()}
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>
+                              Live positions + auto-import closed fills
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", color: tradovateSession ? C.text : C.muted, letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", borderBottom: `1px solid ${tradovateSession ? C.text : C.border2}`, paddingBottom: "2px" }}>
+                          {tradovateSession ? "Manage →" : "Connect →"}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Rithmic CSV tile */}
+                    <button onClick={() => { setView("history"); setShowCsvImport(true); }}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ border: `1px solid ${C.border}`, padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>Rithmic CSV</div>
+                            <span style={{ fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "2px 7px", border: `1px solid ${C.border2}`, color: C.muted }}>PROP FIRM</span>
+                          </div>
+                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>
+                            Apex, TopstepX, Earn2Trade — import your trade statement
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", borderBottom: `1px solid ${C.border2}`, paddingBottom: "2px" }}>
+                          Import →
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Generic CSV tile */}
+                    <button onClick={() => { setView("history"); setShowCsvImport(true); }}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ border: `1px solid ${C.border}`, padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                            <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>CSV Import</div>
+                            <span style={{ fontFamily: MONO, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "2px 7px", border: `1px solid ${C.border2}`, color: C.muted }}>MT4 / MT5 / TV</span>
+                          </div>
+                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>
+                            MT4, MT5, TradingView, ThinkorSwim and most broker exports
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", borderBottom: `1px solid ${C.border2}`, paddingBottom: "2px" }}>
+                          Import →
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </section>
+
+                {/* ── Coming soon grid ── */}
+                <section>
+                  <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.14em", marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ flex: "0 0 24px", height: "1px", background: C.border2 }} />
+                    COMING SOON
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: "1px", border: `1px solid ${C.border}`, overflow: "hidden" }}>
+                    {COMING_SOON_BROKERS.map((b, i) => (
+                      <div key={b.name}
+                        style={{ padding: "18px 20px", borderRight: isDesktop && i % 2 === 0 ? `1px solid ${C.border}` : "none", borderBottom: i < COMING_SOON_BROKERS.length - (isDesktop ? 2 : 1) ? `1px solid ${C.border}` : "none", background: C.bg }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em" }}>{b.name}</div>
+                          <span style={{ fontFamily: MONO, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "2px 6px", border: `1px solid ${C.border2}`, color: C.dim, whiteSpace: "nowrap", flexShrink: 0, marginLeft: "8px" }}>{b.tag}</span>
+                        </div>
+                        <div style={{ fontFamily: BODY, fontSize: "12px", color: C.dim, lineHeight: 1.55 }}>{b.desc}</div>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.dim, letterSpacing: "0.14em", textTransform: "uppercase", marginTop: "10px" }}>— Coming soon</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* ── Request a broker ── */}
+                <section style={{ paddingBottom: "clamp(20px, 4vw, 32px)" }}>
+                  <div style={{ border: `1px solid ${C.border}`, padding: "20px 24px", display: "flex", flexDirection: isDesktop ? "row" : "column", justifyContent: "space-between", alignItems: isDesktop ? "center" : "flex-start", gap: "14px" }}>
+                    <div>
+                      <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em", marginBottom: "4px" }}>Don't see your broker?</div>
+                      <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5 }}>Tell us which one you use and we'll prioritise it.</div>
+                    </div>
+                    <button onClick={() => setFeedbackOpen(true)}
+                      style={{ background: C.text, color: C.bg, border: "none", padding: "12px 20px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0 }}>
+                      Request →
+                    </button>
+                  </div>
+                </section>
+              </div>
+            );
+          })()}
 
           {/* ══════════════════════════ CIRCLES ══════════════════════════ */}
           {view === "circles" && (
