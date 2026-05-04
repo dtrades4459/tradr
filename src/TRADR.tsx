@@ -1515,6 +1515,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [isCreatingCircle, setIsCreatingCircle] = useState(false);
   const [isJoiningCircle, setIsJoiningCircle] = useState(false);
   const [showLiveModal, setShowLiveModal] = useState(false);
+  const [fontScale, setFontScale] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem("tradr_font_scale") ?? "1") || 1; } catch { return 1; }
+  });
+  const [showStripeGuide, setShowStripeGuide] = useState(false);
 
   // ── Tradovate integration ────────────────────────────────────────────────────
   const [tradovateSession, setTradovateSession] = useState<TradovateSession | null>(null);
@@ -1544,6 +1548,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
   );
 
   useEffect(() => { loadAll(); }, []);
+
+  useEffect(() => {
+    (document.documentElement as any).style.zoom = String(fontScale);
+    try { localStorage.setItem("tradr_font_scale", String(fontScale)); } catch {}
+  }, [fontScale]);
 
   // ── Stripe return URL handler ───────────────────────────────────────────────
   useEffect(() => {
@@ -2919,7 +2928,20 @@ export default function Tradr({ user }: { user?: any } = {}) {
               <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "17px" : "15px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "14px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              <span>{profile.handle || "@trader"}</span>
+              <button
+                onClick={() => { setView("home"); setHomeSection("settings"); }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: C.text, fontFamily: MONO, fontSize: "12px",
+                  letterSpacing: "0.06em", padding: "4px 8px",
+                  borderRadius: "6px", transition: "background 0.15s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = C.border2 ?? "#3A3A34")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                title="Go to your profile"
+              >
+                {profile.handle || "@trader"}
+              </button>
               <button onClick={() => supabase.auth.signOut()}
                 style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 4px", minHeight: "44px" }}>
                 sign out →
@@ -3470,6 +3492,45 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     </div>
                   </section>
 
+                  {/* Integrations Status */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
+                    <SectionKicker label="INTEGRATIONS" C={C} />
+                    <div style={{ marginTop: "16px" }}>
+
+                      {/* Stripe status */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontSize: "18px" }}>💳</span>
+                          <div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>Stripe Billing</div>
+                            <div style={{ fontSize: "11px", color: profile.stripeCustomerId ? "#22c55e" : C.muted }}>
+                              {profile.stripeCustomerId ? "✓ Connected" : "Not connected"}
+                            </div>
+                          </div>
+                        </div>
+                        {!profile.stripeCustomerId && (
+                          <button
+                            onClick={() => setShowStripeGuide(true)}
+                            style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", padding: "5px 10px", fontSize: "11px", color: C.muted, cursor: "pointer" }}
+                          >Setup →</button>
+                        )}
+                      </div>
+
+                      {/* Tradovate status */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontSize: "18px" }}>📡</span>
+                          <div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>Tradovate Auto-Import</div>
+                            <div style={{ fontSize: "11px", color: tradovateSession ? "#22c55e" : C.muted }}>
+                              {tradovateSession ? "✓ Connected" : "Not connected"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
                   {/* Broker Integrations */}
                   <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
                     <SectionKicker label="BROKER INTEGRATIONS" C={C} />
@@ -3746,6 +3807,27 @@ export default function Tradr({ user }: { user?: any } = {}) {
                         <button onClick={toggleDark} style={{ background: darkMode ? C.text : C.border, border: "none", borderRadius: "999px", width: "40px", height: "22px", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
                           <div style={{ position: "absolute", top: "3px", left: darkMode ? "20px" : "3px", width: "16px", height: "16px", borderRadius: "50%", background: darkMode ? C.bg : C.text, transition: "left 0.2s" }} />
                         </button>
+                      </div>
+                      {/* Text Size */}
+                      <div style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: "11px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "12px" }}>Text Size</div>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          {([["S", 0.85], ["M", 1.0], ["L", 1.15], ["XL", 1.3]] as [string, number][]).map(([label, scale]) => (
+                            <button
+                              key={label}
+                              onClick={() => setFontScale(scale)}
+                              style={{
+                                flex: 1, padding: "10px 4px", border: `1px solid ${fontScale === scale ? C.text : C.border2}`,
+                                borderRadius: "8px", background: fontScale === scale ? C.text : "transparent",
+                                color: fontScale === scale ? C.bg : C.muted,
+                                fontSize: label === "S" ? "11px" : label === "M" ? "13px" : label === "L" ? "15px" : "17px",
+                                fontFamily: BODY, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       {[["Broker", profile.broker || "—"], ["Timezone", profile.timezone || "—"], ["Target R:R", profile.targetRR ? `${profile.targetRR}R` : "—"], ["Max Trades/Day", profile.maxTradesPerDay || "—"]].map(([k, v]) => (
                         <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -4815,6 +4897,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
           />
         )}
 
+        {showStripeGuide && (
+          <StripeSetupGuide C={C} onClose={() => setShowStripeGuide(false)} />
+        )}
+
         {viewProfile && (
           <ProfileModal
             handle={viewProfile}
@@ -5245,6 +5331,167 @@ interface OnboardingData {
   twitter: string;
   instruments: string[];
   strategy: string;
+}
+
+// ─── STRIPE SETUP GUIDE ────────────────────────────────────────────────────────
+function StripeSetupGuide({ C, onClose }: { C: Record<string, string>; onClose: () => void }) {
+  const [copiedStep, setCopiedStep] = useState<number | null>(null);
+
+  function copy(text: string, step: number) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedStep(step);
+      setTimeout(() => setCopiedStep(null), 1500);
+    });
+  }
+
+  const overlay: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 9999,
+    display: "flex", alignItems: "flex-start", justifyContent: "center",
+    padding: "20px", overflowY: "auto",
+  };
+  const card: React.CSSProperties = {
+    background: "#1A1A18", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
+    borderRadius: "16px", padding: "28px 24px", width: "100%", maxWidth: "440px",
+    display: "flex", flexDirection: "column", gap: "20px", marginTop: "20px",
+  };
+  const stepStyle: React.CSSProperties = {
+    display: "flex", flexDirection: "column", gap: "8px",
+    padding: "16px", background: "transparent", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
+    borderRadius: "10px",
+  };
+  const stepNum: React.CSSProperties = {
+    width: "22px", height: "22px", borderRadius: "50%",
+    background: "#f59e0b", color: "#000", fontSize: "11px", fontWeight: 800,
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  };
+  const codeBox: React.CSSProperties = {
+    background: "#0C0C0B", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
+    borderRadius: "6px", padding: "8px 12px", fontSize: "12px",
+    fontFamily: "'IBM Plex Mono', monospace", color: "#89cff0",
+    wordBreak: "break-all",
+  };
+  const copyBtn: React.CSSProperties = {
+    background: "none", border: `1px solid ${C.border2 ?? "#3A3A34"}`, borderRadius: "5px",
+    padding: "3px 8px", fontSize: "10px", color: C.muted ?? "#8A8A82", cursor: "pointer",
+    alignSelf: "flex-start",
+  };
+
+  const STEPS: Array<{
+    title: string;
+    body: string;
+    detail?: string;
+    varName?: string;
+    varNames?: string[];
+    vars?: string[];
+    webhookUrl?: string;
+    link?: string;
+  }> = [
+    {
+      title: "Get your Stripe Secret Key",
+      body: "Go to dashboard.stripe.com → Developers → API keys",
+      detail: "Copy the Secret key (starts with sk_live_... or sk_test_...)",
+      varName: "STRIPE_SECRET_KEY",
+      link: "https://dashboard.stripe.com/apikeys",
+    },
+    {
+      title: "Create your Pro product & price",
+      body: "Stripe Dashboard → Product catalogue → + Add product",
+      detail: "Name: TRADR Pro · Pricing: Recurring · £5.99 · Monthly\nCopy the Price ID (starts with price_...)",
+      varName: "STRIPE_PRICE_ID",
+      link: "https://dashboard.stripe.com/products",
+    },
+    {
+      title: "Set up your webhook",
+      body: "Stripe Dashboard → Developers → Webhooks → + Add endpoint",
+      detail: "Select events: checkout.session.completed, customer.subscription.deleted, invoice.payment_failed\nCopy the Signing secret (starts with whsec_...)",
+      varName: "STRIPE_WEBHOOK_SECRET",
+      webhookUrl: "https://tradrjournal.xyz/api/stripe-webhook",
+      link: "https://dashboard.stripe.com/webhooks",
+    },
+    {
+      title: "Get your Supabase keys",
+      body: "supabase.com → your tradr project → Settings → API",
+      detail: "Copy the Project URL and the service_role key",
+      varNames: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+      link: "https://supabase.com/dashboard/project/vifwjwsndchnrpvfgrmg/settings/api",
+    },
+    {
+      title: "Add all vars to Vercel",
+      body: "vercel.com → tradr.dt project → Settings → Environment Variables",
+      detail: "Add all 6 variables below. Tick Production + Preview + Development for each.",
+      vars: [
+        "STRIPE_SECRET_KEY",
+        "STRIPE_PRICE_ID",
+        "STRIPE_WEBHOOK_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "APP_URL = https://tradrjournal.xyz",
+      ],
+      link: "https://vercel.com/dylnyland4459-1994s-projects/tradr-dt/settings/environment-variables",
+    },
+  ];
+
+  return (
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={card}>
+        <div>
+          <div style={{ fontSize: "20px", fontWeight: 800, color: C.text ?? "#EDEDE8" }}>Connect Stripe</div>
+          <div style={{ fontSize: "13px", color: C.muted ?? "#8A8A82", marginTop: "4px" }}>
+            5 steps to get real payments working. Takes about 10 minutes.
+          </div>
+        </div>
+
+        {STEPS.map((s, i) => (
+          <div key={i} style={stepStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={stepNum}>{i + 1}</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: C.text ?? "#EDEDE8" }}>{s.title}</div>
+            </div>
+            <div style={{ fontSize: "12px", color: C.muted ?? "#8A8A82", lineHeight: 1.5 }}>{s.body}</div>
+            {s.detail && (
+              <div style={{ fontSize: "12px", color: C.text2 ?? "#BCBCB4", lineHeight: 1.6, whiteSpace: "pre-line" }}>{s.detail}</div>
+            )}
+            {s.webhookUrl && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={codeBox}>{s.webhookUrl}</div>
+                <button style={copyBtn} onClick={() => copy(s.webhookUrl!, i)}>
+                  {copiedStep === i ? "✓" : "Copy"}
+                </button>
+              </div>
+            )}
+            {s.vars && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {s.vars.map((v: string) => (
+                  <div key={v} style={{ ...codeBox, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {s.link && (
+              <a
+                href={s.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: "11px", color: "#89cff0", textDecoration: "none", alignSelf: "flex-start" }}
+              >
+                Open dashboard →
+              </a>
+            )}
+          </div>
+        ))}
+
+        <button
+          onClick={onClose}
+          style={{
+            background: C.text ?? "#EDEDE8", color: C.bg ?? "#0C0C0B",
+            border: "none", borderRadius: "10px", padding: "13px",
+            fontSize: "14px", fontWeight: 700, cursor: "pointer",
+          }}
+        >Done</button>
+      </div>
+    </div>
+  );
 }
 
 function OnboardingFlow({ C, allStrategyNames, onComplete }: {
