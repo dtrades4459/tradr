@@ -26,6 +26,6 @@ export async function initSentry(): Promise<void> {
     });
     (window as any).Sentry = Sentry;
   } catch (e) {
-    console.warn("[TRADR][sentry] init failed — install @sentry/react to enable:", e);
+    // @sentry/react not installed or DSN invalid — silently swallow.
   }
 }

@@ -83,6 +83,10 @@ export interface Profile {
   socialLinks?: { twitter?: string };
   /** Subscription plan tier. */
   plan?: "free" | "pro" | "elite";
+  /** Stripe customer ID for billing portal / checkout. */
+  stripeCustomerId?: string;
+  /** User email (from auth session — populated at load time). */
+  email?: string;
 }
 
 export interface CircleMember {
@@ -1541,6 +1545,21 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
   useEffect(() => { loadAll(); }, []);
 
+  // ── Stripe return URL handler ───────────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") === "1") {
+      const cid = params.get("cid") ?? "";
+      setProfile(p => ({ ...p, plan: "pro" as const, ...(cid ? { stripeCustomerId: cid } : {}) }));
+      showToast("⚡ You're on TRADR Pro — welcome!");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("cancelled") === "1") {
+      showToast("No worries — you're still on the free plan.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── ?join= deep-link handler ────────────────────────────────────────────────
   // tradrjournal.xyz/?join=TRADR-ABCD-EFGH → open join flow pre-filled
   useEffect(() => {
@@ -1860,6 +1879,22 @@ export default function Tradr({ user }: { user?: any } = {}) {
         }
       }
     } catch (e) { log.error("loadAll.tradovate", e); }
+
+    // Load Stripe customer ID
+    try {
+      const store = (window as any).storage;
+      const stripeKv = await store.get("tradr_stripe_customer").catch(() => null);
+      if (stripeKv?.value) {
+        const { customerId } = JSON.parse(stripeKv.value);
+        if (customerId) setProfile(p => ({ ...p, stripeCustomerId: customerId }));
+      }
+    } catch (e) { log.error("loadAll.stripe", e); }
+
+    // Stamp email from auth session onto profile state (not persisted)
+    if (user?.email) {
+      setProfile(p => ({ ...p, email: user.email }));
+    }
+
     setLoading(false);
   }
 
@@ -2298,6 +2333,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
   async function submitTrade() {
     if (!form.pair || !form.date || !form.outcome || savingTrade) return;
+    // Gate: free users limited to 20 trades
+    if ((profile.plan ?? "free") === "free" && !editId && trades.length >= 20) {
+      setShowUpgrade(true);
+      return;
+    }
     setSavingTrade(true);
     const now = new Date().toISOString();
     const base = { comments: [], reactions: {}, ...form, updatedAt: now };
@@ -3370,14 +3410,36 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       {(profile.plan === "pro" || profile.plan === "elite") && (
                         <div style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
                           <div style={{
-                            background: "linear-gradient(135deg, #f59e0b22, #d9770622)",
-                            border: "1px solid #f59e0b55", borderRadius: "10px", padding: "12px 16px",
-                            display: "flex", alignItems: "center", gap: "10px",
+                            background: "linear-gradient(135deg, #f59e0b18, #d9770612)",
+                            border: "1px solid #f59e0b44", borderRadius: "12px", padding: "14px 16px",
                           }}>
-                            <span style={{ fontSize: "18px" }}>⚡</span>
-                            <div>
-                              <div style={{ fontSize: "13px", fontWeight: 700, color: "#f59e0b" }}>TRADR Pro</div>
-                              <div style={{ fontSize: "11px", color: C.muted }}>All features unlocked</div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span style={{ fontSize: "20px" }}>⚡</span>
+                                <div>
+                                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#f59e0b" }}>TRADR Pro</div>
+                                  <div style={{ fontSize: "11px", color: C.muted, marginTop: "1px" }}>All features unlocked</div>
+                                </div>
+                              </div>
+                              {profile.stripeCustomerId && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const r = await fetch("/api/stripe-portal", {
+                                        method: "POST", headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ stripeCustomerId: profile.stripeCustomerId }),
+                                      });
+                                      const { url } = await r.json();
+                                      window.location.href = url;
+                                    } catch { showToast("Could not open billing portal — try again."); }
+                                  }}
+                                  style={{
+                                    background: "none", border: "1px solid #f59e0b66", borderRadius: "6px",
+                                    padding: "6px 12px", fontSize: "11px", color: "#f59e0b",
+                                    cursor: "pointer", letterSpacing: "0.05em", fontWeight: 600,
+                                  }}
+                                >Manage →</button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -3511,22 +3573,45 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
               {/* AI INSIGHTS */}
               {homeSection === "ai" && (
-                <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
-                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "24px" }}>
-                    RULE-BASED INSIGHTS — UPDATES AFTER EACH TRADE.
+                (profile.plan === "pro" || profile.plan === "elite") ? (
+                  <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "24px" }}>
+                      RULE-BASED INSIGHTS — UPDATES AFTER EACH TRADE.
+                    </div>
+                    <div style={{ borderTop: `1px solid ${C.border}` }}>
+                      {insights.map((ins: any, i: number) => {
+                        const col = ins.type === "positive" ? C.green : ins.type === "warning" ? C.text2 : ins.type === "danger" ? C.red : C.muted;
+                        return (
+                          <div key={i} style={{ padding: "20px 0", borderBottom: `1px solid ${C.border}`, display: "flex", gap: "16px", alignItems: "baseline" }}>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: col, letterSpacing: "0.1em", minWidth: "48px" }}>{ins.kicker}</span>
+                            <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text, lineHeight: 1.55, flex: 1 }}>{ins.text}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div style={{ borderTop: `1px solid ${C.border}` }}>
-                    {insights.map((ins: any, i: number) => {
-                      const col = ins.type === "positive" ? C.green : ins.type === "warning" ? C.text2 : ins.type === "danger" ? C.red : C.muted;
-                      return (
-                        <div key={i} style={{ padding: "20px 0", borderBottom: `1px solid ${C.border}`, display: "flex", gap: "16px", alignItems: "baseline" }}>
-                          <span style={{ fontFamily: MONO, fontSize: "11px", color: col, letterSpacing: "0.1em", minWidth: "48px" }}>{ins.kicker}</span>
-                          <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text, lineHeight: 1.55, flex: 1 }}>{ins.text}</span>
-                        </div>
-                      );
-                    })}
+                ) : (
+                  <div style={{
+                    marginTop: "clamp(24px, 5vw, 40px)",
+                    border: `1px solid ${C.border2}`, borderRadius: "12px", padding: "32px 20px",
+                    textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+                    background: "linear-gradient(135deg, #f59e0b08, #d9770608)",
+                  }}>
+                    <div style={{ fontSize: "28px" }}>🔒</div>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: C.text }}>Insights — Pro Feature</div>
+                    <div style={{ fontSize: "12px", color: C.muted, maxWidth: "240px", lineHeight: 1.6 }}>
+                      Pattern detection, edge analysis, and discipline scoring. Upgrade to Pro to unlock.
+                    </div>
+                    <button
+                      onClick={() => setShowUpgrade(true)}
+                      style={{
+                        background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#000",
+                        border: "none", borderRadius: "8px", padding: "10px 20px",
+                        fontSize: "13px", fontWeight: 700, cursor: "pointer",
+                      }}
+                    >⚡ Upgrade to Pro</button>
                   </div>
-                </div>
+                )
               )}
 
               {/* RULES */}
@@ -4722,13 +4807,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
         {showUpgrade && (
           <UpgradeModal
             C={C}
+            userId={profile.uid ?? ""}
+            userEmail={profile.email ?? user?.email ?? ""}
+            stripeCustomerId={profile.stripeCustomerId}
+            onCustomerId={(cid) => setProfile(p => ({ ...p, stripeCustomerId: cid }))}
             onClose={() => setShowUpgrade(false)}
-            onUpgrade={async () => {
-              const updated = { ...profile, plan: "pro" as const };
-              setProfile(updated);
-              await saveProfile(updated);
-              setShowUpgrade(false);
-            }}
           />
         )}
 
@@ -4946,6 +5029,10 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
             <div style={{ fontFamily: MONO, fontSize: "12px", color: C.text, letterSpacing: "0.1em" }}>{myCode}</div>
             <button onClick={() => { navigator.clipboard?.writeText(myCode); showToast("Code copied"); }}
               style={{ ...pillGhost, padding: "4px 10px", fontSize: "9px" }}>COPY</button>
+            <button onClick={() => {
+              const handle = (profile.handle ?? "").replace(/^@/, "");
+              navigator.clipboard?.writeText(`https://tradrjournal.xyz/@${handle}`).then(() => showToast("Profile link copied!"));
+            }} style={{ ...pillGhost, padding: "4px 10px", fontSize: "9px" }}>SHARE PROFILE</button>
           </div>
         </div>
       </section>
@@ -6513,108 +6600,122 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fol
 }
 
 // ─── UPGRADE MODAL ────────────────────────────────────────────────────────────
-function UpgradeModal({ C, onClose, onUpgrade }: {
+function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustomerId, onClose }: {
   C: Record<string, string>;
+  userId: string;
+  userEmail: string;
+  stripeCustomerId?: string;
+  onCustomerId: (id: string) => void;
   onClose: () => void;
-  onUpgrade: () => void;
 }) {
-  const [upgrading, setUpgrading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleUpgrade() {
-    setUpgrading(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setDone(true);
-    await new Promise(r => setTimeout(r, 800));
-    onUpgrade();
-    onClose();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/stripe-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, email: userEmail, stripeCustomerId }),
+      });
+      if (!res.ok) {
+        const { error: msg } = await res.json().catch(() => ({}));
+        throw new Error(msg ?? `Request failed (${res.status})`);
+      }
+      const { url, customerId: newCid } = await res.json();
+      if (newCid) onCustomerId(newCid);
+      window.location.href = url; // navigate to Stripe Checkout
+    } catch (err: any) {
+      console.error("[upgrade]", err);
+      setError(err.message ?? "Something went wrong. Please try again.");
+      setLoading(false);
+    }
   }
 
   const overlay: React.CSSProperties = {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)",
     display: "flex", alignItems: "center", justifyContent: "center",
     zIndex: 9999, padding: "20px",
   };
   const card: React.CSSProperties = {
-    background: C.card || "#1A1A18", border: `1px solid ${C.border2}`,
+    background: "#1A1A18", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
     borderRadius: "16px", padding: "28px 24px", width: "100%", maxWidth: "360px",
-    display: "flex", flexDirection: "column", gap: "20px",
-  };
-  const badge: React.CSSProperties = {
-    background: "linear-gradient(135deg, #f59e0b, #d97706)",
-    color: "#000", borderRadius: "6px", padding: "4px 10px",
-    fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em",
-    textTransform: "uppercase", alignSelf: "flex-start",
-  };
-  const priceRow: React.CSSProperties = {
-    display: "flex", alignItems: "baseline", gap: "6px",
-  };
-  const bigPrice: React.CSSProperties = {
-    fontSize: "36px", fontWeight: 800, color: C.text, lineHeight: 1,
-  };
-  const perMonth: React.CSSProperties = {
-    fontSize: "13px", color: C.muted,
-  };
-  const featureList: React.CSSProperties = {
-    display: "flex", flexDirection: "column", gap: "10px",
-  };
-  const featureItem: React.CSSProperties = {
-    display: "flex", alignItems: "center", gap: "10px",
-    fontSize: "13px", color: C.text2,
-  };
-  const ctaBtn: React.CSSProperties = {
-    background: done ? "#22c55e" : upgrading ? C.muted : "linear-gradient(135deg, #f59e0b, #d97706)",
-    color: done ? "#fff" : "#000",
-    border: "none", borderRadius: "10px", padding: "14px",
-    fontSize: "15px", fontWeight: 700, cursor: upgrading ? "default" : "pointer",
-    width: "100%", transition: "all 0.3s",
-  };
-  const closeBtn: React.CSSProperties = {
-    background: "none", border: "none", color: C.muted, cursor: "pointer",
-    fontSize: "12px", textAlign: "center", letterSpacing: "0.06em",
+    display: "flex", flexDirection: "column", gap: "18px",
   };
 
   const FEATURES = [
-    "Unlimited trade history",
-    "CSV & broker auto-import",
-    "Advanced analytics & heatmaps",
-    "Custom strategy builder",
-    "Priority in Trading Circles leaderboard",
-    "Export trade reports (PDF + CSV)",
+    { icon: "📊", text: "Unlimited trade history" },
+    { icon: "📥", text: "CSV & broker auto-import" },
+    { icon: "🔍", text: "Advanced analytics & heatmaps" },
+    { icon: "🧠", text: "Full insights — patterns & edge detection" },
+    { icon: "🏆", text: "Priority in Trading Circles leaderboard" },
+    { icon: "📤", text: "Export reports (CSV + PDF)" },
   ];
 
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={card}>
+        {/* Header */}
         <div>
-          <div style={badge}>⚡ Pro</div>
-          <div style={{ marginTop: "14px", fontSize: "20px", fontWeight: 700, color: C.text }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            background: "linear-gradient(135deg, #f59e0b, #d97706)",
+            color: "#000", borderRadius: "6px", padding: "3px 10px",
+            fontSize: "11px", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
+          }}>⚡ PRO</div>
+          <div style={{ marginTop: "12px", fontSize: "21px", fontWeight: 800, color: C.text ?? "#EDEDE8", lineHeight: 1.2 }}>
             Upgrade to TRADR Pro
           </div>
-          <div style={{ marginTop: "4px", fontSize: "13px", color: C.muted }}>
-            Everything you need to trade with an edge.
+          <div style={{ marginTop: "4px", fontSize: "13px", color: C.muted ?? "#8A8A82" }}>
+            Everything you need to trade with a real edge.
           </div>
         </div>
-        <div style={priceRow}>
-          <span style={bigPrice}>$5.99</span>
-          <span style={perMonth}>/month</span>
+
+        {/* Price */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+          <span style={{ fontSize: "38px", fontWeight: 900, color: C.text ?? "#EDEDE8", lineHeight: 1 }}>£5.99</span>
+          <span style={{ fontSize: "13px", color: C.muted ?? "#8A8A82" }}>/month · cancel any time</span>
         </div>
-        <div style={featureList}>
+
+        {/* Features */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {FEATURES.map(f => (
-            <div key={f} style={featureItem}>
-              <span style={{ color: "#22c55e", fontSize: "16px" }}>✓</span>
-              <span>{f}</span>
+            <div key={f.text} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13px", color: C.text2 ?? "#BCBCB4" }}>
+              <span style={{ fontSize: "15px", width: "20px", flexShrink: 0 }}>{f.icon}</span>
+              <span>{f.text}</span>
             </div>
           ))}
         </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{ background: "#ef444422", border: "1px solid #ef444455", borderRadius: "8px", padding: "10px 12px", fontSize: "12px", color: "#ef4444" }}>
+            {error}
+          </div>
+        )}
+
+        {/* CTA */}
         <button
-          style={ctaBtn}
           onClick={handleUpgrade}
-          disabled={upgrading}
+          disabled={loading}
+          style={{
+            background: loading ? (C.muted ?? "#8A8A82") : "linear-gradient(135deg, #f59e0b, #d97706)",
+            color: "#000", border: "none", borderRadius: "10px",
+            padding: "14px", fontSize: "15px", fontWeight: 800,
+            cursor: loading ? "default" : "pointer", width: "100%",
+            transition: "opacity 0.2s", opacity: loading ? 0.7 : 1,
+          }}
         >
-          {done ? "✓ You're Pro!" : upgrading ? "Processing…" : "Upgrade Now — $5.99/mo"}
+          {loading ? "Redirecting to checkout…" : "Upgrade Now — £5.99/mo"}
         </button>
-        <button style={closeBtn} onClick={onClose}>Maybe later</button>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: C.muted ?? "#8A8A82", cursor: "pointer", fontSize: "12px", textAlign: "center", letterSpacing: "0.06em" }}
+        >
+          Maybe later
+        </button>
       </div>
     </div>
   );
