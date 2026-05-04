@@ -1,8 +1,30 @@
 export const config = { runtime: "nodejs" };
 
+// Simple in-memory rate limiter (resets on cold start, good enough for serverless)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 5; // max 5 requests
+const RATE_WINDOW = 60_000; // per 60 seconds
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() || "unknown";
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: "Too many requests" });
   }
 
   const { feedback, name, handle } = req.body || {};

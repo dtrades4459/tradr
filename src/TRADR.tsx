@@ -81,6 +81,8 @@ export interface Profile {
   instruments?: string[];
   /** Social media handles. */
   socialLinks?: { twitter?: string };
+  /** Subscription plan tier. */
+  plan?: "free" | "pro" | "elite";
 }
 
 export interface CircleMember {
@@ -1426,7 +1428,7 @@ function getEmotionTags(emotions: string | string[] | undefined): string[] {
 }
 
 const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
-const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {} };
+const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {}, plan: "free" };
 
 export default function Tradr({ user }: { user?: any } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -1503,6 +1505,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // CSV import panel state
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Circle action loading states
   const [isCreatingCircle, setIsCreatingCircle] = useState(false);
@@ -2231,13 +2234,29 @@ export default function Tradr({ user }: { user?: any } = {}) {
     // member may have joined since the last tick. Falls back to whatever's on
     // the passed circle object if the listByPrefix fails.
     const members = await readCircleMembers(circle.code, circle.members || []);
+
+    // Batch fetch all entry rows for this circle in a single query instead of
+    // one request per member (avoids N+1 round-trips).
+    const prefix = `tradr_circle_entry_${circle.code}_`;
+    let rowMap: Record<string, any> = {};
+    try {
+      const rows = await (window as any).storage.listByPrefix(prefix);
+      for (const row of rows || []) {
+        try {
+          const parsed = JSON.parse(row.value);
+          const memberCode = row.key.slice(prefix.length);
+          rowMap[memberCode] = parsed;
+        } catch { /* skip malformed rows */ }
+      }
+    } catch { /* fall through to per-member defaults */ }
+
     const entries: any[] = [];
     for (const m of members) {
-      try {
-        const r = await (window as any).storage.get("tradr_circle_entry_" + circle.code + "_" + m.code, true);
-        if (r) entries.push(JSON.parse(r.value));
-        else entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null });
-      } catch { entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null }); }
+      if (rowMap[m.code]) {
+        entries.push(rowMap[m.code]);
+      } else {
+        entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null });
+      }
     }
     const m = circle.metric || "dollar";
     entries.sort((a, b) => {
@@ -3326,14 +3345,57 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       openProfile={openProfile}
                     />
                   </section>
+                  {/* Plan / Upgrade */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
+                    <SectionKicker label="PLAN" C={C} />
+                    <div style={{ marginTop: "16px" }}>
+                      {profile.plan !== "pro" && profile.plan !== "elite" && (
+                        <div style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
+                          <button
+                            onClick={() => setShowUpgrade(true)}
+                            style={{
+                              background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                              color: "#000", border: "none", borderRadius: "10px",
+                              padding: "13px 20px", fontSize: "14px", fontWeight: 700,
+                              cursor: "pointer", width: "100%", letterSpacing: "0.02em",
+                            }}
+                          >
+                            ⚡ Upgrade to Pro — $5.99/mo
+                          </button>
+                          <div style={{ marginTop: "6px", fontSize: "11px", color: C.muted, textAlign: "center" }}>
+                            Unlimited imports · Advanced analytics · Export reports
+                          </div>
+                        </div>
+                      )}
+                      {(profile.plan === "pro" || profile.plan === "elite") && (
+                        <div style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
+                          <div style={{
+                            background: "linear-gradient(135deg, #f59e0b22, #d9770622)",
+                            border: "1px solid #f59e0b55", borderRadius: "10px", padding: "12px 16px",
+                            display: "flex", alignItems: "center", gap: "10px",
+                          }}>
+                            <span style={{ fontSize: "18px" }}>⚡</span>
+                            <div>
+                              <div style={{ fontSize: "13px", fontWeight: 700, color: "#f59e0b" }}>TRADR Pro</div>
+                              <div style={{ fontSize: "11px", color: C.muted }}>All features unlocked</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
                   {/* Data & Privacy */}
                   <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
                     <SectionKicker label="DATA & PRIVACY" C={C} />
                     <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                       <div style={{ display: "flex", gap: "10px" }}>
-                        <button onClick={exportCSV}
+                        <button onClick={() => {
+                            if (profile.plan !== "pro" && profile.plan !== "elite") { setShowUpgrade(true); return; }
+                            exportCSV();
+                          }}
                           style={{ flex: 1, padding: "12px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                          Export CSV
+                          {profile.plan !== "pro" && profile.plan !== "elite" ? "🔒 Export CSV (Pro)" : "Export CSV"}
                         </button>
                         <button onClick={exportData}
                           style={{ flex: 1, padding: "12px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
@@ -3342,6 +3404,27 @@ export default function Tradr({ user }: { user?: any } = {}) {
                       </div>
                       <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.55 }}>
                         Download all your trades and profile data. Your data belongs to you.
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Broker Integrations */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
+                    <SectionKicker label="BROKER INTEGRATIONS" C={C} />
+                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div style={{ border: `1px solid ${tradovateSession ? C.green + "66" : C.border}`, borderRadius: "10px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", transition: "border-color 0.2s" }}>
+                        <div>
+                          <div style={{ fontFamily: MONO, fontSize: "11px", color: tradovateSession ? C.green : C.text, letterSpacing: "0.08em" }}>
+                            {tradovateSession ? `✓ ${tradovateSession.accountName ?? "Tradovate"} · ${tradovateSession.env.toUpperCase()}` : "Tradovate"}
+                          </div>
+                          <div style={{ fontFamily: BODY, fontSize: "11px", color: C.muted, marginTop: "3px" }}>
+                            {tradovateSession ? "Live positions & auto-import active" : "Connect for live positions & auto-import"}
+                          </div>
+                        </div>
+                        <button onClick={() => setShowLiveModal(true)}
+                          style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.1em", color: C.text, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                          {tradovateSession ? "Manage →" : "Connect →"}
+                        </button>
                       </div>
                     </div>
                   </section>
@@ -4634,6 +4717,19 @@ export default function Tradr({ user }: { user?: any } = {}) {
               </div>
             </div>
           </div>
+        )}
+
+        {showUpgrade && (
+          <UpgradeModal
+            C={C}
+            onClose={() => setShowUpgrade(false)}
+            onUpgrade={async () => {
+              const updated = { ...profile, plan: "pro" as const };
+              setProfile(updated);
+              await saveProfile(updated);
+              setShowUpgrade(false);
+            }}
+          />
         )}
 
         {viewProfile && (
@@ -6415,3 +6511,112 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fol
     </div>
   );
 }
+
+// ─── UPGRADE MODAL ────────────────────────────────────────────────────────────
+function UpgradeModal({ C, onClose, onUpgrade }: {
+  C: Record<string, string>;
+  onClose: () => void;
+  onUpgrade: () => void;
+}) {
+  const [upgrading, setUpgrading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleUpgrade() {
+    setUpgrading(true);
+    await new Promise(r => setTimeout(r, 1500));
+    setDone(true);
+    await new Promise(r => setTimeout(r, 800));
+    onUpgrade();
+    onClose();
+  }
+
+  const overlay: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    zIndex: 9999, padding: "20px",
+  };
+  const card: React.CSSProperties = {
+    background: C.card || "#1A1A18", border: `1px solid ${C.border2}`,
+    borderRadius: "16px", padding: "28px 24px", width: "100%", maxWidth: "360px",
+    display: "flex", flexDirection: "column", gap: "20px",
+  };
+  const badge: React.CSSProperties = {
+    background: "linear-gradient(135deg, #f59e0b, #d97706)",
+    color: "#000", borderRadius: "6px", padding: "4px 10px",
+    fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em",
+    textTransform: "uppercase", alignSelf: "flex-start",
+  };
+  const priceRow: React.CSSProperties = {
+    display: "flex", alignItems: "baseline", gap: "6px",
+  };
+  const bigPrice: React.CSSProperties = {
+    fontSize: "36px", fontWeight: 800, color: C.text, lineHeight: 1,
+  };
+  const perMonth: React.CSSProperties = {
+    fontSize: "13px", color: C.muted,
+  };
+  const featureList: React.CSSProperties = {
+    display: "flex", flexDirection: "column", gap: "10px",
+  };
+  const featureItem: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: "10px",
+    fontSize: "13px", color: C.text2,
+  };
+  const ctaBtn: React.CSSProperties = {
+    background: done ? "#22c55e" : upgrading ? C.muted : "linear-gradient(135deg, #f59e0b, #d97706)",
+    color: done ? "#fff" : "#000",
+    border: "none", borderRadius: "10px", padding: "14px",
+    fontSize: "15px", fontWeight: 700, cursor: upgrading ? "default" : "pointer",
+    width: "100%", transition: "all 0.3s",
+  };
+  const closeBtn: React.CSSProperties = {
+    background: "none", border: "none", color: C.muted, cursor: "pointer",
+    fontSize: "12px", textAlign: "center", letterSpacing: "0.06em",
+  };
+
+  const FEATURES = [
+    "Unlimited trade history",
+    "CSV & broker auto-import",
+    "Advanced analytics & heatmaps",
+    "Custom strategy builder",
+    "Priority in Trading Circles leaderboard",
+    "Export trade reports (PDF + CSV)",
+  ];
+
+  return (
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={card}>
+        <div>
+          <div style={badge}>⚡ Pro</div>
+          <div style={{ marginTop: "14px", fontSize: "20px", fontWeight: 700, color: C.text }}>
+            Upgrade to TRADR Pro
+          </div>
+          <div style={{ marginTop: "4px", fontSize: "13px", color: C.muted }}>
+            Everything you need to trade with an edge.
+          </div>
+        </div>
+        <div style={priceRow}>
+          <span style={bigPrice}>$5.99</span>
+          <span style={perMonth}>/month</span>
+        </div>
+        <div style={featureList}>
+          {FEATURES.map(f => (
+            <div key={f} style={featureItem}>
+              <span style={{ color: "#22c55e", fontSize: "16px" }}>✓</span>
+              <span>{f}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          style={ctaBtn}
+          onClick={handleUpgrade}
+          disabled={upgrading}
+        >
+          {done ? "✓ You're Pro!" : upgrading ? "Processing…" : "Upgrade Now — $5.99/mo"}
+        </button>
+        <button style={closeBtn} onClick={onClose}>Maybe later</button>
+      </div>
+    </div>
+  );
+}
+

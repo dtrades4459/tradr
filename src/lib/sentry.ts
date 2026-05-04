@@ -1,34 +1,22 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Sentry init (optional)
+// TRADR · Sentry init
 //
-// initSentry() does NOTHING unless:
-//   1. VITE_SENTRY_DSN is set in your env, AND
-//   2. @sentry/react is installed.
+// @sentry/react is installed. initSentry() is a no-op unless VITE_SENTRY_DSN
+// is set in the environment.
 //
-// This means it is safe to call from main.tsx today — the build will not
-// fail if you haven't installed Sentry yet. To enable it later:
-//
-//   npm install @sentry/react
+// To enable:
 //   echo "VITE_SENTRY_DSN=https://...@sentry.io/..." >> .env
-//
-// Then redeploy. Sentry exposes itself on window.Sentry so lib/log.ts picks
-// it up automatically.
+//   # Then redeploy.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+import * as Sentry from "@sentry/react";
 
 export async function initSentry(): Promise<void> {
   const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
   if (!dsn) return;
 
   try {
-    // Dynamic import so a missing dependency does not break the build.
-    // The /* @vite-ignore */ comment lets Vite skip resolving this at build
-    // time when @sentry/react isn't installed yet.
-    const mod = await import(/* @vite-ignore */ "@sentry/react").catch(() => null);
-    if (!mod) {
-      console.warn("[TRADR][sentry] DSN set but @sentry/react not installed — run: npm install @sentry/react");
-      return;
-    }
-    mod.init({
+    Sentry.init({
       dsn,
       environment: import.meta.env.MODE,
       tracesSampleRate: 0.1,
@@ -36,8 +24,11 @@ export async function initSentry(): Promise<void> {
       replaysOnErrorSampleRate: 1.0,
     });
     // Expose so lib/log.ts can pick it up without an import dependency.
-    (window as any).Sentry = mod;
+    (window as any).Sentry = Sentry;
   } catch (e) {
     console.warn("[TRADR][sentry] init failed:", e);
   }
 }
+
+// Re-export for use in ErrorBoundary and other components.
+export { Sentry };
