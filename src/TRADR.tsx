@@ -66,6 +66,10 @@ export interface Profile {
   onboarded?: boolean;
   /** If true, this user's trades are visible on their public profile. */
   publicTrades?: boolean;
+  /** Futures instruments the user primarily trades (e.g. ["ES", "NQ"]). */
+  instruments?: string[];
+  /** Social media handles. */
+  socialLinks?: { twitter?: string };
 }
 
 export interface CircleMember {
@@ -841,10 +845,15 @@ function AvatarCircle({ name, avatar, size = 40, color, onClick, C }: any) {
   const bg = C?.panel ?? "#161614";
   const style: React.CSSProperties = { width: size, height: size, borderRadius: "50%", border: `1px solid ${border}`, flexShrink: 0, cursor: onClick ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", objectFit: "cover" };
   const safeAvatar = avatar && (avatar.startsWith("data:image/") || avatar.startsWith("https://")) ? avatar : null;
+  // Emoji avatar: short string that isn't a URL or data URI
+  const isEmoji = avatar && !safeAvatar && avatar.length <= 8;
   if (safeAvatar) return <img src={safeAvatar} alt="av" style={style} onClick={onClick} />;
   return (
     <div style={{ ...style, background: bg }} onClick={onClick}>
-      <span style={{ fontSize: size * 0.34, color: col, letterSpacing: "0.04em", fontFamily: MONO }}>{initials}</span>
+      {isEmoji
+        ? <span style={{ fontSize: size * 0.5, lineHeight: 1 }}>{avatar}</span>
+        : <span style={{ fontSize: size * 0.34, color: col, letterSpacing: "0.04em", fontFamily: MONO }}>{initials}</span>
+      }
     </div>
   );
 }
@@ -1311,7 +1320,7 @@ function getEmotionTags(emotions: string | string[] | undefined): string[] {
 }
 
 const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", comments: [], reactions: {} };
-const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false };
+const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {} };
 
 export default function Tradr({ user }: { user?: any } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -2548,22 +2557,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
       <OnboardingFlow
         C={C}
         allStrategyNames={allStrategyNames}
-        onComplete={async (name: string, handle: string, strategy: string) => {
+        onComplete={async ({ name, handle, avatar, bio, twitter, instruments, strategy }: OnboardingData) => {
           // Set localStorage immediately so a refresh won't re-show onboarding
           // even if the Supabase write hasn't completed yet.
           try { localStorage.setItem("tradr_onboarded", "1"); } catch {}
+          const cleanHandle = handle.trim() || `@${name.trim().toLowerCase().replace(/\s+/g, "")}`;
           const updated: Profile = {
             ...profile,
             name: name.trim(),
-            handle: handle.trim() || `@${name.trim().toLowerCase().replace(/\s+/g, "")}`,
+            handle: cleanHandle,
+            avatar: avatar || profile.avatar,
+            bio: bio.trim() || profile.bio,
             broker: profile.broker,
             timezone: profile.timezone,
             startDate: profile.startDate,
             targetRR: profile.targetRR,
             maxTradesPerDay: profile.maxTradesPerDay,
             onboarded: true,
+            instruments: instruments.length > 0 ? instruments : profile.instruments,
+            socialLinks: twitter.trim() ? { twitter: twitter.trim() } : profile.socialLinks,
           };
-          if (strategy) updated.targetRR = profile.targetRR;
           await saveProfile(updated);
           // If they picked a strategy, pre-select it in the log form so their first trade is faster.
           if (strategy) setForm((f: Partial<Trade>) => ({ ...f, strategy }));
@@ -4464,20 +4477,94 @@ function ProfileView({ profile, myCode, followers, following, friendCodes, myCir
 
 // ─── ONBOARDING FLOW ──────────────────────────────────────────────────────────
 
-const ONBOARDING_STEPS = ["welcome", "strategy", "ready"] as const;
+const ONBOARDING_STEPS = ["welcome", "about", "instruments", "strategy", "ready"] as const;
 type OnboardingStep = typeof ONBOARDING_STEPS[number];
+
+const AVATAR_EMOJIS = [
+  "🎯","🦁","🐂","🦅","⚡","🔥","💎","🏆",
+  "🦈","🧠","🎲","👑","🐺","🦊","🤖","⚔️",
+  "🌊","🏔️","🎭","⭐","💰","🪄","🛡️","🎪",
+];
+
+const FUTURES_INSTRUMENTS = [
+  { code: "ES",  label: "E-mini S&P 500"  },
+  { code: "NQ",  label: "E-mini Nasdaq"   },
+  { code: "MES", label: "Micro S&P 500"   },
+  { code: "MNQ", label: "Micro Nasdaq"    },
+  { code: "YM",  label: "E-mini Dow"      },
+  { code: "RTY", label: "E-mini Russell"  },
+  { code: "CL",  label: "Crude Oil"       },
+  { code: "GC",  label: "Gold"            },
+  { code: "SI",  label: "Silver"          },
+  { code: "NG",  label: "Natural Gas"     },
+  { code: "ZB",  label: "T-Bond"          },
+  { code: "6E",  label: "Euro FX"         },
+];
+
+interface OnboardingData {
+  name: string;
+  handle: string;
+  avatar: string;
+  bio: string;
+  twitter: string;
+  instruments: string[];
+  strategy: string;
+}
 
 function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   C: any;
   allStrategyNames: string[];
-  onComplete: (name: string, handle: string, strategy: string) => Promise<void>;
+  onComplete: (data: OnboardingData) => Promise<void>;
 }) {
   const [step, setStep] = useState<OnboardingStep>("welcome");
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
+  const [handleEdited, setHandleEdited] = useState(false);
+  const [avatar, setAvatar] = useState("");
+  const [bio, setBio] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [instruments, setInstruments] = useState<string[]>([]);
   const [strategy, setStrategy] = useState("");
+  const [customStrategy, setCustomStrategy] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
   const [saving, setSaving] = useState(false);
   const [nameErr, setNameErr] = useState("");
+
+  function onNameChange(v: string) {
+    setName(v);
+    setNameErr("");
+    if (!handleEdited) {
+      const slug = v.trim().toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9_]/g, "");
+      setHandle(slug ? `@${slug}` : "");
+    }
+  }
+
+  function onHandleChange(v: string) {
+    setHandleEdited(true);
+    const raw = v.startsWith("@") ? v.slice(1) : v;
+    const clean = raw.replace(/[^a-z0-9_.]/gi, "").toLowerCase();
+    setHandle(clean ? `@${clean}` : "");
+  }
+
+  function toggleInstrument(code: string) {
+    setInstruments(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]);
+  }
+
+  const stepIndex = ONBOARDING_STEPS.indexOf(step);
+  function goNext() {
+    if (stepIndex < ONBOARDING_STEPS.length - 1) setStep(ONBOARDING_STEPS[stepIndex + 1]);
+  }
+  function goBack() {
+    if (stepIndex > 0) setStep(ONBOARDING_STEPS[stepIndex - 1]);
+  }
+
+  async function finish() {
+    if (saving) return;
+    setSaving(true);
+    const finalStrategy = showCustom ? customStrategy.trim() : strategy;
+    await onComplete({ name, handle, avatar, bio, twitter, instruments, strategy: finalStrategy });
+    setSaving(false);
+  }
 
   const inp: React.CSSProperties = {
     background: "transparent", border: "none",
@@ -4494,238 +4581,318 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
     display: "flex", alignItems: "center", justifyContent: "center",
   });
 
-  async function finish() {
-    if (saving) return;
-    setSaving(true);
-    await onComplete(name, handle, strategy);
-    setSaving(false);
-  }
+  const MonoLbl = ({ children, optional }: { children: string; optional?: boolean }) => (
+    <label style={{
+      fontFamily: MONO, fontSize: "10px", color: C.muted,
+      letterSpacing: "0.14em", textTransform: "uppercase" as const,
+      display: "block", marginBottom: "8px",
+    }}>
+      {children}{optional && <span style={{ color: C.dim, fontSize: "9px", marginLeft: "6px" }}>optional</span>}
+    </label>
+  );
+
+  const StepBadge = ({ n }: { n: number }) => (
+    <div style={{
+      fontFamily: MONO, fontSize: "10px", color: C.muted,
+      letterSpacing: "0.16em", textTransform: "uppercase" as const, marginBottom: "16px",
+    }}>
+      — Step {n} of {ONBOARDING_STEPS.length}
+    </div>
+  );
+
+  const Heading = ({ line1, line2 }: { line1: string; line2: string }) => (
+    <h1 style={{
+      fontFamily: DISPLAY, fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
+      letterSpacing: "-0.03em", lineHeight: 1.05, color: C.text, marginBottom: "12px",
+    }}>
+      {line1}<br />
+      <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>{line2}</span>
+    </h1>
+  );
 
   return (
     <div style={{
-      minHeight: "100vh", minHeight: "100dvh",
-      background: C.bg, color: C.text,
+      minHeight: "100dvh", background: C.bg, color: C.text,
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      padding: "32px 24px",
-      fontFamily: "BODY",
+      padding: "32px 24px", fontFamily: BODY,
     }}>
       <div style={{ width: "100%", maxWidth: "420px" }}>
 
         {/* Wordmark */}
         <div style={{
-          fontFamily: DISPLAY,
-          fontSize: "17px", fontWeight: 700, letterSpacing: "-0.01em",
-          color: C.text, marginBottom: "56px",
+          fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700,
+          letterSpacing: "-0.01em", color: C.text, marginBottom: "48px",
         }}>
           TRADR<span style={{ color: C.blue }}>.</span>
         </div>
 
-        {/* Step indicator */}
-        <div style={{ display: "flex", gap: "6px", marginBottom: "48px" }}>
+        {/* Progress indicator */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "44px" }}>
           {ONBOARDING_STEPS.map((s, i) => (
             <div key={s} style={{
               height: "2px", flex: 1, borderRadius: "1px",
-              background: ONBOARDING_STEPS.indexOf(step) >= i ? C.text : C.border,
+              background: stepIndex >= i ? C.text : C.border,
               transition: "background 0.3s",
             }} />
           ))}
         </div>
 
-        {/* ── STEP 1: Welcome + name ── */}
+        {/* ── STEP 1: Name + handle + avatar ── */}
         {step === "welcome" && (
           <div style={{ animation: "rise 0.3s ease" }}>
-            <div style={{
-              fontFamily: "MONO",
-              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
-              textTransform: "uppercase", marginBottom: "16px",
-            }}>
-              — Step 1 of 3
-            </div>
-            <h1 style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
-              letterSpacing: "-0.03em", lineHeight: 1.05,
-              color: C.text, marginBottom: "12px",
-            }}>
-              Let's set up<br />
-              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>your profile.</span>
-            </h1>
-            <p style={{
-              fontSize: "14px", color: C.muted, lineHeight: 1.7,
-              marginBottom: "40px",
-            }}>
-              This is how other traders will see you on leaderboards and in circles.
+            <StepBadge n={1} />
+            <Heading line1="Let's set up" line2="your profile." />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "28px" }}>
+              This is how other traders see you on leaderboards and in circles.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginBottom: "40px" }}>
+            {/* Emoji avatar picker */}
+            <div style={{ marginBottom: "28px" }}>
+              <MonoLbl optional>Pick an avatar</MonoLbl>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {AVATAR_EMOJIS.map(e => (
+                  <button key={e} onClick={() => setAvatar(avatar === e ? "" : e)} style={{
+                    width: "42px", height: "42px", borderRadius: "50%",
+                    border: `1.5px solid ${avatar === e ? C.text : C.border}`,
+                    background: avatar === e ? C.panel : "transparent",
+                    cursor: "pointer", fontSize: "20px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "border-color 0.15s, background 0.15s",
+                  }}>{e}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginBottom: "32px" }}>
               <div>
-                <label style={{
-                  fontFamily: "MONO",
-                  fontSize: "10px", color: C.muted, letterSpacing: "0.14em",
-                  textTransform: "uppercase", display: "block", marginBottom: "8px",
-                }}>Your name</label>
+                <MonoLbl>Your name</MonoLbl>
                 <input
-                  value={name} onChange={e => { setName(e.target.value); setNameErr(""); }}
+                  value={name} onChange={e => onNameChange(e.target.value)}
                   placeholder="e.g. Dylon" style={inp} autoFocus
-                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("strategy"); }}
+                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) goNext(); }}
                 />
                 {nameErr && <div style={{ fontSize: "12px", color: C.red, marginTop: "6px" }}>{nameErr}</div>}
               </div>
               <div>
-                <label style={{
-                  fontFamily: "MONO",
-                  fontSize: "10px", color: C.muted, letterSpacing: "0.14em",
-                  textTransform: "uppercase", display: "block", marginBottom: "8px",
-                }}>Handle <span style={{ color: C.dim, fontSize: "9px" }}>optional</span></label>
+                <MonoLbl optional>Handle</MonoLbl>
                 <input
-                  value={handle} onChange={e => setHandle(e.target.value)}
+                  value={handle} onChange={e => onHandleChange(e.target.value)}
                   placeholder="@yourhandle" style={inp}
-                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) setStep("strategy"); }}
+                  onKeyDown={e => { if (e.key === "Enter" && name.trim()) goNext(); }}
                 />
               </div>
             </div>
 
+            <button onClick={() => { if (!name.trim()) { setNameErr("Name is required."); return; } goNext(); }} style={pillPrimary(!!name.trim())}>
+              Continue →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 2: About yourself ── */}
+        {step === "about" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <StepBadge n={2} />
+            <Heading line1="Tell us about" line2="yourself." />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "28px" }}>
+              Optional — shows on your public profile. You can always update it later.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginBottom: "32px" }}>
+              <div>
+                <MonoLbl optional>Bio</MonoLbl>
+                <textarea
+                  value={bio} onChange={e => setBio(e.target.value)}
+                  placeholder="Multi-strategy trader | Consistency over everything"
+                  rows={3}
+                  style={{ ...inp, resize: "none", lineHeight: 1.6 }}
+                />
+              </div>
+              <div>
+                <MonoLbl optional>X / Twitter</MonoLbl>
+                <input
+                  value={twitter} onChange={e => setTwitter(e.target.value.replace(/^@+/, ""))}
+                  placeholder="@handle" style={inp}
+                  onKeyDown={e => { if (e.key === "Enter") goNext(); }}
+                />
+              </div>
+            </div>
+
+            <button onClick={goNext} style={pillPrimary(true)}>
+              {bio.trim() || twitter.trim() ? "Continue →" : "Skip →"}
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 3: Instruments ── */}
+        {step === "instruments" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <StepBadge n={3} />
+            <Heading line1="What futures do" line2="you trade?" />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "24px" }}>
+              Select all that apply. More markets coming soon.
+            </p>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "32px" }}>
+              {FUTURES_INSTRUMENTS.map(({ code, label }) => {
+                const active = instruments.includes(code);
+                return (
+                  <button key={code} onClick={() => toggleInstrument(code)} style={{
+                    background: active ? C.text : "transparent",
+                    color: active ? C.bg : C.text2,
+                    border: `1px solid ${active ? C.text : C.border2}`,
+                    borderRadius: "8px", padding: "8px 14px",
+                    cursor: "pointer", transition: "all 0.15s",
+                    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px",
+                  }}>
+                    <span style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, letterSpacing: "0.04em" }}>{code}</span>
+                    <span style={{ fontFamily: BODY, fontSize: "10px", opacity: 0.7 }}>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button onClick={goNext} style={pillPrimary(true)}>
+              {instruments.length === 0 ? "Skip →" : `Continue with ${instruments.length} selected →`}
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 4: Strategy ── */}
+        {step === "strategy" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <StepBadge n={4} />
+            <Heading line1="What's your" line2="main strategy?" />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "24px" }}>
+              We'll pre-load your checklist and rules. Add more strategies later.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", borderTop: `1px solid ${C.border}`, marginBottom: "32px" }}>
+              {allStrategyNames.map((s: string) => (
+                <div key={s} onClick={() => { setStrategy(strategy === s ? "" : s); setShowCustom(false); }} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "15px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer",
+                }}>
+                  <span style={{
+                    fontFamily: BODY, fontSize: "14px",
+                    color: strategy === s ? C.text : C.text2, fontWeight: strategy === s ? 500 : 400,
+                  }}>{s}</span>
+                  <div style={{
+                    width: "18px", height: "18px", borderRadius: "50%",
+                    border: `1px solid ${strategy === s ? C.text : C.border2}`,
+                    background: strategy === s ? C.text : "transparent",
+                    flexShrink: 0, transition: "all 0.15s",
+                  }} />
+                </div>
+              ))}
+
+              {/* Custom strategy */}
+              <div onClick={() => { setShowCustom(true); setStrategy(""); }} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "15px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer",
+              }}>
+                <span style={{
+                  fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em",
+                  textTransform: "uppercase" as const,
+                  color: showCustom ? C.text : C.muted, fontWeight: showCustom ? 500 : 400,
+                }}>Custom strategy…</span>
+                <div style={{
+                  width: "18px", height: "18px", borderRadius: "50%",
+                  border: `1px solid ${showCustom ? C.text : C.border2}`,
+                  background: showCustom ? C.text : "transparent",
+                  flexShrink: 0, transition: "all 0.15s",
+                }} />
+              </div>
+
+              {showCustom && (
+                <div style={{ padding: "10px 0 2px" }}>
+                  <input
+                    value={customStrategy} onChange={e => setCustomStrategy(e.target.value)}
+                    placeholder="e.g. Breakout Momentum"
+                    style={{ ...inp, fontSize: "14px" }} autoFocus
+                    onKeyDown={e => { if (e.key === "Enter" && customStrategy.trim()) goNext(); }}
+                  />
+                </div>
+              )}
+
+              {/* Skip option */}
+              <div onClick={() => { setStrategy(""); setShowCustom(false); setCustomStrategy(""); }} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "15px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer",
+              }}>
+                <span style={{
+                  fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em",
+                  textTransform: "uppercase" as const,
+                  color: !strategy && !showCustom ? C.text : C.muted,
+                  fontWeight: !strategy && !showCustom ? 500 : 400,
+                }}>I'll decide later</span>
+                <div style={{
+                  width: "18px", height: "18px", borderRadius: "50%",
+                  border: `1px solid ${!strategy && !showCustom ? C.text : C.border2}`,
+                  background: !strategy && !showCustom ? C.text : "transparent",
+                  flexShrink: 0, transition: "all 0.15s",
+                }} />
+              </div>
+            </div>
+
             <button
-              onClick={() => {
-                if (!name.trim()) { setNameErr("Name is required."); return; }
-                setStep("strategy");
-              }}
-              style={pillPrimary(!!name.trim())}
+              onClick={() => { if (showCustom && !customStrategy.trim()) return; goNext(); }}
+              style={pillPrimary(!showCustom || !!customStrategy.trim())}
             >
               Continue →
             </button>
           </div>
         )}
 
-        {/* ── STEP 2: Primary strategy ── */}
-        {step === "strategy" && (
-          <div style={{ animation: "rise 0.3s ease" }}>
-            <div style={{
-              fontFamily: "MONO",
-              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
-              textTransform: "uppercase", marginBottom: "16px",
-            }}>
-              — Step 2 of 3
-            </div>
-            <h1 style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
-              letterSpacing: "-0.03em", lineHeight: 1.05,
-              color: C.text, marginBottom: "12px",
-            }}>
-              What's your<br />
-              <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>main strategy?</span>
-            </h1>
-            <p style={{
-              fontSize: "14px", color: C.muted, lineHeight: 1.7,
-              marginBottom: "32px",
-            }}>
-              We'll pre-load your checklist and rules. You can add more strategies later.
-            </p>
-
-            <div style={{
-              display: "flex", flexDirection: "column", gap: "1px",
-              borderTop: `1px solid ${C.border}`,
-              marginBottom: "36px",
-            }}>
-              {allStrategyNames.map((s: string) => (
-                <div
-                  key={s}
-                  onClick={() => setStrategy(strategy === s ? "" : s)}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "16px 0", borderBottom: `1px solid ${C.border}`,
-                    cursor: "pointer",
-                    transition: "opacity 0.12s",
-                  }}
-                >
-                  <span style={{
-                    fontFamily: "BODY",
-                    fontSize: "14px", color: strategy === s ? C.text : C.text2,
-                    fontWeight: strategy === s ? 500 : 400,
-                  }}>{s}</span>
-                  <div style={{
-                    width: "18px", height: "18px", borderRadius: "50%",
-                    border: `1px solid ${strategy === s ? C.text : C.border2}`,
-                    background: strategy === s ? C.text : "transparent",
-                    flexShrink: 0,
-                    transition: "all 0.15s",
-                  }} />
-                </div>
-              ))}
-              {/* Skip option */}
-              <div
-                onClick={() => setStrategy("")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "16px 0", borderBottom: `1px solid ${C.border}`,
-                  cursor: "pointer",
-                }}
-              >
-                <span style={{
-                  fontFamily: "MONO",
-                  fontSize: "11px", color: C.muted, letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                }}>I'll decide later</span>
-                <div style={{
-                  width: "18px", height: "18px", borderRadius: "50%",
-                  border: `1px solid ${strategy === "" ? C.text : C.border2}`,
-                  background: strategy === "" ? C.text : "transparent",
-                  flexShrink: 0, transition: "all 0.15s",
-                }} />
-              </div>
-            </div>
-
-            <button onClick={() => setStep("ready")} style={pillPrimary(true)}>
-              Continue →
-            </button>
-          </div>
-        )}
-
-        {/* ── STEP 3: Ready to log ── */}
+        {/* ── STEP 5: Ready ── */}
         {step === "ready" && (
           <div style={{ animation: "rise 0.3s ease" }}>
-            <div style={{
-              fontFamily: "MONO",
-              fontSize: "10px", color: C.muted, letterSpacing: "0.16em",
-              textTransform: "uppercase", marginBottom: "16px",
-            }}>
-              — Step 3 of 3
-            </div>
+            <StepBadge n={5} />
             <h1 style={{
-              fontFamily: DISPLAY,
-              fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
-              letterSpacing: "-0.03em", lineHeight: 1.05,
-              color: C.text, marginBottom: "16px",
+              fontFamily: DISPLAY, fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
+              letterSpacing: "-0.03em", lineHeight: 1.05, color: C.text, marginBottom: "16px",
             }}>
               You're in,<br />
               <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>{name || "trader"}.</span>
             </h1>
-            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "40px" }}>
-              Your edge is built one trade at a time. Log your first trade — the stats and insights follow automatically.
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "32px" }}>
+              Your edge is built one trade at a time. Log your first trade — the stats follow automatically.
             </p>
 
-            {/* Quick summary of what they set */}
+            {/* Summary */}
             <div style={{
-              borderTop: `1px solid ${C.border}`,
-              borderBottom: `1px solid ${C.border}`,
-              padding: "20px 0", marginBottom: "36px",
+              borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
+              padding: "18px 0", marginBottom: "28px",
               display: "flex", flexDirection: "column", gap: "12px",
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontFamily: "MONO", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Name</span>
-                <span style={{ fontFamily: "BODY", fontSize: "14px", color: C.text }}>{name}</span>
-              </div>
-              {handle && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontFamily: "MONO", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Handle</span>
-                  <span style={{ fontFamily: "BODY", fontSize: "14px", color: C.text }}>{handle}</span>
+              {avatar && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>Avatar</span>
+                  <span style={{ fontSize: "22px" }}>{avatar}</span>
                 </div>
               )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontFamily: "MONO", fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Strategy</span>
-                <span style={{ fontFamily: "BODY", fontSize: "14px", color: C.text }}>{strategy || "Not set"}</span>
+                <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>Name</span>
+                <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text }}>{name}</span>
+              </div>
+              {handle && handle !== "@" && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>Handle</span>
+                  <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text }}>{handle}</span>
+                </div>
+              )}
+              {instruments.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>Markets</span>
+                  <span style={{ fontFamily: MONO, fontSize: "12px", color: C.text }}>{instruments.join(", ")}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>Strategy</span>
+                <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text }}>
+                  {showCustom ? (customStrategy || "Custom") : (strategy || "Not set")}
+                </span>
               </div>
             </div>
 
@@ -4737,23 +4904,18 @@ function OnboardingFlow({ C, allStrategyNames, onComplete }: {
 
         {/* Back link */}
         {step !== "welcome" && (
-          <button
-            onClick={() => setStep(step === "ready" ? "strategy" : "welcome")}
-            style={{
-              background: "none", border: "none", color: C.muted,
-              cursor: "pointer", fontSize: "12px",
-              fontFamily: "MONO",
-              letterSpacing: "0.1em", textTransform: "uppercase",
-              marginTop: "20px", padding: "8px 0",
-            }}
-          >
+          <button onClick={goBack} style={{
+            background: "none", border: "none", color: C.muted,
+            cursor: "pointer", fontSize: "12px", fontFamily: MONO,
+            letterSpacing: "0.1em", textTransform: "uppercase",
+            marginTop: "20px", padding: "8px 0",
+          }}>
             ← Back
           </button>
         )}
 
       </div>
 
-      {/* CSS for the rise animation used above */}
       <style>{`@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
     </div>
   );
@@ -5541,15 +5703,4 @@ function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, fol
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
-
-      {friends.length > 0 && friendFeed.length === 0 && !showAddFriend && (
-        <div style={{ padding: "24px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textAlign: "center" }}>
-          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Ask friends to publish, then hit refresh.</div>
-        </div>
-      )}
-    </div>
-  );
-}
+        
