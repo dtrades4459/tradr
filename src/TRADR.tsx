@@ -7128,7 +7128,7 @@ function ProfileModal({ handle, myCode, following, followUser, unfollowUser, onC
 
 // ─── FRIENDS FEED (editorial) ────────────────────────────────────────────────
 function FriendsFeed({ friends, friendFeed, showAddFriend, setShowAddFriend, followHandleInput, setFollowHandleInput, followHandleMsg, followHandleLoading, followByHandle, followUser, removeFriend, unfollowUser, following, followers, followerProfiles, publishFeed, refreshFeed, reactToFeed, myFeedReactions, getMyCode, profile, C, inp, lbl, pillGhost, pillPrimary, openProfile }: any) {
-  const [tab, setTab] = React.useState<"feed"|"people">("feed");
+  const [tab, setTab] = useState<"feed"|"people">("feed");
 
   const followingCount = following?.length || 0;
   const followerCount = followerProfiles?.length || 0;
