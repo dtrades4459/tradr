@@ -1806,7 +1806,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [fontScale, setFontScale] = useState<number>(() => {
     try { return parseFloat(localStorage.getItem("tradr_font_scale") ?? "1") || 1; } catch { return 1; }
   });
-  const [showStripeGuide, setShowStripeGuide] = useState(false);
 
   // ── Tradovate integration ────────────────────────────────────────────────────
   const [tradovateSession, setTradovateSession] = useState<TradovateSession | null>(null);
@@ -3830,12 +3829,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                           </div>
                           <div style={{ fontSize: "11px", color: C.muted, marginTop: "2px" }}>Subscription management</div>
                         </div>
-                        {!profile.stripeCustomerId && (
-                          <button onClick={() => setShowStripeGuide(true)}
-                            style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", padding: "5px 10px", fontSize: "11px", color: C.muted, cursor: "pointer", fontFamily: MONO, letterSpacing: "0.06em" }}>
-                            Setup →
-                          </button>
-                        )}
+
                       </div>
                     </div>
                   </section>
@@ -5330,9 +5324,6 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
           />
         )}
 
-        {showStripeGuide && (
-          <StripeSetupGuide C={C} onClose={() => setShowStripeGuide(false)} />
-        )}
 
         {viewProfile && (
           <ProfileModal
@@ -5769,165 +5760,6 @@ interface OnboardingData {
 }
 
 // ─── STRIPE SETUP GUIDE ────────────────────────────────────────────────────────
-function StripeSetupGuide({ C, onClose }: { C: Record<string, string>; onClose: () => void }) {
-  const [copiedStep, setCopiedStep] = useState<number | null>(null);
-
-  function copy(text: string, step: number) {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedStep(step);
-      setTimeout(() => setCopiedStep(null), 1500);
-    });
-  }
-
-  const overlay: React.CSSProperties = {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 9999,
-    display: "flex", alignItems: "flex-start", justifyContent: "center",
-    padding: "20px", overflowY: "auto",
-  };
-  const card: React.CSSProperties = {
-    background: "#1A1A18", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
-    borderRadius: "16px", padding: "28px 24px", width: "100%", maxWidth: "440px",
-    display: "flex", flexDirection: "column", gap: "20px", marginTop: "20px",
-  };
-  const stepStyle: React.CSSProperties = {
-    display: "flex", flexDirection: "column", gap: "8px",
-    padding: "16px", background: "transparent", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
-    borderRadius: "10px",
-  };
-  const stepNum: React.CSSProperties = {
-    width: "22px", height: "22px", borderRadius: "50%",
-    background: "#f59e0b", color: "#000", fontSize: "11px", fontWeight: 800,
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  };
-  const codeBox: React.CSSProperties = {
-    background: "#0C0C0B", border: `1px solid ${C.border2 ?? "#3A3A34"}`,
-    borderRadius: "6px", padding: "8px 12px", fontSize: "12px",
-    fontFamily: "'IBM Plex Mono', monospace", color: "#89cff0",
-    wordBreak: "break-all",
-  };
-  const copyBtn: React.CSSProperties = {
-    background: "none", border: `1px solid ${C.border2 ?? "#3A3A34"}`, borderRadius: "5px",
-    padding: "3px 8px", fontSize: "10px", color: C.muted ?? "#8A8A82", cursor: "pointer",
-    alignSelf: "flex-start",
-  };
-
-  const STEPS: Array<{
-    title: string;
-    body: string;
-    detail?: string;
-    varName?: string;
-    varNames?: string[];
-    vars?: string[];
-    webhookUrl?: string;
-    link?: string;
-  }> = [
-    {
-      title: "Get your Stripe Secret Key",
-      body: "Go to dashboard.stripe.com → Developers → API keys",
-      detail: "Copy the Secret key (starts with sk_live_... or sk_test_...)",
-      varName: "STRIPE_SECRET_KEY",
-      link: "https://dashboard.stripe.com/apikeys",
-    },
-    {
-      title: "Create your Pro product & price",
-      body: "Stripe Dashboard → Product catalogue → + Add product",
-      detail: "Name: TRADR Pro · Pricing: Recurring · £5.99 · Monthly\nCopy the Price ID (starts with price_...)",
-      varName: "STRIPE_PRICE_ID",
-      link: "https://dashboard.stripe.com/products",
-    },
-    {
-      title: "Set up your webhook",
-      body: "Stripe Dashboard → Developers → Webhooks → + Add endpoint",
-      detail: "Select events: checkout.session.completed, customer.subscription.deleted, invoice.payment_failed\nCopy the Signing secret (starts with whsec_...)",
-      varName: "STRIPE_WEBHOOK_SECRET",
-      webhookUrl: "https://tradrjournal.xyz/api/stripe-webhook",
-      link: "https://dashboard.stripe.com/webhooks",
-    },
-    {
-      title: "Get your Supabase keys",
-      body: "supabase.com → your tradr project → Settings → API",
-      detail: "Copy the Project URL and the service_role key",
-      varNames: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
-      link: "https://supabase.com/dashboard/project/vifwjwsndchnrpvfgrmg/settings/api",
-    },
-    {
-      title: "Add all vars to Vercel",
-      body: "vercel.com → tradr.dt project → Settings → Environment Variables",
-      detail: "Add all 6 variables below. Tick Production + Preview + Development for each.",
-      vars: [
-        "STRIPE_SECRET_KEY",
-        "STRIPE_PRICE_ID",
-        "STRIPE_WEBHOOK_SECRET",
-        "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY",
-        "APP_URL = https://tradrjournal.xyz",
-      ],
-      link: "https://vercel.com/dylnyland4459-1994s-projects/tradr-dt/settings/environment-variables",
-    },
-  ];
-
-  return (
-    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={card}>
-        <div>
-          <div style={{ fontSize: "20px", fontWeight: 800, color: C.text ?? "#EDEDE8" }}>Connect Stripe</div>
-          <div style={{ fontSize: "13px", color: C.muted ?? "#8A8A82", marginTop: "4px" }}>
-            5 steps to get real payments working. Takes about 10 minutes.
-          </div>
-        </div>
-
-        {STEPS.map((s, i) => (
-          <div key={i} style={stepStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div style={stepNum}>{i + 1}</div>
-              <div style={{ fontSize: "14px", fontWeight: 700, color: C.text ?? "#EDEDE8" }}>{s.title}</div>
-            </div>
-            <div style={{ fontSize: "12px", color: C.muted ?? "#8A8A82", lineHeight: 1.5 }}>{s.body}</div>
-            {s.detail && (
-              <div style={{ fontSize: "12px", color: C.text2 ?? "#BCBCB4", lineHeight: 1.6, whiteSpace: "pre-line" }}>{s.detail}</div>
-            )}
-            {s.webhookUrl && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <div style={codeBox}>{s.webhookUrl}</div>
-                <button style={copyBtn} onClick={() => copy(s.webhookUrl!, i)}>
-                  {copiedStep === i ? "✓" : "Copy"}
-                </button>
-              </div>
-            )}
-            {s.vars && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                {s.vars.map((v: string) => (
-                  <div key={v} style={{ ...codeBox, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span>{v}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {s.link && (
-              <a
-                href={s.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: "11px", color: "#89cff0", textDecoration: "none", alignSelf: "flex-start" }}
-              >
-                Open dashboard →
-              </a>
-            )}
-          </div>
-        ))}
-
-        <button
-          onClick={onClose}
-          style={{
-            background: C.text ?? "#EDEDE8", color: C.bg ?? "#0C0C0B",
-            border: "none", borderRadius: "10px", padding: "13px",
-            fontSize: "14px", fontWeight: 700, cursor: "pointer",
-          }}
-        >Done</button>
-      </div>
-    </div>
-  );
-}
 
 function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   C: any;
