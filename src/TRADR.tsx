@@ -4784,6 +4784,122 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                       </div>
                     </section>
                   )}
+
+                  {/* ══ SETUP BREAKDOWN ══ */}
+                  {(() => {
+                    // Build per-setup stats across all trades
+                    const setupMap: Record<string, { strategy: string; count: number; w: number; l: number; be: number; pnl: number; pnlArr: number[] }> = {};
+                    trades.forEach((t: any) => {
+                      if (!t.setup) return;
+                      const key = t.setup;
+                      if (!setupMap[key]) setupMap[key] = { strategy: t.strategy || "", count: 0, w: 0, l: 0, be: 0, pnl: 0, pnlArr: [] };
+                      setupMap[key].count++;
+                      const p = parseFloat(t.pnl) || 0;
+                      setupMap[key].pnl += p;
+                      setupMap[key].pnlArr.push(p);
+                      if (t.outcome === "Win") setupMap[key].w++;
+                      else if (t.outcome === "Loss") setupMap[key].l++;
+                      else setupMap[key].be++;
+                    });
+
+                    const setupEntries = Object.entries(setupMap)
+                      .filter(([, v]) => v.count >= 1)
+                      .sort((a, b) => b[1].pnl - a[1].pnl);
+
+                    if (!setupEntries.length) return (
+                      <section>
+                        <SectionKicker label="SETUP BREAKDOWN" C={C} />
+                        <div style={{ marginTop: "20px", textAlign: "center", padding: "40px 0", color: C.muted, fontSize: "13px", fontStyle: "italic" }}>
+                          Select a setup when logging trades to see which patterns make money.
+                        </div>
+                      </section>
+                    );
+
+                    const maxAbsPnl = Math.max(...setupEntries.map(([, v]) => Math.abs(v.pnl)), 0.01);
+                    const best = setupEntries[0];
+                    const worst = setupEntries[setupEntries.length - 1];
+                    const totalSetupPnl = setupEntries.reduce((a, [, v]) => a + v.pnl, 0);
+
+                    return (
+                      <section>
+                        <SectionKicker label="SETUP BREAKDOWN" C={C} />
+
+                        {/* Summary callouts */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "16px", marginBottom: "24px" }}>
+                          <div style={{ padding: "14px", border: `1px solid ${C.green}33`, borderRadius: "8px", background: C.green + "08" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.1em", marginBottom: "5px" }}>BEST SETUP</div>
+                            <div style={{ fontFamily: BODY, fontSize: "13px", fontWeight: 500, color: C.text, marginBottom: "4px", lineHeight: 1.3 }}>{best[0].split("(")[0].trim()}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "11px", color: C.green }}>{best[1].pnl >= 0 ? "+" : ""}{best[1].pnl.toFixed(2)}R</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "3px" }}>
+                              {best[1].count}T · {best[1].count > 0 ? Math.round((best[1].w / best[1].count) * 100) : 0}% WR
+                            </div>
+                          </div>
+                          <div style={{ padding: "14px", border: `1px solid ${C.red}33`, borderRadius: "8px", background: C.red + "08" }}>
+                            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.red, letterSpacing: "0.1em", marginBottom: "5px" }}>WORST SETUP</div>
+                            <div style={{ fontFamily: BODY, fontSize: "13px", fontWeight: 500, color: C.text, marginBottom: "4px", lineHeight: 1.3 }}>{worst[0].split("(")[0].trim()}</div>
+                            <div style={{ fontFamily: MONO, fontSize: "11px", color: worst[1].pnl >= 0 ? C.green : C.red }}>{worst[1].pnl >= 0 ? "+" : ""}{worst[1].pnl.toFixed(2)}R</div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "3px" }}>
+                              {worst[1].count}T · {worst[1].count > 0 ? Math.round((worst[1].w / worst[1].count) * 100) : 0}% WR
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Full table */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          {setupEntries.map(([name, v], idx) => {
+                            const wr = v.count > 0 ? Math.round((v.w / v.count) * 100) : 0;
+                            const avgPnl = v.count > 0 ? v.pnl / v.count : 0;
+                            const barPct = Math.abs(v.pnl) / maxAbsPnl * 100;
+                            const isPos = v.pnl >= 0;
+                            const pnlColor = isPos ? C.green : C.red;
+                            return (
+                              <div key={name} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, fontWeight: 500, marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {name.split("(")[0].trim()}
+                                    </div>
+                                    {v.strategy && (
+                                      <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em" }}>{stratCode(v.strategy)}</div>
+                                    )}
+                                  </div>
+                                  <div style={{ display: "flex", gap: "14px", alignItems: "baseline", flexShrink: 0, marginLeft: "12px" }}>
+                                    <div style={{ textAlign: "right" }}>
+                                      <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: pnlColor }}>{isPos ? "+" : ""}{v.pnl.toFixed(1)}R</div>
+                                      <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>TOTAL</div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                      <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: wr >= 50 ? C.green : C.red }}>{wr}%</div>
+                                      <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>WIN RATE</div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                      <div style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: avgPnl >= 0 ? C.green : C.red }}>{avgPnl >= 0 ? "+" : ""}{avgPnl.toFixed(1)}R</div>
+                                      <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em" }}>AVG/TRADE</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* P&L bar */}
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <div style={{ flex: 1, height: "3px", background: C.border, borderRadius: "2px", overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${barPct}%`, background: pnlColor, borderRadius: "2px", transition: "width 0.4s ease" }} />
+                                  </div>
+                                  <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, flexShrink: 0 }}>{v.count}T</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Total */}
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px", paddingTop: "10px", borderTop: `1px solid ${C.border2}` }}>
+                          <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>
+                            TOTAL P&L FROM TAGGED SETUPS&nbsp;&nbsp;
+                            <span style={{ color: totalSetupPnl >= 0 ? C.green : C.red, fontWeight: 700 }}>{totalSetupPnl >= 0 ? "+" : ""}{totalSetupPnl.toFixed(2)}R</span>
+                          </span>
+                        </div>
+                      </section>
+                    );
+                  })()}
                 </>
               )}
 
