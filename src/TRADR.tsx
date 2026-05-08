@@ -58,6 +58,7 @@ export interface Trade {
   updatedAt?: string;
   mae?: string;
   mfe?: string;
+  ruleAdherence?: boolean | null;  // did trader follow their rules?
 }
 
 export interface Profile {
@@ -449,6 +450,25 @@ function generateInsights(trades: Trade[]): Insight[] {
     if (avgRR < 1.5) insights.push({ kicker: "R:R", text: `Your average R:R is ${avgRR.toFixed(2)}. Aim for 2R+ to maintain positive expectancy even at 40% win rate.`, type: "warning" });
   }
   // Positive reinforcement — only after a meaningful sample (20 trades).
+  // Discipline score
+  const adhTrades = trades.filter(t => t.ruleAdherence !== undefined && t.ruleAdherence !== null);
+  if (adhTrades.length >= 5) {
+    const followed = adhTrades.filter(t => t.ruleAdherence === true).length;
+    const discPct = Math.round((followed / adhTrades.length) * 100);
+    const discWins = trades.filter(t => t.ruleAdherence === true && t.outcome === "Win").length;
+    const discTotal = trades.filter(t => t.ruleAdherence === true).length;
+    const discWR = discTotal ? Math.round((discWins / discTotal) * 100) : 0;
+    const undiscWins = trades.filter(t => t.ruleAdherence === false && t.outcome === "Win").length;
+    const undiscTotal = trades.filter(t => t.ruleAdherence === false).length;
+    const undiscWR = undiscTotal ? Math.round((undiscWins / undiscTotal) * 100) : 0;
+    if (discPct < 70) {
+      insights.push({ kicker: "DISC", text: `You followed your rules on only ${discPct}% of trades. Rule-adherent trades win at ${discWR}% vs ${undiscWR}% when you break them.`, type: "warning" });
+    } else if (discPct >= 85) {
+      insights.push({ kicker: "DISC", text: `Strong discipline — ${discPct}% rule adherence. Rule-following trades win at ${discWR}%. Keep it up.`, type: "positive" });
+    } else {
+      insights.push({ kicker: "DISC", text: `${discPct}% rule adherence. Rule-following trades: ${discWR}% WR vs ${undiscWR}% when rules broken.`, type: "info" });
+    }
+  }
   if (wr >= 0.6 && trades.length >= 20) insights.push({ kicker: "HOLD", text: `Solid consistency — ${(wr * 100).toFixed(0)}% win rate over ${trades.length} trades. Stay disciplined.`, type: "positive" });
   if (!insights.length) insights.push({ kicker: "OKAY", text: "No major issues detected. Keep journaling consistently for deeper insights.", type: "info" });
   return insights;
@@ -457,12 +477,14 @@ function generateInsights(trades: Trade[]): Insight[] {
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 // ─── TR MARK ─────────────────────────────────────────────────────────────────
 function TrMark({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
+  // SVG paths traced from the official tr mark (uploaded logo)
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
-      <rect width="100" height="100" rx="20" fill={bg}/>
-      <text x="50" y="67" textAnchor="middle" fill="#EDEDE8"
-        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif"
-        fontWeight="700" fontSize="52" letterSpacing="-2">tr</text>
+    <svg width={size} height={size} viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
+      <rect width="1024" height="1024" fill={bg}/>
+      {/* t — crossbar only */}
+      <rect x="230" y="267" width="220" height="76" fill="#EDEDE8"/>
+      {/* r — stem + arm with rounded top-right corner */}
+      <path d="M 460 267 L 718 267 A 76 76 0 0 1 794 343 L 585 343 L 585 757 L 460 757 Z" fill="#EDEDE8"/>
     </svg>
   );
 }
@@ -1448,7 +1470,7 @@ function getEmotionTags(emotions: string | string[] | undefined): string[] {
   return EMOTION_TAGS.filter(t => lower.includes(t.id) || lower.includes(t.label.toLowerCase())).map(t => t.id);
 }
 
-const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", mae: "", mfe: "", comments: [], reactions: {} };
+const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", mae: "", mfe: "", ruleAdherence: null, comments: [], reactions: {} };
 const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {}, plan: "free" };
 
 // ── TRADR Global circle ──────────────────────────────────────────────────────
@@ -2910,12 +2932,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
   }
 
   function exportCSV() {
-    const headers = ["Date","Pair","Session","Bias","Strategy","Setup","Entry","SL","TP","R:R","Outcome","P&L (R)","P&L ($)","Notes","Emotions"];
+    const headers = ["Date","Pair","Session","Bias","Strategy","Setup","Entry","SL","TP","R:R","Outcome","P&L (R)","P&L ($)","Notes","Emotions","Rules Followed"];
     const rows = trades.map(t => [
       t.date, t.pair, t.session, t.bias, t.strategy, t.setup,
       t.entryPrice, t.slPrice, t.tpPrice, t.rr, t.outcome, t.pnl, t.pnlDollar,
       `"${(t.notes || "").replace(/"/g, '""')}"`,
-      `"${(Array.isArray(t.emotions) ? t.emotions.join(", ") : t.emotions || "").replace(/"/g, '""')}"`
+      `"${(Array.isArray(t.emotions) ? t.emotions.join(", ") : t.emotions || "").replace(/"/g, '""')}"`,
+      t.ruleAdherence === true ? "Yes" : t.ruleAdherence === false ? "No" : ""
     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -3275,10 +3298,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
         {/* ── MASTHEAD ── */}
         <header style={{ padding: isDesktop ? "18px 40px 0" : "14px 22px 12px", borderBottom: `0.5px solid ${C.border}`, position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button onClick={() => setView("home")} style={{ display: "flex", alignItems: "center", gap: "10px", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
               <TrMark size={isDesktop ? 26 : 24} bg={C.panel} />
               <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "17px" : "15px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
-            </div>
+            </button>
             <div style={{ display: "flex", alignItems: "baseline", gap: "14px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
               <button
                 onClick={() => { setView("home"); setHomeSection("settings"); }}
@@ -4316,6 +4339,21 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 </div>
               </div>
               <div>
+                <label style={lbl}>Followed your rules?</label>
+                <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                  {([{ val: true, label: "YES ✓", color: C.green }, { val: false, label: "NO ✗", color: C.red }] as const).map(opt => {
+                    const active = form.ruleAdherence === opt.val;
+                    return (
+                      <button key={String(opt.val)} type="button"
+                        onClick={() => setForm((f: any) => ({ ...f, ruleAdherence: active ? null : opt.val }))}
+                        style={{ background: active ? opt.color + "22" : "transparent", color: active ? opt.color : C.muted, border: `1px solid ${active ? opt.color : C.border2}`, borderRadius: "999px", padding: "8px 0", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", flex: 1, transition: "all 0.15s ease" }}>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
                 <label style={lbl}>Screenshot</label>
                 {form.screenshot ? (
                   <div style={{ position: "relative", marginTop: "6px" }}>
@@ -4818,6 +4856,68 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Discipline Score ── */}
+                  {(() => {
+                    const adhTrades = trades.filter((t: any) => t.ruleAdherence !== undefined && t.ruleAdherence !== null);
+                    if (!adhTrades.length) return (
+                      <div style={{ marginTop: "28px", padding: "20px", border: `1px dashed ${C.border2}`, borderRadius: "8px", textAlign: "center", color: C.muted, fontSize: "12px", fontStyle: "italic" }}>
+                        Mark "Followed your rules?" when logging trades to see your discipline score.
+                      </div>
+                    );
+                    const followed = adhTrades.filter((t: any) => t.ruleAdherence === true).length;
+                    const broke = adhTrades.filter((t: any) => t.ruleAdherence === false).length;
+                    const discPct = Math.round((followed / adhTrades.length) * 100);
+                    const followedWins = trades.filter((t: any) => t.ruleAdherence === true && t.outcome === "Win").length;
+                    const followedTotal = trades.filter((t: any) => t.ruleAdherence === true).length;
+                    const brokeWins = trades.filter((t: any) => t.ruleAdherence === false && t.outcome === "Win").length;
+                    const brokeTotal = trades.filter((t: any) => t.ruleAdherence === false).length;
+                    const followedWR = followedTotal ? Math.round((followedWins / followedTotal) * 100) : null;
+                    const brokeWR = brokeTotal ? Math.round((brokeWins / brokeTotal) * 100) : null;
+                    const followedPnL = trades.filter((t: any) => t.ruleAdherence === true).reduce((a: number, t: any) => a + (parseFloat(t.pnl) || 0), 0);
+                    const brokePnL = trades.filter((t: any) => t.ruleAdherence === false).reduce((a: number, t: any) => a + (parseFloat(t.pnl) || 0), 0);
+                    const discColor = discPct >= 80 ? C.green : discPct >= 60 ? "#F5A623" : C.red;
+                    return (
+                      <div style={{ marginTop: "28px" }}>
+                        <SectionKicker label="DISCIPLINE SCORE" C={C} />
+                        <div style={{ marginTop: "16px", padding: "20px", border: `1px solid ${C.border}`, borderRadius: "8px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "20px" }}>
+                            <div style={{ position: "relative", width: "72px", height: "72px", flexShrink: 0 }}>
+                              <svg viewBox="0 0 36 36" style={{ transform: "rotate(-90deg)", width: "72px", height: "72px" }}>
+                                <circle cx="18" cy="18" r="15.9" fill="none" stroke={C.border2} strokeWidth="3" />
+                                <circle cx="18" cy="18" r="15.9" fill="none" stroke={discColor} strokeWidth="3"
+                                  strokeDasharray={`${discPct} ${100 - discPct}`} strokeLinecap="round" />
+                              </svg>
+                              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DISPLAY, fontSize: "18px", fontWeight: 700, color: discColor }}>{discPct}%</div>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "4px" }}>RULE ADHERENCE</div>
+                              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, marginBottom: "8px" }}>
+                                You followed your rules on <strong style={{ color: discColor }}>{followed}</strong> of <strong>{adhTrades.length}</strong> tagged trades.
+                              </div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}>
+                                {broke > 0 ? `${broke} trade${broke !== 1 ? "s" : ""} broke rules` : "No rule breaks recorded"}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <div style={{ padding: "12px 14px", background: C.green + "0f", border: `1px solid ${C.green}22`, borderRadius: "6px" }}>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.1em", marginBottom: "6px" }}>FOLLOWED RULES</div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text }}>{followedWR !== null ? `${followedWR}%` : "—"}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, marginTop: "2px" }}>WIN RATE</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: followedPnL >= 0 ? C.green : C.red, marginTop: "6px" }}>{followedPnL >= 0 ? "+" : ""}{followedPnL.toFixed(2)}R total</div>
+                            </div>
+                            <div style={{ padding: "12px 14px", background: C.red + "0f", border: `1px solid ${C.red}22`, borderRadius: "6px" }}>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.red, letterSpacing: "0.1em", marginBottom: "6px" }}>BROKE RULES</div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text }}>{brokeWR !== null ? `${brokeWR}%` : "—"}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, marginTop: "2px" }}>WIN RATE</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: brokePnL >= 0 ? C.green : C.red, marginTop: "6px" }}>{brokePnL >= 0 ? "+" : ""}{brokePnL.toFixed(2)}R total</div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );

@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0C0C0B"/>
-  <text x="256" y="340" text-anchor="middle" fill="#EDEDE8"
-    font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif"
-    font-weight="700" font-size="264" letter-spacing="-10">tr</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#0A0A0A"/>
+  <rect x="230" y="267" width="220" height="76" fill="#EDEDE8"/>
+  <path d="M 460 267 L 718 267 A 76 76 0 0 1 794 343 L 585 343 L 585 757 L 460 757 Z" fill="#EDEDE8"/>
 </svg>
