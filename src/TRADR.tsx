@@ -3189,8 +3189,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
   // main-nav + sub-nav fit on one row instead of stacking into two.
   const HOME_SECTIONS = [
-    { id: "feed", label: "Overview" },
-    { id: "analytics", label: "Analytics" },
+    { id: "feed", label: "Dashboard" },
     { id: "ai", label: "Insights" },
     { id: "rules", label: "Rules" },
   ];
@@ -3200,8 +3199,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
     { id: "strategies", label: "Strategies" },
     { id: "calendar", label: "Calendar" },
     { id: "psychology", label: "Psychology" },
-    { id: "heatmap", label: "Heatmap" },
-    { id: "maemfe", label: "MAE/MFE" },
   ];
   const CHECKLIST_SECTIONS = [
     { id: "pretrade", label: "Pre-trade" },
@@ -3975,63 +3972,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
               )}
 
               {/* ANALYTICS */}
-              {homeSection === "analytics" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "clamp(40px, 6vw, 56px)", marginTop: "clamp(24px, 5vw, 40px)" }}>
-                  <section>
-                    <SectionKicker label="WIN RATE BY STRATEGY" C={C} />
-                    <div style={{ marginTop: "20px" }}><WinRateChart trades={trades} C={C} /></div>
-                  </section>
-                  <section>
-                    <SectionKicker label="MONTHLY P&L" C={C} />
-                    <div style={{ marginTop: "16px" }}>
-                      {trades.length < 2
-                        ? <div style={{ fontSize: "12px", color: C.muted, fontFamily: BODY }}>Log more trades to see monthly trends.</div>
-                        : <MonthlyPnLChart trades={trades} C={C} />}
-                    </div>
-                  </section>
-                  <section>
-                    <SectionKicker label="SESSION PERFORMANCE" C={C} />
-                    <div style={{ marginTop: "12px", borderTop: `1px solid ${C.border}` }}>
-                      {Object.entries(sessionStats).map(([session, v]: any) => {
-                        const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
-                        return (
-                          <div key={session} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
-                            <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{session}</span>
-                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.04em" }}>{wr}%</span>
-                            <span style={{ fontFamily: MONO, fontSize: "11px", color: v.pnl >= 0 ? C.green : C.red, letterSpacing: "0.04em", minWidth: "60px", textAlign: "right" }}>{v.pnl >= 0 ? "+" : ""}{v.pnl.toFixed(1)}R</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                  <section>
-                    <SectionKicker label="P&L CALENDAR" C={C} />
-                    <div style={{ marginTop: "20px" }}>
-                      <CalendarView trades={trades} C={C} onDayClick={(key: string) => { const dt = trades.filter(t => t.date === key); setCalDayTrades({ key, trades: dt }); }} />
-                      {calDayTrades && (
-                        <div style={{ marginTop: "20px", borderTop: `1px solid ${C.border}`, paddingTop: "14px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-                            <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em" }}>{calDayTrades.key} · {calDayTrades.trades.length} TRADE{calDayTrades.trades.length !== 1 ? "S" : ""}</span>
-                            <button onClick={() => setCalDayTrades(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "12px" }}>close</button>
-                          </div>
-                          {calDayTrades.trades.map((t: any) => (
-                            <div key={t.id} className="row-hvr" onClick={() => { setView("history"); setExpandedId(t.id); }}
-                              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                              <span style={{ fontFamily: MONO, fontSize: "12px", color: C.text }}>{t.pair}</span>
-                              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                                {t.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2 }}>{t.rr}R</span>}
-                                <span style={{ fontFamily: MONO, fontSize: "11px", color: outcomeColor(t.outcome, C), letterSpacing: "0.06em" }}>{outcomeLetter(t.outcome)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              )}
-
-              {/* AI INSIGHTS */}
+              {/* AI INSIGHTS — Analytics removed; all charts live in Stats tab */}
               {homeSection === "ai" && (
                 (!isFlagOn("paywall") || profile.plan === "pro" || profile.plan === "elite") ? (
                   <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
@@ -4270,6 +4211,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 <div><label style={lbl}>Date</label><input type="date" name="date" value={form.date} onChange={handleChange} style={inp} /></div>
                 <div><label style={lbl}>Pair / Instrument</label><input name="pair" value={form.pair} onChange={handleChange} placeholder="EURUSD" style={inp} /></div>
               </div>
+              {/* ── Outcome + P&L first — most important fields ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+                <div>
+                  <label style={lbl}>Outcome</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
+                    {OUTCOMES.map(o => {
+                      const active = form.outcome === o;
+                      const col = o === "Win" ? C.green : o === "Loss" ? C.red : C.muted;
+                      return (
+                        <button key={o} type="button" onClick={() => setForm((f: any) => ({ ...f, outcome: active ? "" : o }))}
+                          style={{ background: active ? col + "22" : "transparent", color: active ? col : C.muted, border: `1px solid ${active ? col : C.border2}`, borderRadius: "8px", padding: "10px 0", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", transition: "all 0.12s ease", textAlign: "center" }}>
+                          {o}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div><label style={lbl}>P&L (R)</label><input type="number" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5 or -1" style={inp} /></div>
+                <div><label style={lbl}>P&L ($)</label><input type="number" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="e.g. +320" style={inp} /></div>
+              </div>
               <div>
                 <label style={lbl}>Strategy</label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
@@ -4303,11 +4264,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   <span style={{ fontFamily: DISPLAY, fontSize: "22px", color: C.text, fontWeight: 500, letterSpacing: "-0.02em" }}>{form.rr}R</span>
                 </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "16px" }}>
-                <div><label style={lbl}>Outcome</label><select name="outcome" value={form.outcome} onChange={handleChange} style={sel}><option value="">Select</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select></div>
-                <div><label style={lbl}>P&L (R)</label><input type="number" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5 or -1" style={inp} /></div>
-                <div><label style={lbl}>P&L ($)</label><input type="number" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="e.g. +320" style={inp} /></div>
-              </div>
               <div><label style={lbl}>Notes</label><textarea name="notes" value={form.notes} onChange={handleChange} placeholder="What did price do? Why did you enter?" rows={3} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                 <div>
@@ -4742,6 +4698,13 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                           <SectionKicker label="DRAWDOWN CURVE" C={C}/>
                           <div style={{ marginTop:"14px" }}><DrawdownCurve trades={trades} C={C}/></div>
                         </section>
+                        <section>
+                          <SectionKicker label="MAE vs MFE — TRADE EFFICIENCY" C={C}/>
+                          <div style={{ marginTop:"8px", fontFamily:BODY, fontSize:"12px", color:C.muted, lineHeight:1.6, marginBottom:"16px" }}>
+                            MAE = max adverse excursion · MFE = max favourable excursion · shows if you're cutting winners early
+                          </div>
+                          <MAEMFEChart trades={trades} C={C}/>
+                        </section>
                       </>
                   }
                 </div>
@@ -4924,6 +4887,14 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                       ))}
                     </div>
                   )}
+                  <div style={{ marginTop: "40px" }}>
+                    <SectionKicker label="P&L BY SESSION × DAY" C={C} />
+                    <div style={{ marginTop: "14px" }}><SessionHeatmap trades={trades} C={C} /></div>
+                  </div>
+                  <div style={{ marginTop: "40px" }}>
+                    <SectionKicker label="DRAWDOWN CURVE" C={C} />
+                    <div style={{ marginTop: "14px" }}><DrawdownCurve trades={trades} C={C} /></div>
+                  </div>
                 </section>
               )}
 
@@ -5043,26 +5014,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
             </div>
           )}
 
-              {statsTab === "heatmap" && (
-                <section>
-                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "16px" }}>P&L BY SESSION × DAY</div>
-                  <SessionHeatmap trades={trades} C={C} />
-                  <div style={{ marginTop: "32px" }}>
-                    <SectionKicker label="DRAWDOWN CURVE" C={C} />
-                    <div style={{ marginTop: "14px" }}><DrawdownCurve trades={trades} C={C} /></div>
-                  </div>
-                </section>
-              )}
-
-              {statsTab === "maemfe" && (
-                <section>
-                  <SectionKicker label="MAE vs MFE — TRADE EFFICIENCY" C={C} />
-                  <div style={{ marginTop: "8px", fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, marginBottom: "16px" }}>
-                    MAE = how far price moved against you · MFE = how far it moved in your favour · capture efficiency = P&L ÷ MFE
-                  </div>
-                  <MAEMFEChart trades={trades} C={C} />
-                </section>
-              )}
+              {/* Heatmap + MAE/MFE merged into Calendar and Performance tabs */}
 
           {/* ══════════════════════════ CHECKLIST ══════════════════════════ */}
           {view === "checklist" && (
@@ -5511,7 +5463,9 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
         )}
 
         {/* ── First-run tour ── */}
-        {showTour && <TourOverlay C={C} onDone={() => setShowTour(false)} />}
+        {showTour && <TourOverlay C={C} onDone={() => { setShowTour(false); (window as any).__tradrGoLog = undefined; }} />}
+        {/* Register a callback so TourOverlay can navigate to LOG */}
+        {showTour && (() => { (window as any).__tradrGoLog = () => setView("log"); return null; })()}
 
         {/* ── Feedback modal ── */}
         {feedbackOpen && (
@@ -5586,8 +5540,7 @@ function SectionKicker({ label, C }: any) {
 // Replaces the emoji-dropdown with editorial mono text tabs.
 function HomeSectionTabs({ homeSection, setHomeSection, C }: any) {
   const SECTIONS = [
-    { id: "feed", label: "Overview" },
-    { id: "analytics", label: "Analytics" },
+    { id: "feed", label: "Dashboard" },
     { id: "ai", label: "Insights" },
     { id: "rules", label: "Rules" },
   ];
@@ -6050,9 +6003,9 @@ function TourOverlay({ C, onDone }: { C: any; onDone: () => void }) {
             style={{ flex: 1, padding: "13px", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "10px", color: C.muted, cursor: "pointer", fontFamily: "var(--font-mono, monospace)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
             Skip
           </button>
-          <button onClick={() => isLast ? finish() : setStep(s => s + 1)}
+          <button onClick={() => { if (isLast) { finish(); (window as any).__tradrGoLog?.(); } else setStep(s => s + 1); }}
             style={{ flex: 2, padding: "13px", background: C.text, border: "none", borderRadius: "10px", color: C.bg, cursor: "pointer", fontFamily: "var(--font-mono, monospace)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500 }}>
-            {isLast ? "Let\'s go →" : "Next →"}
+            {isLast ? "Log your first trade →" : "Next →"}
           </button>
         </div>
       </div>
