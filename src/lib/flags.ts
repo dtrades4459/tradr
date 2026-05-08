@@ -5,21 +5,41 @@
 // to production and turn it on per-device without redeploying.
 //
 // Toggle a flag from the browser console:
-//   localStorage.tradr_flags = "newTrades,newProfile"
-//   location.reload();
+//   window.tradrFlags.enableFlag("newTrades"); location.reload();
+//   window.tradrFlags.disableFlag("newProfile"); location.reload();
 //
 // Read a flag in code:
 //   import { isFlagOn } from "./lib/flags";
 //   if (isFlagOn("newTrades")) { ...new code path... } else { ...old... }
 //
-// Keep flag names short and *additive*. Default is OFF. When a flag has been
-// at 100% for a week with no issues, delete the flag and the old code path
-// in the same PR.
+// Keep flag names short and *additive*. When a flag has been at 100% for a
+// week with no issues, delete the flag and the old code path in the same PR.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const STORAGE_KEY = "tradr_flags";
+const STORAGE_KEY_OFF = "tradr_flags_off";
+
+// Flags that are ON by default for all users.
+// Add a flag here once you have validated it on your own account.
+// To turn one off for debugging:
+//   window.tradrFlags.disableFlag("newProfile"); location.reload();
+const DEFAULT_ON: ReadonlySet<string> = new Set([
+  "newProfile",  // dual-write + read from public.profiles (v2 schema)
+]);
 
 let cache: Set<string> | null = null;
+let cacheOff: Set<string> | null = null;
+
+function readOff(): Set<string> {
+  if (cacheOff) return cacheOff;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_OFF) || "";
+    cacheOff = new Set(raw.split(",").map(s => s.trim()).filter(Boolean));
+  } catch {
+    cacheOff = new Set();
+  }
+  return cacheOff;
+}
 
 function read(): Set<string> {
   if (cache) return cache;
@@ -33,19 +53,25 @@ function read(): Set<string> {
 }
 
 export function isFlagOn(name: string): boolean {
-  return read().has(name);
+  if (readOff().has(name)) return false;
+  if (read().has(name)) return true;
+  return DEFAULT_ON.has(name);
 }
 
 export function enableFlag(name: string): void {
-  const s = new Set(read()); s.add(name); persist(s);
+  const off = new Set(readOff()); off.delete(name); persistOff(off);
+  const on = new Set(read()); on.add(name); persist(on);
 }
 
 export function disableFlag(name: string): void {
-  const s = new Set(read()); s.delete(name); persist(s);
+  const on = new Set(read()); on.delete(name); persist(on);
+  const off = new Set(readOff()); off.add(name); persistOff(off);
 }
 
 export function listFlags(): string[] {
-  return Array.from(read());
+  const on = new Set([...DEFAULT_ON, ...read()]);
+  for (const f of readOff()) on.delete(f);
+  return Array.from(on);
 }
 
 function persist(s: Set<string>): void {
@@ -53,8 +79,12 @@ function persist(s: Set<string>): void {
   try { localStorage.setItem(STORAGE_KEY, Array.from(s).join(",")); } catch { /* noop */ }
 }
 
-// Expose on window so non-developers (and you, on a phone) can flip flags
-// from devtools without poking at imports.
+function persistOff(s: Set<string>): void {
+  cacheOff = s;
+  try { localStorage.setItem(STORAGE_KEY_OFF, Array.from(s).join(",")); } catch { /* noop */ }
+}
+
+// Expose on window so you can flip flags from devtools on any device.
 if (typeof window !== "undefined") {
   (window as any).tradrFlags = { isFlagOn, enableFlag, disableFlag, listFlags };
 }

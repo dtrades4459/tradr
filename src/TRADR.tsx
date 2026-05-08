@@ -171,7 +171,7 @@ const BIAS = ["Bullish","Bearish","Neutral"];
 const OUTCOMES = ["Win","Loss","Breakeven"];
 // Text reaction markers — no emoji.
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
-const TABS = ["home","log","history","stats","import","circles"];
+const TABS = ["home","log","history","stats","circles"];
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 // Warm editorial palette — dark primary, light secondary.
@@ -1765,6 +1765,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [followerProfiles, setFollowerProfiles] = useState<Array<{ code: string; name: string; handle: string }>>([]);
   const [viewProfile, setViewProfile] = useState<string | null>(null);
   function openProfile(handle: string) { if (handle) setViewProfile(handle.replace(/^@/, "")); }
+  // Tour: shown once to new users after onboarding. Skipped if localStorage flag already set.
+  const [showTour, setShowTour] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
@@ -2386,8 +2388,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
       if (newTrades.length === 0) {
         showToast("No new fills since last sync");
       } else {
-        await handleTradovateFillImport(newTrades);
-        showToast(`${newTrades.length} trade${newTrades.length === 1 ? "" : "s"} imported from Tradovate`);
+        const imported = await handleTradovateFillImport(newTrades);
+        if (imported === 0) {
+          showToast("All fills already in journal — nothing new");
+        } else {
+          showToast(`${imported} trade${imported === 1 ? "" : "s"} imported from Tradovate`);
+        }
       }
       // Update lastSyncTime and positions
       const updatedSess: TradovateSession = { ...sess, lastSyncTime: new Date().toISOString() };
@@ -2416,16 +2422,26 @@ export default function Tradr({ user }: { user?: any } = {}) {
    * Import fills from Tradovate into the journal, deduplicating against
    * any existing trades that have the same source fill ID in their notes.
    */
-  async function handleTradovateFillImport(newTrades: any[]) {
-    const existingNotes = new Set(trades.map(t => t.notes));
-    const deduped = newTrades.filter(t => !existingNotes.has(t.notes));
-    if (!deduped.length) return;
+  async function handleTradovateFillImport(newTrades: any[]): Promise<number> {
+    // Dedup by fill ID embedded in notes ("Tradovate fill #<id> ·").
+    // Using ID substring so manual edits to the notes field don't break dedup.
+    const importedIds = new Set(
+      trades
+        .map(t => { const m = (t.notes || "").match(/Tradovate fill #(\d+)/); return m ? m[1] : null; })
+        .filter(Boolean)
+    );
+    const deduped = newTrades.filter(t => {
+      const m = (t.notes || "").match(/Tradovate fill #(\d+)/);
+      return m ? !importedIds.has(m[1]) : true;
+    });
+    if (!deduped.length) return 0;
     const updated = [...trades, ...deduped];
     setTrades(updated);
     try {
       const store = (window as any).storage;
       await store.set("tradr_trades", JSON.stringify(updated));
     } catch (e) { log.error("tradovate.fillImport.save", e); }
+    return deduped.length;
   }
 
   /** Read the ban list for a circle. Returns a Set of banned member codes. */
@@ -2706,11 +2722,41 @@ export default function Tradr({ user }: { user?: any } = {}) {
     const file = e.target.files?.[0]; if (!file) return;
     if (file.size > 15 * 1024 * 1024) { showToast("Image too large — max 15MB"); return; }
     if (!file.type.startsWith("image/")) { showToast("File must be an image"); return; }
-    const compressed = await compressImage(file, 800);
-    if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: compressed } : t); await saveTrades(u); }
-    else setForm((f: any) => ({ ...f, screenshot: compressed }));
+    showToast("Uploading screenshot\u2026");
+    try {
+      const dataUri = await compressImage(file, 800);
+      const res = await fetch(dataUri);
+      const blob = await res.blob();
+      const uid = profile?.uid || "anon";
+      const path = `${uid}/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+      const { error } = await supabase.storage.from("trade-screenshots").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(path);
+      const screenshotUrl = urlData.publicUrl;
+      if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: screenshotUrl } : t); await saveTrades(u); }
+      else setForm((f: any) => ({ ...f, screenshot: screenshotUrl }));
+      showToast("Screenshot saved");
+    } catch (err) {
+      log.error("screenshot.upload", err);
+      const compressed = await compressImage(file, 800);
+      if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: compressed } : t); await saveTrades(u); }
+      else setForm((f: any) => ({ ...f, screenshot: compressed }));
+      showToast("Saved locally (Storage unavailable)");
+    }
   }
   async function removeScreenshot(tradeId: any) {
+    const existing = tradeId ? trades.find((t: any) => t.id === tradeId)?.screenshot : (form as any)?.screenshot;
+    if (existing && typeof existing === "string" && existing.includes("trade-screenshots")) {
+      try {
+        const url = new URL(existing);
+        const marker = "/object/public/trade-screenshots/";
+        const idx = url.pathname.indexOf(marker);
+        if (idx >= 0) {
+          const storagePath = decodeURIComponent(url.pathname.slice(idx + marker.length));
+          await supabase.storage.from("trade-screenshots").remove([storagePath]);
+        }
+      } catch { /* non-fatal */ }
+    }
     if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: "" } : t); await saveTrades(u); }
     else setForm((f: any) => ({ ...f, screenshot: "" }));
   }
@@ -3110,12 +3156,11 @@ export default function Tradr({ user }: { user?: any } = {}) {
   };
 
   const NAV_TABS = [
-    { id: "home",    label: "HOME"    },
-    { id: "log",     label: "LOG"     },
-    { id: "history", label: "JOURNAL" },
-    { id: "stats",   label: "STATS"   },
-    { id: "import",  label: "IMPORT"  },
-    { id: "circles", label: "CIRCLES" },
+    { id: "home",    label: "HOME",    icon: "◈" },
+    { id: "log",     label: "LOG",     icon: "+" },
+    { id: "history", label: "JOURNAL", icon: "≡" },
+    { id: "stats",   label: "STATS",   icon: "↗" },
+    { id: "circles", label: "CIRCLES", icon: "◆" },
   ];
 
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
@@ -3195,6 +3240,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
             } catch { /* silently ignore — circle may not exist yet */ }
           }
           setView("log");
+          // Show the first-run tour unless they've already seen it
+          if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
         }}
       />
     );
@@ -3284,7 +3331,8 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   const sn = subNavFor(tab.id); const ia = view === tab.id;
                   return (
                     <div key={tab.id}>
-                      <button onClick={()=>setView(tab.id)} style={{ display:"flex", alignItems:"center", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                      <button onClick={()=>setView(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                        <span style={{ fontSize:"13px", fontFamily:"system-ui, sans-serif", letterSpacing:0, lineHeight:1, opacity:ia?1:0.6 }}>{(tab as any).icon}</span>
                         {tab.label}
                       </button>
                       {ia && sn && (
@@ -4956,7 +5004,8 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
           )}
 
           {/* ══════════════════════════ IMPORT ══════════════════════════ */}
-          {view === "import" && (() => {
+          {view === "import" && (() => { setView("history"); setShowCsvImport(true); return null; })()}
+          {view === "import_legacy_unused" && (() => {
             return (
               <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
                 {!isDesktop && (
@@ -5092,8 +5141,9 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
           <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: C.bg, borderTop: `0.5px solid ${C.border}`, display: "flex", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" }}>
             {NAV_TABS.map(tab => (
               <button key={tab.id} onClick={() => setView(tab.id)}
-                style={{ flex: 1, minHeight: "44px", padding: "0 4px", background: "none", border: "none", borderTop: view === tab.id ? `1px solid ${C.text}` : "1px solid transparent", marginTop: "-0.5px", color: view === tab.id ? C.text : C.dim, fontSize: "9px", letterSpacing: "0.10em", cursor: "pointer", fontFamily: MONO, textTransform: "uppercase", transition: "color 0.12s ease", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {tab.label}
+                style={{ flex: 1, minHeight: "52px", padding: "6px 4px 4px", background: "none", border: "none", borderTop: view === tab.id ? `1.5px solid ${C.text}` : "1.5px solid transparent", marginTop: "-0.5px", color: view === tab.id ? C.text : C.dim, fontSize: "9px", letterSpacing: "0.10em", cursor: "pointer", fontFamily: MONO, textTransform: "uppercase", transition: "color 0.12s ease", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px" }}>
+                <span style={{ fontSize: "14px", lineHeight: 1, fontFamily: "system-ui, sans-serif", letterSpacing: 0 }}>{(tab as any).icon}</span>
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -5243,6 +5293,9 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
             </div>
           </div>
         )}
+
+        {/* ── First-run tour ── */}
+        {showTour && <TourOverlay C={C} onDone={() => setShowTour(false)} />}
 
         {/* ── Feedback modal ── */}
         {feedbackOpen && (
@@ -5719,6 +5772,76 @@ interface OnboardingData {
   twitter: string;
   instruments: string[];
   strategy: string;
+}
+
+// ─── FIRST-RUN TOUR OVERLAY ────────────────────────────────────────────────────
+// A lightweight 3-step coach-mark tour shown once to new users after onboarding.
+// Gated on localStorage "tradr_tour_done" — set on dismiss or completion.
+
+const TOUR_STEPS = [
+  {
+    icon: "+",
+    title: "Log your first trade",
+    body: "Hit LOG to record any trade in seconds — P&L, R-multiple, screenshot, notes.",
+    highlight: "log",
+  },
+  {
+    icon: "↗",
+    title: "Track your edge",
+    body: "STATS breaks down your win rate, average R, and equity curve so you know exactly what\'s working.",
+    highlight: "stats",
+  },
+  {
+    icon: "◆",
+    title: "Compete in circles",
+    body: "Join or create a Trading Circle to share trades, climb the leaderboard, and stay accountable.",
+    highlight: "circles",
+  },
+];
+
+function TourOverlay({ C, onDone }: { C: any; onDone: () => void }) {
+  const [step, setStep] = useState(0);
+  const current = TOUR_STEPS[step];
+  const isLast = step === TOUR_STEPS.length - 1;
+
+  function finish() {
+    try { localStorage.setItem("tradr_tour_done", "1"); } catch {}
+    onDone();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9990, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+      onClick={finish}>
+      <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "480px", padding: "32px 28px calc(40px + env(safe-area-inset-bottom))" }}
+        onClick={e => e.stopPropagation()}>
+        {/* progress dots */}
+        <div style={{ display: "flex", gap: "6px", justifyContent: "center", marginBottom: "28px" }}>
+          {TOUR_STEPS.map((_, i) => (
+            <div key={i} style={{ width: i === step ? "20px" : "6px", height: "6px", borderRadius: "3px", background: i === step ? C.text : C.border2, transition: "all 0.2s ease" }} />
+          ))}
+        </div>
+        <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "18px", fontFamily: "system-ui, sans-serif", fontSize: "22px" }}>
+          {current.icon}
+        </div>
+        <div style={{ fontFamily: "var(--font-display, Georgia, serif)", fontSize: "22px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: "10px" }}>
+          {current.title}
+        </div>
+        <div style={{ fontFamily: "var(--font-body, system-ui, sans-serif)", fontSize: "14px", color: C.muted, lineHeight: 1.6, marginBottom: "32px" }}>
+          {current.body}
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={finish}
+            style={{ flex: 1, padding: "13px", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "10px", color: C.muted, cursor: "pointer", fontFamily: "var(--font-mono, monospace)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            Skip
+          </button>
+          <button onClick={() => isLast ? finish() : setStep(s => s + 1)}
+            style={{ flex: 2, padding: "13px", background: C.text, border: "none", borderRadius: "10px", color: C.bg, cursor: "pointer", fontFamily: "var(--font-mono, monospace)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500 }}>
+            {isLast ? "Let\'s go →" : "Next →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── STRIPE SETUP GUIDE ────────────────────────────────────────────────────────
