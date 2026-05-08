@@ -94,6 +94,21 @@ export interface Profile {
   maxDailyLoss?: string;
   /** Account balance in $ for position size calculator. */
   accountBalance?: string;
+  /** Prop firm / funded evaluation accounts. */
+  propFirmAccounts?: PropFirmAccount[];
+}
+
+export interface PropFirmAccount {
+  id: string;
+  name: string;
+  firm: string;
+  accountSize: number;
+  profitTarget: number;
+  dailyLossLimit: number;
+  maxDrawdown: number;
+  trailingDrawdown: boolean;
+  active: boolean;
+  passed?: boolean;
 }
 
 export interface CircleMember {
@@ -1471,7 +1486,7 @@ function getEmotionTags(emotions: string | string[] | undefined): string[] {
 }
 
 const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", mae: "", mfe: "", ruleAdherence: null, comments: [], reactions: {} };
-const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {}, plan: "free" };
+const DEF_PROFILE: Profile = { name: "Trader", handle: "@trader", bio: "Multi-strategy trader | Consistency over everything", avatar: "", broker: "", timezone: "London (GMT)", startDate: new Date().toISOString().split("T")[0], targetRR: "2", maxTradesPerDay: "2", publicTrades: false, instruments: [], socialLinks: {}, plan: "free", propFirmAccounts: [] };
 
 // ── TRADR Global circle ──────────────────────────────────────────────────────
 // Set this to the code of the global public circle after creating it in the app.
@@ -1832,6 +1847,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [isCreatingCircle, setIsCreatingCircle] = useState(false);
   const [isJoiningCircle, setIsJoiningCircle] = useState(false);
   const [showLiveModal, setShowLiveModal] = useState(false);
+  const [logDetailsOpen, setLogDetailsOpen] = useState(false);
+  const [propFirmModal, setPropFirmModal] = useState(false);
+  const [editingPropAccount, setEditingPropAccount] = useState<PropFirmAccount | null>(null);
+  const [propFirmDraft, setPropFirmDraft] = useState<any>({ name: "", firm: "Apex", accountSize: "50000", profitTarget: "3000", dailyLossLimit: "1000", maxDrawdown: "2500", trailingDrawdown: false });
   const [fontScale, setFontScale] = useState<number>(() => {
     try { return parseFloat(localStorage.getItem("tradr_font_scale") ?? "1") || 1; } catch { return 1; }
   });
@@ -1864,6 +1883,19 @@ export default function Tradr({ user }: { user?: any } = {}) {
   );
 
   useEffect(() => { loadAll(); }, []);
+
+  // Auto-compute R:R whenever entry/SL/TP change
+  useEffect(() => {
+    const e = parseFloat((form as any).entryPrice ?? "");
+    const s = parseFloat((form as any).slPrice ?? "");
+    const t = parseFloat((form as any).tpPrice ?? "");
+    if (!isNaN(e) && !isNaN(s) && !isNaN(t) && e !== s) {
+      const risk = Math.abs(e - s);
+      const reward = Math.abs(t - e);
+      const rr = (reward / risk).toFixed(2);
+      setForm((f: any) => ({ ...f, rr }));
+    }
+  }, [(form as any).entryPrice, (form as any).slPrice, (form as any).tpPrice]);
 
   useEffect(() => {
     (document.documentElement as any).style.zoom = String(fontScale);
@@ -2293,6 +2325,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
       setIsImportingCsv(false);
     }
   }
+  async function savePropFirmAccounts(accounts: PropFirmAccount[]) {
+    const updated = { ...profile, propFirmAccounts: accounts };
+    setProfile(updated);
+    await saveProfile(updated);
+  }
+
   async function saveProfile(u: Profile) {
     setProfile(u);
     // ── Legacy KV write (always — keeps live app working until v2 cutover) ──
@@ -3822,7 +3860,64 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
                   {/* Friends */}
                   <section style={{ marginTop: "clamp(40px, 6vw, 56px)", paddingTop: "32px", borderTop: `1px solid ${C.border}` }}>
-                    <FriendsFeed
+                    {/* ── PROP FIRM ACCOUNTS ── */}
+                  {(profile.propFirmAccounts ?? []).filter((a: PropFirmAccount) => a.active && !a.passed).length > 0 && (() => {
+                    const accounts = (profile.propFirmAccounts ?? []).filter((a: PropFirmAccount) => a.active && !a.passed);
+                    const totalPnlAll = trades.reduce((s: number, t: any) => s + (parseFloat(t.pnlDollar) || 0), 0);
+                    const todayStr = new Date().toISOString().split("T")[0];
+                    const dailyPnlAll = trades.filter((t: any) => t.date === todayStr).reduce((s: number, t: any) => s + (parseFloat(t.pnlDollar) || 0), 0);
+                    return (
+                      <section style={{ marginTop: "24px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                          <SectionKicker label="PROP ACCOUNTS" C={C} />
+                          <button onClick={() => setHomeSection("settings")}
+                            style={{ background: "none", border: "none", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", cursor: "pointer", padding: 0 }}>Manage →</button>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                          {accounts.map((acct: PropFirmAccount) => {
+                            const pnl = totalPnlAll;
+                            const profitPct = Math.min(100, Math.max(0, (pnl / acct.profitTarget) * 100));
+                            const ddUsed = Math.max(0, -pnl);
+                            const ddPct = Math.min(100, (ddUsed / acct.maxDrawdown) * 100);
+                            const dailyLossPct = Math.min(100, (Math.max(0, -dailyPnlAll) / acct.dailyLossLimit) * 100);
+                            const isDanger = ddPct >= 100 || dailyLossPct >= 100;
+                            const isWarning = ddPct >= 80 || dailyLossPct >= 80;
+                            const statusColor = isDanger ? C.red : isWarning ? "#F59E0B" : C.green;
+                            return (
+                              <div key={acct.id} style={{ background: C.panel, borderRadius: "12px", padding: "16px", border: `1px solid ${isDanger ? C.red + "44" : isWarning ? "#F59E0B44" : C.border}` }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                                  <div>
+                                    <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>{acct.name}</div>
+                                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px" }}>{acct.firm} · ${acct.accountSize.toLocaleString()}</div>
+                                  </div>
+                                  <span style={{ fontFamily: MONO, fontSize: "10px", color: statusColor, letterSpacing: "0.08em" }}>
+                                    {isDanger ? "⚠ LIMIT HIT" : isWarning ? "⚠ WARNING" : "● ACTIVE"}
+                                  </span>
+                                </div>
+                                {[
+                                  { label: "Profit target", pct: profitPct, val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)}`, target: `$${acct.profitTarget.toLocaleString()}`, color: C.green },
+                                  { label: `Max drawdown${acct.trailingDrawdown ? " (trailing)" : ""}`, pct: ddPct, val: `$${ddUsed.toFixed(0)}`, target: `$${acct.maxDrawdown.toLocaleString()}`, color: ddPct >= 80 ? C.red : "#F59E0B" },
+                                  { label: "Daily loss limit", pct: dailyLossPct, val: `$${Math.max(0, -dailyPnlAll).toFixed(0)}`, target: `$${acct.dailyLossLimit.toLocaleString()}`, color: dailyLossPct >= 80 ? C.red : "#F59E0B" },
+                                ].map(bar => (
+                                  <div key={bar.label} style={{ marginBottom: "10px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+                                      <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{bar.label}</span>
+                                      <span style={{ fontFamily: MONO, fontSize: "9px", color: bar.pct >= 80 ? bar.color : C.muted }}>{bar.val} / {bar.target}</span>
+                                    </div>
+                                    <div style={{ height: "5px", background: C.bg, borderRadius: "999px", overflow: "hidden" }}>
+                                      <div style={{ height: "100%", width: `${bar.pct}%`, background: bar.color, borderRadius: "999px", transition: "width 0.4s ease" }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    );
+                  })()}
+
+                  <FriendsFeed
                       friends={friends} friendFeed={friendFeed} showAddFriend={showAddFriend} setShowAddFriend={setShowAddFriend}
                       followHandleInput={followHandleInput} setFollowHandleInput={setFollowHandleInput}
                       followHandleMsg={followHandleMsg} followHandleLoading={followHandleLoading}
@@ -3916,6 +4011,44 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
                       </div>
                     </div>
+                  </section>
+
+                  {/* PROP FIRM ACCOUNTS */}
+                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
+                      <SectionKicker label="PROP ACCOUNTS" C={C} />
+                      <button onClick={() => { setEditingPropAccount(null); setPropFirmDraft({ name: "", firm: "Apex", accountSize: "50000", profitTarget: "3000", dailyLossLimit: "1000", maxDrawdown: "2500", trailingDrawdown: false }); setPropFirmModal(true); }}
+                        style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em", color: C.text, cursor: "pointer", textTransform: "uppercase" }}>+ Add</button>
+                    </div>
+                    {(profile.propFirmAccounts ?? []).length === 0 ? (
+                      <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, padding: "16px", border: `1px dashed ${C.border2}`, borderRadius: "8px", textAlign: "center" }}>
+                        No accounts yet — add your Apex / TopstepX / prop eval
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {(profile.propFirmAccounts ?? []).map((acct: PropFirmAccount) => (
+                          <div key={acct.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", border: `1px solid ${C.border}`, borderRadius: "10px", background: C.panel }}>
+                            <div>
+                              <div style={{ fontSize: "13px", fontWeight: 500, color: acct.active && !acct.passed ? C.text : C.muted }}>{acct.name}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.05em", marginTop: "2px" }}>{acct.firm} · ${acct.accountSize.toLocaleString()} · target ${acct.profitTarget.toLocaleString()}</div>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                              {acct.passed && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green }}>PASSED</span>}
+                              {!acct.passed && (
+                                <button onClick={() => { const u = (profile.propFirmAccounts ?? []).map(a => a.id === acct.id ? { ...a, active: !a.active } : a); savePropFirmAccounts(u as PropFirmAccount[]); }}
+                                  style={{ background: acct.active ? C.green + "22" : "transparent", color: acct.active ? C.green : C.muted, border: `1px solid ${acct.active ? C.green + "44" : C.border2}`, borderRadius: "999px", padding: "4px 10px", fontSize: "9px", fontFamily: MONO, letterSpacing: "0.08em", cursor: "pointer", textTransform: "uppercase" }}>
+                                  {acct.active ? "Active" : "Paused"}
+                                </button>
+                              )}
+                              <button onClick={() => { setEditingPropAccount(acct); setPropFirmDraft({ ...acct, accountSize: String(acct.accountSize), profitTarget: String(acct.profitTarget), dailyLossLimit: String(acct.dailyLossLimit), maxDrawdown: String(acct.maxDrawdown) }); setPropFirmModal(true); }}
+                                style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "4px 10px", fontSize: "9px", fontFamily: MONO, letterSpacing: "0.08em", color: C.muted, cursor: "pointer", textTransform: "uppercase" }}>Edit</button>
+                              <button onClick={() => { const u = (profile.propFirmAccounts ?? []).filter(a => a.id !== acct.id); savePropFirmAccounts(u as PropFirmAccount[]); }}
+                                style={{ background: "transparent", border: "none", color: C.red, cursor: "pointer", fontSize: "18px", padding: "0 4px", lineHeight: 1 }}>×</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
 
                   {/* Data export */}
@@ -4204,14 +4337,15 @@ export default function Tradr({ user }: { user?: any } = {}) {
           )}
 
           {/* ══════════════════════════ LOG TRADE ══════════════════════════ */}
-          {view === "log" && (
+                    {view === "log" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "18px", marginTop: "clamp(16px, 4vw, 28px)" }}>
               <SectionKicker label={editId ? "EDIT TRADE" : "NEW TRADE"} C={C} />
+
+              {/* ── CORE FIELDS ── */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div><label style={lbl}>Date</label><input type="date" name="date" value={form.date} onChange={handleChange} style={inp} /></div>
-                <div><label style={lbl}>Pair / Instrument</label><input name="pair" value={form.pair} onChange={handleChange} placeholder="EURUSD" style={inp} /></div>
+                <div><label style={lbl}>Pair / Instrument</label><input name="pair" value={form.pair} onChange={handleChange} placeholder="ES / NQ / EURUSD" style={inp} /></div>
               </div>
-              {/* ── Outcome + P&L first — most important fields ── */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
                 <div>
                   <label style={lbl}>Outcome</label>
@@ -4237,63 +4371,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   {allStrategyNames.map((s: string) => <StrategyPill key={s} name={s} selected={form.strategy === s} onClick={() => setForm((f: any) => ({ ...f, strategy: s, setup: "" }))} C={C} />)}
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                <div><label style={lbl}>Session</label><select name="session" value={form.session} onChange={handleChange} style={sel}><option value="">Select</option>{SESSIONS.map(s => <option key={s}>{s}</option>)}</select></div>
-                <div><label style={lbl}>Bias</label><select name="bias" value={form.bias} onChange={handleChange} style={sel}><option value="">Select</option>{BIAS.map(b => <option key={b}>{b}</option>)}</select></div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-                <div><label style={lbl}>Entry Time</label><input type="time" name="entryTime" value={form.entryTime || ""} onChange={handleChange} style={inp} /></div>
-                <div><label style={lbl}>Exit Time</label><input type="time" name="exitTime" value={form.exitTime || ""} onChange={handleChange} style={inp} /></div>
-                <div><label style={lbl}>Direction</label><select name="direction" value={form.direction || ""} onChange={handleChange} style={sel}><option value="">Select</option><option>Long</option><option>Short</option></select></div>
-              </div>
-              <div>
-                <label style={lbl}>Setup {form.strategy && <span style={{ color: C.muted, marginLeft: "6px" }}>· {stratCode(form.strategy)}</span>}</label>
-                <select name="setup" value={form.setup} onChange={handleChange} style={sel}>
-                  <option value="">Select setup</option>
-                  {(form.strategy ? _allStratMap[form.strategy]?.setups || [] : allSetups).map((s: string) => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "12px" }}>
-                <div><label style={lbl}>Entry</label><input type="number" name="entryPrice" value={form.entryPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
-                <div><label style={lbl}>Stop Loss</label><input type="number" name="slPrice" value={form.slPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
-                <div><label style={lbl}>Take Profit</label><input type="number" name="tpPrice" value={form.tpPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
-              </div>
-              {form.rr && (
-                <div style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Calculated R:R</span>
-                  <span style={{ fontFamily: DISPLAY, fontSize: "22px", color: C.text, fontWeight: 500, letterSpacing: "-0.02em" }}>{form.rr}R</span>
-                </div>
-              )}
-              <div><label style={lbl}>Notes</label><textarea name="notes" value={form.notes} onChange={handleChange} placeholder="What did price do? Why did you enter?" rows={3} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-                <div>
-                  <label style={lbl}>MAE — Max adverse excursion <span style={{ color: C.dim }}>(R)</span></label>
-                  <input name="mae" type="number" step="0.01" value={form.mae || ""} onChange={handleChange} placeholder="e.g. 0.8" style={inp} />
-                </div>
-                <div>
-                  <label style={lbl}>MFE — Max favourable excursion <span style={{ color: C.dim }}>(R)</span></label>
-                  <input name="mfe" type="number" step="0.01" value={form.mfe || ""} onChange={handleChange} placeholder="e.g. 3.2" style={inp} />
-                </div>
-              </div>
-              <div>
-                <label style={lbl}>Emotional State</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
-                  {EMOTION_TAGS.map(tag => {
-                    const active = getEmotionTags(form.emotions).includes(tag.id);
-                    return (
-                      <button key={tag.id} type="button"
-                        onClick={() => {
-                          const current = getEmotionTags(form.emotions);
-                          const next = active ? current.filter(t => t !== tag.id) : [...current, tag.id];
-                          setForm((f: any) => ({ ...f, emotions: next }));
-                        }}
-                        style={{ background: active ? tag.color + "22" : "transparent", color: active ? tag.color : C.muted, border: `1px solid ${active ? tag.color : C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", transition: "all 0.15s ease" }}>
-                        {tag.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
               <div>
                 <label style={lbl}>Followed your rules?</label>
                 <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
@@ -4309,21 +4386,88 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   })}
                 </div>
               </div>
-              <div>
-                <label style={lbl}>Screenshot</label>
-                {form.screenshot ? (
-                  <div style={{ position: "relative", marginTop: "6px" }}>
-                    <img src={form.screenshot} alt="screenshot" style={{ width: "100%", border: `1px solid ${C.border}`, display: "block", maxHeight: "200px", objectFit: "cover" }} />
-                    <button onClick={() => removeScreenshot(null)}
-                      style={{ position: "absolute", top: "8px", right: "8px", background: C.bg, border: `1px solid ${C.border2}`, borderRadius: "999px", color: C.text, padding: "4px 10px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em" }}>REMOVE</button>
+
+              {/* ── DETAILS TOGGLE ── */}
+              <button type="button" onClick={() => setLogDetailsOpen(o => !o)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", color: C.muted, fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <span>Details — setup, prices, notes, screenshot</span>
+                <span style={{ fontSize: "14px", display: "inline-block", transform: logDetailsOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>↓</span>
+              </button>
+
+              {logDetailsOpen && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "18px", borderLeft: `2px solid ${C.border}`, paddingLeft: "16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div><label style={lbl}>Session</label><select name="session" value={form.session} onChange={handleChange} style={sel}><option value="">Select</option>{SESSIONS.map(s => <option key={s}>{s}</option>)}</select></div>
+                    <div><label style={lbl}>Bias</label><select name="bias" value={form.bias} onChange={handleChange} style={sel}><option value="">Select</option>{BIAS.map(b => <option key={b}>{b}</option>)}</select></div>
                   </div>
-                ) : (
-                  <label htmlFor="ssUpload" style={{ display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${C.border2}`, padding: "20px", cursor: "pointer", color: C.muted, fontSize: "12px", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
-                    Upload screenshot
-                    <input id="ssUpload" type="file" accept="image/jpeg,image/png" onChange={e => handleScreenshotUpload(e, null)} />
-                  </label>
-                )}
-              </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                    <div><label style={lbl}>Entry Time</label><input type="time" name="entryTime" value={form.entryTime || ""} onChange={handleChange} style={inp} /></div>
+                    <div><label style={lbl}>Exit Time</label><input type="time" name="exitTime" value={form.exitTime || ""} onChange={handleChange} style={inp} /></div>
+                    <div><label style={lbl}>Direction</label><select name="direction" value={form.direction || ""} onChange={handleChange} style={sel}><option value="">Select</option><option>Long</option><option>Short</option></select></div>
+                  </div>
+                  <div>
+                    <label style={lbl}>Setup {form.strategy && <span style={{ color: C.muted, marginLeft: "6px" }}>· {stratCode(form.strategy)}</span>}</label>
+                    <select name="setup" value={form.setup} onChange={handleChange} style={sel}>
+                      <option value="">Select setup</option>
+                      {(form.strategy ? _allStratMap[form.strategy]?.setups || [] : allSetups).map((s: string) => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Prices <span style={{ color: C.dim, textTransform: "none", letterSpacing: 0, fontSize: "10px" }}>— auto-computes R:R</span></label>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginTop: "8px" }}>
+                      <div><label style={{ ...lbl, marginBottom: "2px" }}>Entry</label><input type="number" name="entryPrice" value={form.entryPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+                      <div><label style={{ ...lbl, marginBottom: "2px" }}>Stop Loss</label><input type="number" name="slPrice" value={form.slPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+                      <div><label style={{ ...lbl, marginBottom: "2px" }}>Take Profit</label><input type="number" name="tpPrice" value={form.tpPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+                    </div>
+                  </div>
+                  {form.rr && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Auto R:R</span>
+                      <span style={{ fontFamily: DISPLAY, fontSize: "22px", color: C.text, fontWeight: 500, letterSpacing: "-0.02em" }}>{form.rr}R</span>
+                    </div>
+                  )}
+                  <div><label style={lbl}>Notes</label><textarea name="notes" value={form.notes} onChange={handleChange} placeholder="What did price do? Why did you enter?" rows={3} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                    <div><label style={lbl}>MAE <span style={{ color: C.dim }}>(R)</span></label><input name="mae" type="number" step="0.01" value={form.mae || ""} onChange={handleChange} placeholder="e.g. 0.8" style={inp} /></div>
+                    <div><label style={lbl}>MFE <span style={{ color: C.dim }}>(R)</span></label><input name="mfe" type="number" step="0.01" value={form.mfe || ""} onChange={handleChange} placeholder="e.g. 3.2" style={inp} /></div>
+                  </div>
+                  <div>
+                    <label style={lbl}>Emotional State</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
+                      {EMOTION_TAGS.map(tag => {
+                        const active = getEmotionTags(form.emotions).includes(tag.id);
+                        return (
+                          <button key={tag.id} type="button"
+                            onClick={() => {
+                              const current = getEmotionTags(form.emotions);
+                              const next = active ? current.filter(t => t !== tag.id) : [...current, tag.id];
+                              setForm((f: any) => ({ ...f, emotions: next }));
+                            }}
+                            style={{ background: active ? tag.color + "22" : "transparent", color: active ? tag.color : C.muted, border: `1px solid ${active ? tag.color : C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", transition: "all 0.15s ease" }}>
+                            {tag.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={lbl}>Screenshot</label>
+                    {form.screenshot ? (
+                      <div style={{ position: "relative", marginTop: "6px" }}>
+                        <img src={form.screenshot} alt="screenshot" style={{ width: "100%", border: `1px solid ${C.border}`, display: "block", maxHeight: "200px", objectFit: "cover" }} />
+                        <button onClick={() => removeScreenshot(null)}
+                          style={{ position: "absolute", top: "8px", right: "8px", background: C.bg, border: `1px solid ${C.border2}`, borderRadius: "999px", color: C.text, padding: "4px 10px", cursor: "pointer", fontSize: "10px", fontFamily: MONO, letterSpacing: "0.08em" }}>REMOVE</button>
+                      </div>
+                    ) : (
+                      <label htmlFor="ssUpload" style={{ display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${C.border2}`, padding: "20px", cursor: "pointer", color: C.muted, fontSize: "12px", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
+                        Upload screenshot
+                        <input id="ssUpload" type="file" accept="image/jpeg,image/png" onChange={e => handleScreenshotUpload(e, null)} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button onClick={submitTrade} disabled={savingTrade || !(form.pair && form.date && form.outcome)}
                 style={{ ...pillPrimary(!!(form.pair && form.date && form.outcome && !savingTrade)), marginTop: "8px" }}>
                 {savingTrade ? "Saving…" : editId ? "Update trade →" : "Save trade →"}
@@ -4331,7 +4475,6 @@ export default function Tradr({ user }: { user?: any } = {}) {
               {editId && <button onClick={() => { setForm(EMPTY_TRADE); setEditId(null); setView("history"); }} style={pillGhost}>CANCEL EDIT</button>}
             </div>
           )}
-
           {/* ══════════════════════════ HISTORY ══════════════════════════ */}
           {view === "history" && (
             <div style={{ marginTop: "clamp(16px, 4vw, 28px)" }}>
@@ -5466,6 +5609,69 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
         {showTour && <TourOverlay C={C} onDone={() => { setShowTour(false); (window as any).__tradrGoLog = undefined; }} />}
         {/* Register a callback so TourOverlay can navigate to LOG */}
         {showTour && (() => { (window as any).__tradrGoLog = () => setView("log"); return null; })()}
+
+        {/* ── Prop Firm Account Modal ── */}
+        {propFirmModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 9999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+            onClick={e => { if (e.target === e.currentTarget) setPropFirmModal(false); }}>
+            <div style={{ background: C.panel, borderRadius: "20px 20px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: "480px", maxHeight: "90vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>{editingPropAccount ? "Edit Account" : "Add Prop Account"}</span>
+                <button onClick={() => setPropFirmModal(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: "22px", cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                <div style={{ gridColumn: "1/-1" }}>
+                  <label style={lbl}>Account Name</label>
+                  <input value={propFirmDraft.name} onChange={e => setPropFirmDraft((d: any) => ({ ...d, name: e.target.value }))} placeholder="Apex Eval 1" style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Firm</label>
+                  <select value={propFirmDraft.firm} onChange={e => setPropFirmDraft((d: any) => ({ ...d, firm: e.target.value }))} style={sel}>
+                    {["Apex", "TopstepX", "Funded4Traders", "FTMO", "MyFundedFutures", "Earn2Trade", "Other"].map(f => <option key={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Account Size ($)</label>
+                  <input type="number" value={propFirmDraft.accountSize} onChange={e => setPropFirmDraft((d: any) => ({ ...d, accountSize: e.target.value }))} placeholder="50000" style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Profit Target ($)</label>
+                  <input type="number" value={propFirmDraft.profitTarget} onChange={e => setPropFirmDraft((d: any) => ({ ...d, profitTarget: e.target.value }))} placeholder="3000" style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Daily Loss Limit ($)</label>
+                  <input type="number" value={propFirmDraft.dailyLossLimit} onChange={e => setPropFirmDraft((d: any) => ({ ...d, dailyLossLimit: e.target.value }))} placeholder="1000" style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Max Drawdown ($)</label>
+                  <input type="number" value={propFirmDraft.maxDrawdown} onChange={e => setPropFirmDraft((d: any) => ({ ...d, maxDrawdown: e.target.value }))} placeholder="2500" style={inp} />
+                </div>
+                <div style={{ gridColumn: "1/-1", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.06em" }}>Trailing drawdown</div>
+                    <div style={{ fontSize: "12px", color: C.muted, marginTop: "2px" }}>Drawdown follows highest balance</div>
+                  </div>
+                  <button onClick={() => setPropFirmDraft((d: any) => ({ ...d, trailingDrawdown: !d.trailingDrawdown }))}
+                    style={{ width: "44px", height: "24px", borderRadius: "999px", background: propFirmDraft.trailingDrawdown ? C.green : C.border2, border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                    <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#fff", position: "absolute", top: "3px", left: propFirmDraft.trailingDrawdown ? "23px" : "3px", transition: "left 0.2s" }} />
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!propFirmDraft.name || !propFirmDraft.accountSize) return;
+                  const acct: PropFirmAccount = { id: editingPropAccount?.id ?? `pf_${Date.now()}`, name: propFirmDraft.name, firm: propFirmDraft.firm, accountSize: parseFloat(propFirmDraft.accountSize), profitTarget: parseFloat(propFirmDraft.profitTarget), dailyLossLimit: parseFloat(propFirmDraft.dailyLossLimit), maxDrawdown: parseFloat(propFirmDraft.maxDrawdown), trailingDrawdown: propFirmDraft.trailingDrawdown, active: true };
+                  const existing = profile.propFirmAccounts ?? [];
+                  const updated = editingPropAccount ? existing.map(a => a.id === acct.id ? acct : a) : [...existing, acct];
+                  savePropFirmAccounts(updated as PropFirmAccount[]);
+                  setPropFirmModal(false);
+                }}
+                style={{ ...pillPrimary(!!(propFirmDraft.name && propFirmDraft.accountSize)), marginTop: "8px" }}>
+                {editingPropAccount ? "Save changes →" : "Add account →"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Feedback modal ── */}
         {feedbackOpen && (
