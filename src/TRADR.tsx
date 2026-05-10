@@ -73,7 +73,7 @@ const BIAS = ["Bullish","Bearish","Neutral"];
 const OUTCOMES = ["Win","Loss","Breakeven"];
 // Text reaction markers — no emoji.
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
-const TABS = ["home","log","history","stats","circles"];
+const TABS = ["home","log","history","stats","circles","integrations"];
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 // Warm editorial palette — dark primary, light secondary.
@@ -1686,11 +1686,12 @@ export default function Tradr({ user }: { user?: any } = {}) {
   };
 
   const NAV_TABS = [
-    { id: "home",    label: "HOME",    icon: "◈" },
-    { id: "log",     label: "LOG",     icon: "+" },
-    { id: "history", label: "JOURNAL", icon: "≡" },
-    { id: "stats",   label: "STATS",   icon: "↗" },
-    { id: "circles", label: "CIRCLES", icon: "◆" },
+    { id: "home",         label: "HOME",    icon: "◈" },
+    { id: "log",          label: "LOG",     icon: "+" },
+    { id: "history",      label: "JOURNAL", icon: "≡" },
+    { id: "stats",        label: "STATS",   icon: "↗" },
+    { id: "circles",      label: "CIRCLES", icon: "◆" },
+    { id: "integrations", label: "CONNECT", icon: "⟁" },
   ];
 
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
@@ -3673,6 +3674,195 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
               totalPnlDollar={totalPnlDollar}
               hasDollarData={hasDollarData}
             />
+          )}
+
+          {/* ══════════════════════════ INTEGRATIONS ══════════════════════════ */}
+          {view === "integrations" && (
+            <div style={{ padding: isDesktop ? "40px 32px" : "24px 16px 100px", maxWidth: 600 }}>
+              {/* Header */}
+              <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.20em", textTransform: "uppercase", marginBottom: "8px" }}>Integrations</div>
+              <div style={{ fontFamily: DISPLAY, fontSize: "24px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", marginBottom: "32px" }}>
+                Connect your accounts
+              </div>
+
+              {/* ── Tradovate card ── */}
+              <div style={{ border: `1px solid ${tradovateSession ? C.green + "66" : C.border}`, marginBottom: "16px", transition: "border-color 0.2s" }}>
+                {/* Card header */}
+                <div style={{ padding: "18px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Tradovate</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "18px", color: C.text, fontWeight: 500, letterSpacing: "-0.01em" }}>Live Positions &amp; Auto-import</div>
+                  </div>
+                  {/* Status badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", border: `1px solid ${tradovateSession ? C.green + "55" : C.border2}`, background: tradovateSession ? C.green + "18" : "transparent", flexShrink: 0 }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: tradovateSession ? C.green : C.dim }} />
+                    <div style={{ fontFamily: MONO, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tradovateSession ? C.green : C.muted }}>
+                      {tradovateSession ? "Connected" : "Not connected"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card body */}
+                <div style={{ padding: "20px" }}>
+                  {!tradovateSession ? (
+                    /* ── connect form ── */
+                    <>
+                      <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.65, marginBottom: "20px" }}>
+                        Connect your Tradovate account to see open positions in real time and auto-import closed fills into your journal.
+                      </div>
+
+                      {/* Demo / Live env toggle */}
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                        {(["demo", "live"] as const).map(env => (
+                          <button key={env} onClick={() => setTradovateForm(f => ({ ...f, env }))}
+                            style={{ flex: 1, padding: "9px", border: `1px solid ${tradovateForm.env === env ? C.text : C.border2}`, background: tradovateForm.env === env ? C.text : "transparent", color: tradovateForm.env === env ? C.bg : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", transition: "all 0.15s" }}>
+                            {env}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+                        <div>
+                          <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "6px" }}>Username</div>
+                          <input
+                            type="text"
+                            value={tradovateForm.username}
+                            onChange={e => setTradovateForm(f => ({ ...f, username: e.target.value }))}
+                            placeholder="Tradovate username"
+                            autoComplete="username"
+                            style={{ width: "100%", background: C.panel, border: `1px solid ${C.border2}`, padding: "12px 14px", fontFamily: BODY, fontSize: "15px", color: C.text, outline: "none", boxSizing: "border-box" }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "6px" }}>Password</div>
+                          <input
+                            type="password"
+                            value={tradovateForm.password}
+                            onChange={e => setTradovateForm(f => ({ ...f, password: e.target.value }))}
+                            onKeyDown={e => { if (e.key === "Enter") connectTradovate(); }}
+                            placeholder="••••••••"
+                            autoComplete="current-password"
+                            style={{ width: "100%", background: C.panel, border: `1px solid ${C.border2}`, padding: "12px 14px", fontFamily: BODY, fontSize: "15px", color: C.text, outline: "none", boxSizing: "border-box" }}
+                          />
+                        </div>
+                      </div>
+
+                      {tradovateError && (
+                        <div style={{ fontFamily: BODY, fontSize: "12px", color: C.red, marginBottom: "14px", padding: "10px 14px", background: C.red + "18" }}>
+                          {tradovateError}
+                        </div>
+                      )}
+
+                      <div style={{ fontFamily: BODY, fontSize: "11px", color: C.dim, lineHeight: 1.5, marginBottom: "18px" }}>
+                        Credentials are sent to your Vercel proxy and never stored in plain text. Only the session token is saved in Supabase.
+                      </div>
+
+                      <button
+                        onClick={connectTradovate}
+                        disabled={tradovateConnecting || !tradovateForm.username.trim() || !tradovateForm.password.trim()}
+                        style={{ width: "100%", padding: "13px", border: "none", background: (tradovateConnecting || !tradovateForm.username.trim() || !tradovateForm.password.trim()) ? C.border2 : C.text, color: (tradovateConnecting || !tradovateForm.username.trim() || !tradovateForm.password.trim()) ? C.muted : C.bg, cursor: (tradovateConnecting || !tradovateForm.username.trim() || !tradovateForm.password.trim()) ? "not-allowed" : "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", transition: "background 0.15s" }}>
+                        {tradovateConnecting ? "Connecting…" : "Connect account →"}
+                      </button>
+                    </>
+                  ) : (
+                    /* ── connected state ── */
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+                        <div>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", marginBottom: "4px" }}>
+                            {tradovateSession.accountName ?? "Tradovate"}
+                          </div>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em" }}>
+                            {tradovateSession.env.toUpperCase()} ACCOUNT
+                            {tradovateSession.lastSyncTime && ` · synced ${new Date(tradovateSession.lastSyncTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                          </div>
+                        </div>
+                        <button onClick={syncTradovateFills} disabled={tradovateSyncing}
+                          style={{ padding: "8px 16px", border: `1px solid ${C.border2}`, borderRadius: "999px", background: "transparent", color: tradovateSyncing ? C.muted : C.text, cursor: tradovateSyncing ? "not-allowed" : "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.10em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                          {tradovateSyncing ? "Syncing…" : "Sync fills"}
+                        </button>
+                      </div>
+
+                      {/* Open positions mini-list */}
+                      <div style={{ borderTop: `1px solid ${C.border}`, marginBottom: "18px" }}>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", padding: "12px 0 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span>Open Positions{tradovatePositions.length > 0 ? ` (${tradovatePositions.length})` : ""}</span>
+                          <button onClick={() => tradovateSession && refreshTradovatePositions(tradovateSession)}
+                            style={{ background: "none", border: "none", color: C.dim, cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase" }}>
+                            Refresh
+                          </button>
+                        </div>
+                        {tradovatePositions.length === 0 ? (
+                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, padding: "16px 0", textAlign: "center" }}>No open positions</div>
+                        ) : (
+                          tradovatePositions.map(pos => (
+                            <div key={pos.contractId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: `1px solid ${C.border}` }}>
+                              <div>
+                                <div style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.04em" }}>{pos.symbol}</div>
+                                <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px" }}>
+                                  {pos.netPos > 0 ? "+" : ""}{pos.netPos} contracts · avg {pos.netPrice.toFixed(2)}
+                                </div>
+                              </div>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: pos.openPnl >= 0 ? C.green : C.red }}>
+                                {pos.openPnlStr}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <button onClick={disconnectTradovate}
+                        style={{ width: "100%", padding: "11px", border: `1px solid ${C.red}44`, borderRadius: "999px", background: "transparent", color: C.red, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                        Disconnect account
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Webhook card ── */}
+              <div style={{ border: `1px solid ${C.border}` }}>
+                <div style={{ padding: "18px 20px", borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Live Trade Card</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: "18px", color: C.text, fontWeight: 500, letterSpacing: "-0.01em" }}>Webhook Trigger</div>
+                </div>
+                <div style={{ padding: "20px" }}>
+                  <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.65, marginBottom: "16px" }}>
+                    Paste this URL into TradingView Pine Script alert webhook field. When a trade fills, TRADR will push a notification and open a pre-filled trade card.
+                  </div>
+
+                  {/* Webhook URL row */}
+                  <div style={{ display: "flex", gap: "0", alignItems: "stretch", marginBottom: "16px", border: `1px solid ${C.border2}` }}>
+                    <div style={{ flex: 1, background: C.panel, padding: "11px 14px", fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.02em", overflowX: "auto", whiteSpace: "nowrap" }}>
+                      {profile.uid
+                        ? `https://tradrjournal.xyz/api/webhook/${profile.uid}`
+                        : "Sign in to see your webhook URL"}
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (profile.uid) {
+                          navigator.clipboard.writeText(
+                            `https://tradrjournal.xyz/api/webhook/${profile.uid}`
+                          ).then(() => showToast("Webhook URL copied"));
+                        }
+                      }}
+                      disabled={!profile.uid}
+                      style={{ padding: "0 18px", background: "transparent", border: "none", borderLeft: `1px solid ${C.border2}`, color: profile.uid ? C.text : C.dim, cursor: profile.uid ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0 }}>
+                      Copy
+                    </button>
+                  </div>
+
+                  {tradovateSession && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", background: C.green + "0E", border: `1px solid ${C.green}44` }}>
+                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: C.green, flexShrink: 0 }} />
+                      <div style={{ fontFamily: MONO, fontSize: "10px", color: C.green, letterSpacing: "0.08em" }}>
+                        Auto-fill active via Tradovate
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           </div>{/* end main */}
         </div>{/* end grid */}
