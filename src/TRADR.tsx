@@ -127,6 +127,9 @@ function calcRR(e: any, s: any, t: any): string {
   return rr.toFixed(2);
 }
 
+// ─── EMPTY TRADE ─────────────────────────────────────────────────────────────
+const EMPTY_TRADE: Partial<Trade> = { date: new Date().toISOString().split("T")[0], pair: "", session: "", bias: "", strategy: "", setup: "", entryPrice: "", slPrice: "", tpPrice: "", rr: "", outcome: "", pnl: "", pnlDollar: "", entryTime: "", exitTime: "", direction: "", notes: "", emotions: "", screenshot: "", mae: "", mfe: "", ruleAdherence: null, comments: [], reactions: {} };
+
 // ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
 // Breakpoint at 900px matches the login page. Returns true on desktop/tablet-landscape.
 function useIsDesktop(breakpoint = 900) {
