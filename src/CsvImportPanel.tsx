@@ -155,6 +155,18 @@ function rowToTrade(row: Record<string, string>, mapping: Record<string, string>
 
 // ─── CSV PRESETS ─────────────────────────────────────────────────────────────
 const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record<string, string> }> = {
+  tradovate: {
+    label: "Tradovate",
+    hint: "Tradovate account statement CSV (Account → Statements → Trade History)",
+    mapping: {
+      pair:       "Symbol",
+      date:       "Buy Time",
+      bias:       "B/S",
+      pnl:        "P&L",
+      entryPrice: "Buy Price",
+      notes:      "Account",
+    },
+  },
   rithmic: {
     label: "Rithmic",
     hint: "Apex / TopstepX / Earn2Trade prop firm CSV (Trade Route statement)",
@@ -169,7 +181,7 @@ const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record
   },
   tradingview: {
     label: "TradingView",
-    hint: "TradingView strategy tester or live paper-trading export",
+    hint: "TradingView Trade List export (Strategy Tester → List of Trades → Export)",
     mapping: {
       pair:       "Symbol",
       date:       "Date/Time",

@@ -1742,7 +1742,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const HOME_SECTIONS = [
     { id: "feed", label: "Overview" },
     { id: "analytics", label: "Analytics" },
-    { id: "ai", label: "Insights" },
+    { id: "ai", label: "Execution" },
     { id: "rules", label: "Rules" },
   ];
   const STATS_SECTIONS = [
@@ -2001,13 +2001,18 @@ export default function Tradr({ user }: { user?: any } = {}) {
                   <section style={{ marginTop: "40px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", }}>
                       {[
-                        { label: "WIN RATE", value: `${winRate}%` },
-                        { label: "AVG R:R", value: avgRR === "—" ? "—" : `${avgRR}R` },
-                        { label: "STREAK", value: streak.count > 0 ? `${streak.count}${streak.type === "Win" ? "W" : "L"}` : "—" },
-                      ].map((s, i) => (
+                        { label: "WIN RATE", value: `${winRate}%`, color: null },
+                        { label: "AVG R:R", value: avgRR === "—" ? "—" : `${avgRR}R`, color: null },
+                        { label: "STREAK", value: streak.count > 0 ? `${streak.count}${streak.type === "Win" ? "W" : "L"}` : "—", color: streak.count >= 2 ? (streak.type === "Win" ? C.green : C.red) : null },
+                      ].map((s: any, i) => (
                         <div key={s.label} style={{ padding: "16px 12px", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
                           <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginBottom: "6px" }}>{s.label}</div>
-                          <div style={{ fontFamily: DISPLAY, fontSize: "24px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{s.value}</div>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "24px", fontWeight: 500, color: s.color ?? C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{s.value}</div>
+                          {s.label === "STREAK" && streak.count >= 3 && (
+                            <div style={{ fontFamily: MONO, fontSize: "8px", letterSpacing: "0.1em", color: streak.type === "Win" ? C.green : C.red, marginTop: "4px", opacity: 0.8 }}>
+                              {streak.type === "Win" ? "ON FIRE" : "STAY SHARP"}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2587,7 +2592,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
                 (!isFlagOn("paywall") || profile.plan === "pro" || profile.plan === "elite") ? (
                   <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
                     <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "24px" }}>
-                      RULE-BASED INSIGHTS — UPDATES AFTER EACH TRADE.
+                      EXECUTION PATTERNS — RULE-BASED ANALYSIS.
                     </div>
                     <div style={{ borderTop: `1px solid ${C.border}` }}>
                       {insights.map((ins: any, i: number) => {
@@ -3948,7 +3953,7 @@ function HomeSectionTabs({ homeSection, setHomeSection, C }: any) {
   const SECTIONS = [
     { id: "feed", label: "Overview" },
     { id: "analytics", label: "Analytics" },
-    { id: "ai", label: "Insights" },
+    { id: "ai", label: "Execution" },
     { id: "rules", label: "Rules" },
   ];
   return (
