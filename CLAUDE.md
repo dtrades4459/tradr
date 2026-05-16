@@ -182,8 +182,7 @@ Vercel project: domain `tradrjournal.xyz` added and verified.
 ## Code Patterns
 
 ### Writing to Python (large file edits)
-TRADR.tsx is ~7400+ lines. OneDrive can truncate large writes. Always use Python atomic writes:
-**IMPORTANT:** The file has already been truncated once (May 2026 — recovered via git). After any large write, verify `wc -l src/TRADR.tsx` is ~7400+ and `npm run build` passes (use `--outDir /tmp/tradr-dist --emptyOutDir` to avoid the locked `dist/` folder).
+TRADR.tsx is ~5700 lines. OneDrive can truncate large writes. Always use Python atomic writes:
 ```python
 import os, tempfile
 tmp = path + ".tmp"
@@ -267,8 +266,8 @@ On success: sets `feedbackSent(true)`, button turns green and shows "Sent! ✓",
 - [x] V2 prefs column round-trips every legacy Profile field (targets, rules, checklist, alias, etc.) so flag-off clients see no data loss
 
 **Phase 2 — to run / verify**
-- [x] Run migration `001_rls_cleanup.sql` in Supabase ✓ (ran May 2026)
-- [ ] Run migration `002_v2_schema_additive.sql` in Supabase — SQL is in clipboard, open SQL editor at https://supabase.com/dashboard/project/vifwjwsndchnrpvfgrmg/sql/new and paste + run
+- [ ] Run migration `001_rls_cleanup.sql` in Supabase
+- [ ] Run migration `002_v2_schema_additive.sql` in Supabase (creates v2 tables, no data migrated)
 - [ ] Verify v2 profile path on yourself: `localStorage.tradr_flags = "newProfile"; location.reload();` then save profile, check `select * from profiles;`
 - [ ] Set up branch protection on `main` (require CI `build` status check)
 - [ ] (Optional) Install `@sentry/react` + set `VITE_SENTRY_DSN` in Vercel
@@ -278,7 +277,7 @@ On success: sets `feedbackSent(true)`, button turns green and shows "Sent! ✓",
 - [ ] Wire circles v2 behind `newCircles` flag (uses `circles` + `circle_members`)
 - [ ] Wire trades v2 behind `newTrades` flag — riskiest, do last
 - [ ] Backfill script for trades (template in MIGRATION.md)
-- [x] Replace remaining silent `try { } catch { }` blocks in `TRADR.tsx` — `kickMember`, `feedback.send`, `deleteAccount` now log via `log.error()`
+- [ ] Replace remaining silent `try { } catch { }` blocks in `TRADR.tsx` (saveTrades, saveFriends, saveStratChecklists, saveMyCircles, etc.)
 - [ ] Split `TRADR.tsx` — start with `SettingsScreen.tsx`, one screen per PR
 - [ ] Move screenshots from base64-in-trade to Supabase Storage URLs
 - [ ] Replace N+1 `fetchCircleLeaderboard` (TRADR.tsx:1607) with a single SQL query against the v2 schema
@@ -292,7 +291,7 @@ TRADR target pricing: Free tier · Pro $5.99/mo · Elite $9.99/mo.
 **Sprint 1 — Close the core gap**
 - [ ] Wire Tradovate auto-import UI — `api/tradovate.ts` proxy is already built; need account connect screen + fill → trade sync
 - [ ] Rithmic CSV parser — covers Apex, TopstepX, most US prop firm accounts without full API
-- [x] Session time-of-day heatmap + day-of-week breakdown — `TimeOfDayChart` + `DayOfWeekChart` added to Stats → Heatmap tab
+- [ ] Session time-of-day heatmap + day-of-week breakdown (analytics quick win)
 
 **Sprint 2 — Psychology + Prop Firm**
 - [ ] Per-trade emotional state field (Calm / FOMO / Revenge / Confident) + rule-adherence Y/N + mistake tag

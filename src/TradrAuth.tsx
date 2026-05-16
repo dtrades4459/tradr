@@ -99,13 +99,13 @@ const USERNAME_DOMAIN = "users.tradr.app";
 const usernameToEmail = (u: string) => `${u.toLowerCase().trim()}@${USERNAME_DOMAIN}`;
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; initialError?: string }) {
+function AuthForm({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(initialError);
+  const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
   // If user arrives via a password-reset magic link, Supabase fires a
@@ -343,27 +343,8 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   );
 }
 
-// ─── PARSE OAUTH ERROR FROM URL HASH ─────────────────────────────────────────
-// Supabase redirects back to the app with #error=...&error_description=... when
-// an OAuth flow fails (e.g. Google login that isn't configured, or user cancels).
-function parseOAuthError(): string {
-  const hash = window.location.hash.slice(1); // strip leading #
-  if (!hash.includes("error=")) return "";
-  const params = new URLSearchParams(hash);
-  const code = params.get("error") ?? "";
-  const desc = params.get("error_description") ?? "";
-  // Clean the hash from the URL so a refresh doesn't re-trigger the message.
-  history.replaceState(null, "", window.location.pathname + window.location.search);
-  if (code === "access_denied" || desc.toLowerCase().includes("cancel")) {
-    return "Google sign-in was cancelled. Use your username and password instead.";
-  }
-  if (desc) return `Sign-in failed: ${desc.replace(/\+/g, " ")}. Please use username and password.`;
-  return "Google sign-in isn't available. Please use your username and password.";
-}
-
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 function LandingPage({ onSuccess }: { onSuccess: () => void }) {
-  const [oauthError] = useState(() => parseOAuthError());
   return (
     <div className="tradr-landing" style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: BODY }}>
       <style>{`
@@ -454,7 +435,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
 
           {/* Auth column */}
           <aside className="tradr-auth-card">
-            <AuthForm onSuccess={onSuccess} initialError={oauthError} />
+            <AuthForm onSuccess={onSuccess} />
           </aside>
         </div>
 

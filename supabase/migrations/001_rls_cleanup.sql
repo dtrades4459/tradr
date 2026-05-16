@@ -19,7 +19,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 drop policy if exists "shared_kv_update_own_or_entry" on public.shared_kv;
-drop policy if exists "shared_kv_update_own" on public.shared_kv;
 
 create policy "shared_kv_update_own" on public.shared_kv
   for update to authenticated
