@@ -345,6 +345,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [friendMsg, setFriendMsg] = useState("");
   const [toast, setToast] = useState<any>(null);
   const [homeSection, setHomeSection] = useState("feed");
+  const [circleLatestMsgs, setCircleLatestMsgs] = useState<Record<string, any>>({});
   const [activeStrategy, setActiveStrategy] = useState(STRATEGY_NAMES[0]);
   const [stratChecklists, setStratChecklists] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].checklist.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
   const [stratRules, setStratRules] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].rules.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
@@ -1762,6 +1763,7 @@ export default function Tradr({ user }: { user?: any } = {}) {
   // main-nav + sub-nav fit on one row instead of stacking into two.
   const HOME_SECTIONS = [
     { id: "feed", label: "Overview" },
+    { id: "circles", label: "Circles" },
     { id: "ai", label: "Execution" },
     { id: "rules", label: "Rules" },
   ];
@@ -2648,6 +2650,64 @@ export default function Tradr({ user }: { user?: any } = {}) {
                     >⚡ Upgrade to Pro</button>
                   </div>
                 )
+              )}
+
+              {/* CIRCLES CHAT TAB */}
+              {homeSection === "circles" && (
+                <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
+                  <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "20px" }}>
+                    YOUR CIRCLES — TAP TO OPEN CHAT
+                  </div>
+                  {myCircles.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: C.muted, fontSize: "13px" }}>
+                      <div style={{ fontSize: "28px", marginBottom: "12px" }}>◆</div>
+                      You haven't joined any circles yet.<br />
+                      <span style={{ color: C.accent, cursor: "pointer" }} onClick={() => setView("circles")}>Browse Circles →</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", borderTop: `1px solid ${C.border}` }}>
+                      {[...myCircles].sort((a: any, b: any) => {
+                        const aT = circleLatestMsgs[a.code]?.created_at || "";
+                        const bT = circleLatestMsgs[b.code]?.created_at || "";
+                        return bT.localeCompare(aT);
+                      }).map((circle: any) => {
+                        const latest = circleLatestMsgs[circle.code];
+                        return (
+                          <div
+                            key={circle.code}
+                            onClick={() => { setActiveCircle(circle); setCirclesView("detail"); setView("circles"); }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: "14px",
+                              padding: "16px 0", borderBottom: `1px solid ${C.border}`,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <div style={{
+                              width: "40px", height: "40px", borderRadius: "50%",
+                              background: C.border2, display: "flex", alignItems: "center",
+                              justifyContent: "center", fontSize: "18px", flexShrink: 0,
+                            }}>
+                              {circle.icon || "◆"}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 700, color: C.text, marginBottom: "4px" }}>
+                                {circle.name || circle.code}
+                              </div>
+                              {latest ? (
+                                <div style={{ fontSize: "12px", color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  <span style={{ color: C.text2 }}>{latest.author_name}:</span> {latest.text}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: "12px", color: C.muted, fontStyle: "italic" }}>No messages yet</div>
+                              )}
+                            </div>
+                            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, flexShrink: 0 }}>›</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* RULES */}
