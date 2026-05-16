@@ -79,6 +79,25 @@ const OUTCOMES = ["Win","Loss","Breakeven"];
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
 const TABS = ["home","log","history","stats","circles"];
 
+// ─── DEFAULT PROFILE ─────────────────────────────────────────────────────────
+const DEF_PROFILE: Profile = {
+  name: "Trader",
+  handle: "@trader",
+  bio: "Multi-strategy trader | Consistency over everything",
+  avatar: "",
+  broker: "",
+  timezone: "London (GMT)",
+  startDate: new Date().toISOString().split("T")[0],
+  targetRR: "2",
+  maxTradesPerDay: "2",
+  onboarded: false,
+  publicTrades: false,
+  instruments: [],
+  socialLinks: {},
+  plan: "free",
+};
+
+
 // ─── THEME ────────────────────────────────────────────────────────────────────
 // Warm editorial palette — dark primary, light secondary.
 const DARK = {
