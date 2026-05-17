@@ -2928,96 +2928,63 @@ export default function Tradr({ user }: { user?: any } = {}) {
 
               {/* SETTINGS */}
               {homeSection === "settings" && (
-                <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "28px" }}>
-                  {/* Back nav */}
-                  <div>
-                    <button
-                      onClick={() => setHomeSection("feed")}
-                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.10em", textTransform: "uppercase" }}>
-                      <span style={{ fontSize: "12px" }}>←</span> Overview
-                    </button>
+                <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "0" }}>
+
+                  {/* ── User card ── */}
+                  <div style={{ margin: "0 0 20px", borderRadius: "22px", padding: "18px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "14px" }}>
+                    <div onClick={() => document.getElementById("avatarInput")?.click()} style={{ cursor: "pointer" }}>
+                      <AvatarCircle name={profile.name} avatar={profileDraft.avatar || profile.avatar} size={50} color={C.text} C={C} />
+                    </div>
+                    <input id="avatarInput" type="file" accept="image/jpeg,image/png" onChange={handleAvatarUpload} style={{ display: "none" }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 600, color: C.text }}>{profile.name || "—"}</div>
+                      <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>
+                        {profile.handle || "@—"} · {profile.plan === "pro" || profile.plan === "elite" ? "Pro plan" : "Free plan"}
+                      </div>
+                      {(profile.plan === "pro" || profile.plan === "elite") && (
+                        <div style={{ marginTop: "6px", display: "inline-flex", padding: "2px 8px", borderRadius: "999px", background: (C as any).liveSoft ?? "rgba(100,220,180,0.08)", color: (C as any).live ?? C.green, fontFamily: MONO, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", border: `1px solid color-mix(in oklch, ${(C as any).live ?? C.green} 30%, transparent)` }}>● PRO PLAN</div>
+                      )}
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
                   </div>
 
-                  {/* Profile */}
-                  <section>
-                    <SectionKicker label="PROFILE" C={C} />
-                    <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "16px" }}>
-                      <div style={{ position: "relative" }}>
-                        <AvatarCircle name={profile.name} avatar={profileDraft.avatar || profile.avatar} size={56} color={C.text} onClick={() => document.getElementById("avatarInput")?.click()} C={C} />
+                  {/* ── Account section ── */}
+                  <div style={{ padding: "0 2px 8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Account</div>
+                  <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
+                    {/* Edit profile row */}
+                    <div onClick={() => { setProfileDraft({ ...profile }); setEditingProfile(!editingProfile); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 10a3 3 0 1 0 0-6a3 3 0 0 0 0 6zM4 17c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </div>
-                      <input id="avatarInput" type="file" accept="image/jpeg,image/png" onChange={handleAvatarUpload} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{profile.name}</div>
-                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px", display: "flex", alignItems: "center", gap: "5px" }}>
-                          {profile.handle}
-                          {(profile.plan === "pro" || profile.plan === "elite") && (
-                            <CrownIcon size={11} color={C.text} />
-                          )}
-                        </div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Edit profile</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Name, handle, avatar, bio</div>
                       </div>
-                      <button onClick={() => { setProfileDraft({ ...profile }); setEditingProfile(!editingProfile); }} style={pillGhost}>
-                        {editingProfile ? "CANCEL" : "EDIT"}
-                      </button>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d={editingProfile ? "M3 9l4-4 4 4" : "M5 3l4 4-4 4"} stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
                     </div>
+                    {/* Inline edit form */}
                     {editingProfile && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginTop: "24px" }}>
+                      <div style={{ padding: "18px", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: "14px", background: C.panel }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                           <div><label style={lbl}>Name</label><input value={profileDraft.name} onChange={e => setProfileDraft({ ...profileDraft, name: e.target.value })} style={inp} /></div>
                           <div><label style={lbl}>Handle</label><input value={profileDraft.handle} onChange={e => setProfileDraft({ ...profileDraft, handle: e.target.value })} style={inp} /></div>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.border}` }}>
-                          <div>
-                            <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.06em" }}>Public trades</div>
-                            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "3px" }}>Show your trades on your profile</div>
-                          </div>
-                          <button onClick={() => setProfileDraft({ ...profileDraft, publicTrades: !profileDraft.publicTrades })}
-                            style={{ width: "44px", height: "24px", borderRadius: "12px", border: "none", cursor: "pointer", background: profileDraft.publicTrades ? C.green : C.border2, position: "relative", transition: "background 150ms" }}>
-                            <span style={{ position: "absolute", top: "3px", left: profileDraft.publicTrades ? "22px" : "3px", width: "18px", height: "18px", borderRadius: "50%", background: C.bg, transition: "left 150ms" }} />
-                          </button>
-                        </div>
-                        {profileDraft.publicTrades && (
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
-                            <div>
-                              <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.06em" }}>Share with mentor</div>
-                              <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "3px" }}>Copy your public profile link</div>
-                            </div>
-                            <button onClick={() => {
-                              const handle = (profile.handle || "").replace(/^@/, "");
-                              const url = `https://tradrjournal.xyz/@${handle}`;
-                              navigator.clipboard?.writeText(url).then(() => showToast("Mentor link copied!")).catch(() => showToast("Link: " + url));
-                            }} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: C.muted }}>
-                              Copy link
-                            </button>
-                          </div>
-                        )}
                         <div><label style={lbl}>Bio</label><textarea value={profileDraft.bio} onChange={e => setProfileDraft({ ...profileDraft, bio: e.target.value })} rows={2} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} /></div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                           <div><label style={lbl}>Broker</label><input value={profileDraft.broker} onChange={e => setProfileDraft({ ...profileDraft, broker: e.target.value })} placeholder="IC Markets" style={inp} /></div>
                           <div><label style={lbl}>Timezone</label><input value={profileDraft.timezone} onChange={e => setProfileDraft({ ...profileDraft, timezone: e.target.value })} style={inp} /></div>
                         </div>
-                        <div>
-                          <label style={lbl}>Circle alias <span style={{ color: C.dim }}>(shown on leaderboards · 3–12 chars)</span></label>
-                          <input
-                            value={profileDraft.alias || ""}
-                            onChange={e => {
-                              const v = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
-                              setProfileDraft({ ...profileDraft, alias: v });
-                            }}
-                            placeholder="e.g. DYLON-PRO"
-                            style={{ ...inp, fontFamily: MONO, letterSpacing: "0.08em" }}
-                          />
-                        </div>
+                        <div><label style={lbl}>Circle alias <span style={{ color: C.dim }}>(3–12 chars)</span></label><input value={profileDraft.alias || ""} onChange={e => { const v = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12); setProfileDraft({ ...profileDraft, alias: v }); }} placeholder="e.g. DYLON-PRO" style={{ ...inp, fontFamily: MONO, letterSpacing: "0.08em" }} /></div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                           <div><label style={lbl}>Target R:R</label><input type="number" value={profileDraft.targetRR} onChange={e => setProfileDraft({ ...profileDraft, targetRR: e.target.value })} style={inp} /></div>
                           <div><label style={lbl}>Max Trades/Day</label><input type="number" value={profileDraft.maxTradesPerDay} onChange={e => setProfileDraft({ ...profileDraft, maxTradesPerDay: e.target.value })} style={inp} /></div>
-                          <div><label style={lbl}>Max Daily Loss (R) — Kill Switch</label><input type="number" step="0.5" value={profileDraft.maxDailyLoss || ""} onChange={e => setProfileDraft({ ...profileDraft, maxDailyLoss: e.target.value })} placeholder="e.g. 3" style={inp} /></div>
+                          <div><label style={lbl}>Max Daily Loss (R)</label><input type="number" step="0.5" value={profileDraft.maxDailyLoss || ""} onChange={e => setProfileDraft({ ...profileDraft, maxDailyLoss: e.target.value })} placeholder="e.g. 3" style={inp} /></div>
                         </div>
                         <button onClick={async () => {
                           const name = (profileDraft.name || "").trim();
                           const handle = (profileDraft.handle || "").trim();
                           if (!name) { showToast("Name can't be empty"); return; }
                           if (!handle) { showToast("Handle can't be empty"); return; }
-                          // Check handle uniqueness (skip check if unchanged)
                           const normNew = normaliseHandle(handle);
                           const normOld = normaliseHandle(profile.handle || "");
                           if (normNew !== normOld) {
@@ -3027,50 +2994,150 @@ export default function Tradr({ user }: { user?: any } = {}) {
                           await saveProfile({ ...profileDraft, name, handle });
                           setEditingProfile(false);
                           showToast("Profile saved");
-                        }} style={{ ...pillPrimary(true), marginTop: "8px" }}>Save profile →</button>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Preferences */}
-                  <section>
-                    <SectionKicker label="PREFERENCES" C={C} />
-                    <div style={{ marginTop: "12px", borderTop: `1px solid ${C.border}` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: "14px", color: C.text, fontFamily: BODY }}>Dark mode</span>
-                        <button onClick={toggleDark} style={{ background: darkMode ? C.text : C.border, border: "none", borderRadius: "999px", width: "40px", height: "22px", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-                          <div style={{ position: "absolute", top: "3px", left: darkMode ? "20px" : "3px", width: "16px", height: "16px", borderRadius: "50%", background: darkMode ? C.bg : C.text, transition: "left 0.2s" }} />
+                        }} style={{
+                          display: "flex", alignItems: "center", justifyContent: "space-between",
+                          background: C.text, color: C.bg, border: "none", borderRadius: "14px",
+                          padding: "5px 6px 5px 20px", fontSize: "14px", fontWeight: 600,
+                          cursor: "pointer", width: "100%", fontFamily: BODY, marginTop: "4px",
+                        }}>
+                          <span>Save profile</span>
+                          <span style={{ width: "36px", height: "36px", borderRadius: "999px", background: (C as any).live ?? C.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="#0A0A0A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </span>
                         </button>
                       </div>
-                      {/* Text Size */}
-                      <div style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
-                        <div style={{ fontSize: "11px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "12px" }}>Text Size</div>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                          {([["S", 0.85], ["M", 1.0], ["L", 1.15], ["XL", 1.3]] as [string, number][]).map(([label, scale]) => (
-                            <button
-                              key={label}
-                              onClick={() => setFontScale(scale)}
-                              style={{
-                                flex: 1, padding: "10px 4px", border: `1px solid ${fontScale === scale ? C.text : C.border2}`,
-                                borderRadius: "8px", background: fontScale === scale ? C.text : "transparent",
-                                color: fontScale === scale ? C.bg : C.muted,
-                                fontSize: label === "S" ? "11px" : label === "M" ? "13px" : label === "L" ? "15px" : "17px",
-                                fontFamily: BODY, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
-                              }}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                    )}
+                    {/* Plan & Billing */}
+                    <div onClick={() => { if (profile.plan !== "pro" && profile.plan !== "elite") setShowUpgrade(true); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `color-mix(in oklch, ${(C as any).live ?? C.green} 14%, transparent)`, border: `1px solid ${C.border2}`, color: (C as any).live ?? C.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 5h14v10H3zM3 8h14M6 12h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Plan & Billing</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>
+                          {profile.plan === "pro" || profile.plan === "elite" ? "Pro · $24.99/mo" : "Free plan · Upgrade to unlock all"}
                         </div>
                       </div>
-                      {[["Broker", profile.broker || "—"], ["Timezone", profile.timezone || "—"], ["Target R:R", profile.targetRR ? `${profile.targetRR}R` : "—"], ["Max Trades/Day", profile.maxTradesPerDay || "—"]].map(([k, v]) => (
-                        <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
-                          <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{k}</span>
-                          <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{v}</span>
-                        </div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    {/* Appearance / Dark mode */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 2v3M10 15v3M3 10h3M14 10h3M5.5 5.5l-2-2M14.5 5.5l2-2M5.5 14.5l-2 2M14.5 14.5l2 2M10 7a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Appearance</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Dark mode</div>
+                      </div>
+                      <button onClick={toggleDark} style={{ width: "38px", height: "22px", borderRadius: "999px", border: "none", cursor: "pointer", background: darkMode ? (C as any).live ?? C.green : C.border2, position: "relative", transition: "background 0.2s", boxShadow: darkMode ? `0 0 0 3px color-mix(in oklch, ${(C as any).live ?? C.green} 22%, transparent)` : "none", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: "2px", left: darkMode ? "18px" : "2px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Text size ── */}
+                  <div style={{ margin: "16px 0 4px", padding: "0 2px 8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Text Size</div>
+                  <div style={{ borderRadius: "16px", background: C.panel, border: `1px solid ${C.border}`, padding: "14px 16px", marginBottom: "4px" }}>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {([["S", 0.85], ["M", 1.0], ["L", 1.15], ["XL", 1.3]] as [string, number][]).map(([label, scale]) => (
+                        <button key={label} onClick={() => setFontScale(scale)} style={{ flex: 1, padding: "10px 4px", border: `1px solid ${fontScale === scale ? C.text : C.border2}`, borderRadius: "10px", background: fontScale === scale ? C.text : "transparent", color: fontScale === scale ? C.bg : C.muted, fontSize: label === "S" ? "11px" : label === "M" ? "13px" : label === "L" ? "15px" : "17px", fontFamily: BODY, fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>{label}</button>
                       ))}
                     </div>
-                  </section>
+                  </div>
+
+                  {/* ── Privacy & Data ── */}
+                  <div style={{ margin: "16px 0 8px", padding: "0 2px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Privacy & Data</div>
+                  <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
+                    {/* Public trades toggle */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}` }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `color-mix(in oklch, ${C.green} 12%, transparent)`, border: `1px solid ${C.border2}`, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 3l6 3v4c0 4-2.5 6.5-6 7-3.5-.5-6-3-6-7V6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Public trades</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Visible on your profile</div>
+                      </div>
+                      <button onClick={() => { const next = !profile.publicTrades; saveProfile({ ...profile, publicTrades: next }); }} style={{ width: "38px", height: "22px", borderRadius: "999px", border: "none", cursor: "pointer", background: profile.publicTrades ? (C as any).live ?? C.green : C.border2, position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: "2px", left: profile.publicTrades ? "18px" : "2px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
+                      </button>
+                    </div>
+                    {/* Copy mentor link */}
+                    {profile.publicTrades && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M8 4H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M12 2h6v6M10 10L18 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Share with mentor</div>
+                          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Copy your public profile link</div>
+                        </div>
+                        <button onClick={() => { const handle = (profile.handle || "").replace(/^@/, ""); const url = `https://tradrjournal.xyz/@${handle}`; navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Link: " + url)); }} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "5px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.06em", color: C.muted }}>Copy</button>
+                      </div>
+                    )}
+                    {/* Export CSV */}
+                    <div onClick={() => { if (isFlagOn("paywall") && profile.plan !== "pro" && profile.plan !== "elite") { setShowUpgrade(true); return; } exportCSV(); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 3v10M6 9l4 4 4-4M3 16h14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Data export</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>CSV + JSON of all trades</div>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    {/* Delete account */}
+                    <div style={{ padding: "14px 18px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `color-mix(in oklch, ${C.red} 12%, transparent)`, border: `1px solid ${C.border2}`, color: C.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5h10v10H5zM8 8l4 4M12 8l-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.red }}>Delete account</div>
+                          <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Permanent · cannot be undone</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="Type DELETE to confirm" style={{ padding: "11px 14px", background: "transparent", border: `1px solid ${deleteConfirm.toUpperCase() === "DELETE" ? C.red : C.border2}`, borderRadius: "10px", color: C.text, fontFamily: MONO, fontSize: "12px", letterSpacing: "0.04em", outline: "none" }} />
+                        <button onClick={deleteAccount} disabled={deletingAccount || deleteConfirm.toUpperCase() !== "DELETE"} style={{ padding: "11px", border: `1px solid ${deleteConfirm.toUpperCase() === "DELETE" ? C.red : C.border2}`, borderRadius: "10px", background: "transparent", color: deleteConfirm.toUpperCase() === "DELETE" ? C.red : C.muted, cursor: deleteConfirm.toUpperCase() === "DELETE" ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: deletingAccount ? 0.6 : 1, transition: "all 0.2s" }}>
+                          {deletingAccount ? "Deleting…" : "Delete My Account"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Support ── */}
+                  <div style={{ margin: "16px 0 8px", padding: "0 2px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Support</div>
+                  <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
+                    <div onClick={() => setFeedbackOpen(true)} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 4a6 6 0 1 1 0 12a6 6 0 0 1 0-12zM10 7v4M10 14v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Send feedback</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Direct to founder · 24h reply</div>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 4l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Rate TRADR OS</div>
+                        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>App Store</div>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div style={{ textAlign: "center", padding: "24px 0 8px", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.12em" }}>
+                    TRADR OS v1.0 · {new Date().getFullYear()}
+                  </div>
+                  <div style={{ display: "flex", gap: "16px", justifyContent: "center", paddingBottom: "8px" }}>
+                    <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Privacy</a>
+                    <a href="/terms.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Terms</a>
+                  </div>
                 </div>
               )}
             </div>
@@ -3520,65 +3587,154 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
 
               {statsTab === "overview" && total > 0 && (
                 <>
-                  <section>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
-                      <SectionKicker label="OVERVIEW" C={C}/>
-                      <button onClick={()=>{ const txt=`${profile.handle||"Trader"} · ${total} trades · ${winRate}% WR · ${pnlPos?"+":""}${totalPnL}R\n\n@tradrjournal https://tradrjournal.xyz`; window.open(`https://x.com/intent/post?text=${encodeURIComponent(txt)}`,"_blank","noopener"); }} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 12px", cursor:"pointer", fontFamily:MONO, fontSize:"9px", letterSpacing:"0.08em", color:C.muted, display:"flex", alignItems:"center", gap:"5px" }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                        Share Stats
-                      </button>
-                    </div>
-                    <div style={{ borderTop:`1px solid ${C.border}` }}>
-                      {[
-                        ["Total Trades", total],
-                        ["Win Rate", `${winRate}%`],
-                        ["Total P&L", pnlMode === "$" && hasDollarData ? `${totalPnlDollar >= 0 ? "+" : "−"}$${Math.abs(totalPnlDollar).toFixed(2)}` : `${pnlPos ? "+" : ""}${totalPnL}R`],
-                        ["Average R:R", avgRR === "—" ? "—" : `${avgRR}R`],
-                        ["Wins / Losses / B/E", `${wins} / ${losses} / ${bes}`],
-                        ["Best Streak", (() => { let best = 0, cur = 0, last: any = null; trades.slice().reverse().forEach((t: any) => { if (t.outcome === "Win") { cur = last === "Win" ? cur + 1 : 1; last = "Win"; best = Math.max(best, cur); } else { last = t.outcome; cur = 0; } }); return best > 0 ? `${best}W` : "—"; })()],
-                      ].map(([k, v]) => (
-                        <div key={k as any} style={{ display: "flex", justifyContent: "space-between", padding: "13px 0", borderBottom: `1px solid ${C.border}` }}>
-                          <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{k}</span>
-                          <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text }}>{v}</span>
+                  {/* ── Win Rate Ring card ── */}
+                  <div style={{ borderRadius: "22px", padding: "22px", background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", pointerEvents: "none", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.green}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.green})`, filter: "blur(40px)", opacity: 0.45, zIndex: 0 }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: "22px", position: "relative", zIndex: 1 }}>
+                      {(() => {
+                        const wr = parseFloat(winRate as any) || 0;
+                        const r = 38, circ = 2 * Math.PI * r;
+                        const dash = (wr / 100) * circ;
+                        return (
+                          <svg width="100" height="100" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+                            <circle cx="50" cy="50" r={r} fill="none" stroke={C.border2} strokeWidth="8"/>
+                            <circle cx="50" cy="50" r={r} fill="none" stroke={C.accent} strokeWidth="8"
+                              strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 50 50)"/>
+                            <text x="50" y="50" textAnchor="middle" dy="0.35em"
+                              fontFamily={DISPLAY} fontSize="22" fontWeight="600" fill={C.text}>{wr}</text>
+                            <text x="50" y="64" textAnchor="middle" fontFamily={MONO} fontSize="9" fill={C.muted} letterSpacing="0.08em">PERCENT</text>
+                          </svg>
+                        );
+                      })()}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Win rate · {total} trades</div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "32px", fontWeight: 600, color: C.text, marginTop: "6px", letterSpacing: "-0.02em" }}>
+                          {winRate}<span style={{ fontSize: "18px", color: C.muted }}>%</span>
                         </div>
-                      ))}
+                        <div style={{ display: "flex", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 8px", borderRadius: "999px", background: `color-mix(in oklch, ${C.green} 14%, transparent)`, color: C.green, fontSize: "11px", fontWeight: 600, fontFamily: MONO }}>▲ {wins}W</span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 8px", borderRadius: "999px", background: `color-mix(in oklch, ${C.red} 14%, transparent)`, color: C.red, fontSize: "11px", fontWeight: 600, fontFamily: MONO }}>▼ {losses}L</span>
+                          {avgRR !== "—" && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted }}>Avg {avgRR}R</span>}
+                        </div>
+                      </div>
                     </div>
-                  </section>
+                  </div>
+
+                  {/* ── Day-of-week bars ── */}
+                  {(() => {
+                    const dow = [{d:"M",v:0},{d:"T",v:0},{d:"W",v:0},{d:"T",v:0},{d:"F",v:0}];
+                    trades.forEach((t: any) => {
+                      if (!t.date) return;
+                      const day = new Date(t.date + "T12:00:00").getDay();
+                      if (day >= 1 && day <= 5) dow[day - 1].v += parseFloat(t.pnl) || 0;
+                    });
+                    const maxAbs = Math.max(...dow.map(d => Math.abs(d.v)), 0.1);
+                    const best = dow.reduce((a, b) => b.v > a.v ? b : a);
+                    const dayNames = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+                    return (
+                      <div style={{ borderRadius: "22px", padding: "20px", background: C.panel, border: `1px solid ${C.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Net by weekday</div>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.08em" }}>ALL TIME</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: "10px", height: "120px" }}>
+                          {dow.map((d, i) => {
+                            const h = (Math.abs(d.v) / maxAbs) * 90;
+                            const pos = d.v >= 0;
+                            return (
+                              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                                <div style={{ fontFamily: MONO, fontSize: "9px", color: d.v !== 0 ? (pos ? C.green : C.red) : C.dim, fontWeight: 600 }}>
+                                  {d.v !== 0 ? `${pos ? "+" : ""}${d.v.toFixed(1)}` : "—"}
+                                </div>
+                                <div style={{ width: "100%", borderRadius: "8px", border: `1px solid ${C.border2}`, height: `${Math.max(h, 4)}px`, minHeight: "4px", background: pos ? `linear-gradient(180deg, ${C.accent}, color-mix(in oklch, ${C.accent} 40%, transparent))` : `linear-gradient(180deg, ${C.red}, color-mix(in oklch, ${C.red} 30%, transparent))` }} />
+                                <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}>{d.d}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {best.v > 0 && (
+                          <div style={{ marginTop: "14px", padding: "10px 12px", borderRadius: "12px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, fontSize: "11px", color: C.text, fontFamily: BODY, lineHeight: 1.5 }}>
+                            <span style={{ color: C.accent, fontWeight: 600 }}>Insight · </span>
+                            {dayNames[dow.indexOf(best)]}s are your strongest day — <span style={{ fontFamily: MONO, fontWeight: 600 }}>{best.v >= 0 ? "+" : ""}{best.v.toFixed(1)}R</span> total.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Top setups ── */}
+                  {Object.entries(stratStats).length > 0 && (
+                    <div style={{ borderRadius: "22px", overflow: "hidden", border: `1px solid ${C.border}`, background: C.panel }}>
+                      <div style={{ padding: "14px 14px 10px" }}>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Top setups by net R</div>
+                      </div>
+                      {Object.entries(stratStats)
+                        .map(([s, v]: any) => ({ name: s, count: v.count, r: v.pnl, pct: v.w + v.l > 0 ? Math.round(v.w / (v.w + v.l) * 100) : 0, win: v.pnl >= 0 }))
+                        .sort((a, b) => b.r - a.r)
+                        .slice(0, 5)
+                        .map((s) => (
+                          <div key={s.name} style={{ padding: "12px 14px", borderTop: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "13px", fontWeight: 600, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+                                <div style={{ flex: 1, height: "4px", borderRadius: "2px", background: C.border2, overflow: "hidden" }}>
+                                  <div style={{ width: `${s.pct}%`, height: "100%", background: s.win ? C.green : C.red, borderRadius: "2px" }} />
+                                </div>
+                                <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, minWidth: "28px" }}>{s.pct}%</div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 600, color: s.win ? C.green : C.red }}>{s.r >= 0 ? "+" : ""}{s.r.toFixed(1)}R</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}>{s.count} trades</div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* ── Compact stat strip ── */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                    {[
+                      { label: "Total P&L", value: pnlMode === "$" && hasDollarData ? `${totalPnlDollar >= 0 ? "+" : "−"}$${Math.abs(totalPnlDollar).toFixed(0)}` : `${pnlPos ? "+" : ""}${totalPnL}R`, color: pnlPos ? C.green : C.red },
+                      { label: "Avg R:R", value: avgRR === "—" ? "—" : `${avgRR}R`, color: C.text },
+                      { label: "Best Streak", value: (() => { let best = 0, cur = 0, last: any = null; trades.slice().reverse().forEach((t: any) => { if (t.outcome === "Win") { cur = last === "Win" ? cur + 1 : 1; last = "Win"; best = Math.max(best, cur); } else { last = t.outcome; cur = 0; } }); return best > 0 ? `${best}W` : "—"; })(), color: C.text },
+                    ].map(stat => (
+                      <div key={stat.label} style={{ borderRadius: "16px", padding: "14px", background: C.panel, border: `1px solid ${C.border}` }}>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase" }}>{stat.label}</div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 600, color: stat.color, marginTop: "8px", letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" }}>{stat.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Session breakdown (compact) ── */}
                   {Object.entries(sessionStats).length > 0 && (
-                    <section>
-                      <SectionKicker label="SESSION BREAKDOWN" C={C} />
-                      <div style={{ marginTop: "14px", borderTop: `1px solid ${C.border}` }}>
-                        {Object.entries(sessionStats).map(([session, v]: any) => {
-                          const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
-                          return (
-                            <div key={session} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", padding: "13px 0", borderBottom: `1px solid ${C.border}` }}>
-                              <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{session}</span>
-                              <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text, letterSpacing: "0.04em" }}>{wr}%</span>
-                              <span style={{ fontFamily: MONO, fontSize: "11px", color: v.pnl >= 0 ? C.green : C.red, letterSpacing: "0.04em", minWidth: "60px", textAlign: "right" }}>{v.pnl >= 0 ? "+" : ""}{v.pnl.toFixed(1)}R</span>
-                            </div>
-                          );
-                        })}
+                    <div style={{ borderRadius: "22px", overflow: "hidden", border: `1px solid ${C.border}`, background: C.panel }}>
+                      <div style={{ padding: "14px 14px 10px" }}>
+                        <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Session breakdown</div>
                       </div>
-                    </section>
-                  )}
-                  {Object.entries(pairStats).length > 0 && (
-                    <section>
-                      <SectionKicker label="PAIR PERFORMANCE" C={C} />
-                      <div style={{ marginTop: "14px", borderTop: `1px solid ${C.border}` }}>
-                        {Object.entries(pairStats).sort((a: any, b: any) => b[1].pnl - a[1].pnl).map(([pair, v]: any) => {
-                          const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
-                          return (
-                            <div key={pair} style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "12px", alignItems: "baseline", padding: "13px 0", borderBottom: `1px solid ${C.border}` }}>
-                              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.04em" }}>{pair}</span>
-                              <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted }}>{v.w + v.l}T</span>
-                              <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text }}>{wr}%</span>
-                              <span style={{ fontFamily: MONO, fontSize: "11px", color: v.pnl >= 0 ? C.green : C.red, minWidth: "60px", textAlign: "right" }}>{v.pnl >= 0 ? "+" : ""}{v.pnl.toFixed(1)}R</span>
+                      {Object.entries(sessionStats).map(([session, v]: any, i, arr) => {
+                        const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
+                        return (
+                          <div key={session} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderTop: `1px solid ${C.border}` }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: DISPLAY, fontSize: "13px", fontWeight: 600, color: C.text }}>{session}</div>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "3px" }}>{v.w + v.l} trades</div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </section>
+                            <div style={{ fontFamily: MONO, fontSize: "11px", color: C.text }}>{wr}%</div>
+                            <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: v.pnl >= 0 ? C.green : C.red, minWidth: "56px", textAlign: "right" }}>{v.pnl >= 0 ? "+" : ""}{v.pnl.toFixed(1)}R</div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
+
+                  {/* Share button */}
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={() => { const txt = `${profile.handle||"Trader"} · ${total} trades · ${winRate}% WR · ${pnlPos?"+":""}${totalPnL}R\n\n@tradrjournal https://tradrjournal.xyz`; window.open(`https://x.com/intent/post?text=${encodeURIComponent(txt)}`, "_blank", "noopener"); }} style={{ display: "flex", alignItems: "center", gap: "6px", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", color: C.muted }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                      Share Stats
+                    </button>
+                  </div>
                 </>
               )}
 
