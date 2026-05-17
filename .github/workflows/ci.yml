@@ -12,13 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4h
         with:
           node-version: 20
           cache: npm
 
       - name: Install
-        run: npm ci
+        run: npm install
 
       - name: Lint
         run: npm run lint
