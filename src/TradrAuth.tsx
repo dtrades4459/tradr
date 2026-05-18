@@ -368,6 +368,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
           Continue with Google
         </button>
 
+
         {mode === "signin" && (
           <button onClick={() => { setMode("reset"); setError(""); }} style={{ background: "none", border: "none", color: C.muted, fontSize: "12px", cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0, marginTop: "2px" }}>
             Forgot password?
@@ -391,6 +392,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
     </div>
   );
 }
+
 
 // ─── PARSE OAUTH ERROR FROM URL HASH ─────────────────────────────────────────
 // Supabase redirects back to the app with #error=...&error_description=... when
@@ -601,5 +603,10 @@ export default function TradrAuth() {
 
   if (session === undefined) return <LoadingScreen />;
   if (!session) return <LandingPage onSuccess={() => {}} />;
-  return <Tradr user={session.user} />;
+  // Pass the JWT-embedded plan claim to the app so plan gating works immediately
+  // after a Stripe webhook fires (no extra round-trip needed). The claim is set by
+  // stripe-webhook.ts → auth.admin.updateUserById and by the custom_access_token_hook
+  // defined in supabase/migrations/004_plan_jwt_claims.sql.
+  const jwtPlan = (session.user.app_metadata?.plan ?? "free") as "free" | "pro" | "elite";
+  return <Tradr user={session.user} jwtPlan={jwtPlan} />;
 }

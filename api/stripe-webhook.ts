@@ -2,9 +2,14 @@
 // TRADR · Stripe Webhook
 //
 // Verifies Stripe signature, then:
-//   checkout.session.completed     → sets profile.plan = "pro"
-//   customer.subscription.deleted  → sets profile.plan = "free"
+//   checkout.session.completed     → sets profile.plan = "pro"  (KV + JWT claim)
+//   customer.subscription.deleted  → sets profile.plan = "free" (KV + JWT claim)
 //   invoice.payment_failed         → logs only (Stripe handles retries)
+//
+// Plan is written to TWO places on every event so plan gating is server-enforced:
+//   1. user_kv tradr_profile blob  — persisted source of truth, synced to client
+//   2. Supabase auth app_metadata  — embedded in the JWT so serverless functions
+//      can verify plan from the Bearer token without a DB round-trip
 //
 // Required Vercel environment variables:
 //   STRIPE_SECRET_KEY
@@ -42,6 +47,8 @@ async function rawBody(req: any): Promise<Buffer> {
 
 async function setUserPlan(userId: string, plan: "free" | "pro") {
   const db = getSupabase();
+
+  // ── 1. Update tradr_profile KV blob ─────────────────────────────────────────
   const { data } = await db
     .from("user_kv")
     .select("value")
@@ -51,17 +58,29 @@ async function setUserPlan(userId: string, plan: "free" | "pro") {
 
   if (!data?.value) {
     console.warn("[webhook] No profile for userId:", userId);
-    return;
+    // Still stamp app_metadata so the JWT reflects the plan even if the KV row
+    // hasn't been created yet (edge case: user purchases before completing onboarding).
+  } else {
+    const profile = JSON.parse(data.value);
+    profile.plan = plan;
+    await db.from("user_kv").upsert({
+      user_id: userId,
+      key: "tradr_profile",
+      value: JSON.stringify(profile),
+    }, { onConflict: "user_id,key" });
   }
 
-  const profile = JSON.parse(data.value);
-  profile.plan = plan;
-
-  await db.from("user_kv").upsert({
-    user_id: userId,
-    key: "tradr_profile",
-    value: JSON.stringify(profile),
+  // ── 2. Stamp plan into auth app_metadata (server-enforced JWT claim) ─────────
+  // This causes the next JWT refresh to include app_metadata.plan = plan.
+  // Serverless functions can verify this claim without a DB lookup.
+  const { error: metaErr } = await db.auth.admin.updateUserById(userId, {
+    app_metadata: { plan },
   });
+  if (metaErr) {
+    // Log but don't fail — KV write above already succeeded.
+    console.error("[webhook] app_metadata update failed:", metaErr.message);
+  }
+
   console.log(`[webhook] plan=${plan} set for userId=${userId}`);
 }
 

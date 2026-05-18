@@ -108,7 +108,7 @@ export default async function handler(req: any, res: any) {
       const { data: kvRow } = await db
         .from("user_kv")
         .select("value")
-        .eq("uid", userId)
+        .eq("user_id", userId)
         .eq("key", "tradr_stripe_customer")
         .maybeSingle();
 
@@ -121,10 +121,10 @@ export default async function handler(req: any, res: any) {
       const customer = await s.customers.create({ email, metadata: { userId } });
       customerId = customer.id;
       await db.from("user_kv").upsert({
-        uid: userId,
+        user_id: userId,
         key: "tradr_stripe_customer",
         value: JSON.stringify({ customerId }),
-      });
+      }, { onConflict: "user_id,key" });
     }
 
     if (!process.env.STRIPE_PRICE_ID) {

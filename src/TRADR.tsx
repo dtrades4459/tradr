@@ -395,7 +395,7 @@ function PositionSizeCalc({ C, inp, profile, saveProfile }: any) {
   );
 }
 
-export default function Tradr({ user }: { user?: any } = {}) {
+export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [view, setView] = useState("home");
   // ── Circles state ──────────────────────────────────────────────
@@ -414,7 +414,10 @@ export default function Tradr({ user }: { user?: any } = {}) {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
-  const [profile, setProfile] = useState<Profile>(DEF_PROFILE);
+  // jwtPlan comes from the Supabase JWT app_metadata claim — server-verified,
+  // not forgeable from the client. Use it as the authoritative starting plan so
+  // the paywall check is correct before loadAll() finishes.
+  const [profile, setProfile] = useState<Profile>({ ...DEF_PROFILE, plan: jwtPlan ?? "free" });
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState<Profile>(DEF_PROFILE);
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
@@ -847,6 +850,13 @@ export default function Tradr({ user }: { user?: any } = {}) {
         p = { ...p, uid: user.id };
         try { await store.set("tradr_profile", JSON.stringify(p)); }
         catch (e) { log.error("loadAll.profile.uidStamp", e); }
+      }
+      // Always trust the JWT plan claim over whatever is stored in the KV blob.
+      // The JWT is signed by Supabase and set server-side by the Stripe webhook —
+      // it cannot be forged by the client. The KV value is synced on the next
+      // saveProfile() call so they converge quickly.
+      if (jwtPlan && jwtPlan !== "free") {
+        p = { ...p, plan: jwtPlan };
       }
       setProfile(p); setProfileDraft(p);
     } catch (e) { log.error("loadAll.profile", e); }
