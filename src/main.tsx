@@ -4,6 +4,7 @@ import TradrAuth from "./TradrAuth";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { installStorage } from "./lib/storage";
 import { initSentry } from "./lib/sentry";
+import { initPostHog } from "./lib/posthog";
 import "./lib/flags"; // side-effect: exposes window.tradrFlags
 import "./index.css";
 
@@ -14,6 +15,9 @@ installStorage(null);
 
 // Boot Sentry if a DSN is configured. No-op otherwise — safe to leave on.
 initSentry();
+
+// Boot PostHog if a key is configured. No-op otherwise — safe to leave on.
+initPostHog();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

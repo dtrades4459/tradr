@@ -32,6 +32,8 @@ import { SESSIONS, BIAS, EMOTION_TAGS, getEmotionTags, EMPTY_TRADE } from "./tra
 import { TourOverlay, OnboardingFlow } from "./OnboardingFlow";
 import type { OnboardingData } from "./OnboardingFlow";
 import { UpgradeModal } from "./UpgradeModal";
+import { LotSizeCalculator } from "./LotSizeCalculator";
+import { phIdentify, phCapture, phReset } from "./lib/posthog";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -487,6 +489,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showCalc,    setShowCalc]    = useState(false);
 
   // Circle action loading states
   const [isCreatingCircle, setIsCreatingCircle] = useState(false);
@@ -869,6 +872,8 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         p = { ...p, plan: jwtPlan };
       }
       setProfile(p); setProfileDraft(p);
+      // Identify user in PostHog so all events link to their account
+      if (p.uid) phIdentify(p.uid, { handle: p.handle, plan: p.plan ?? "free" });
     } catch (e) { log.error("loadAll.profile", e); }
 
     try { if (fr) setFriends(JSON.parse(fr.value)); }
@@ -987,6 +992,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     try {
       const merged = [...newTrades, ...trades];
       await saveTrades(merged);
+      phCapture("csv_imported", { count: newTrades.length });
       setShowCsvImport(false);
       showToast(`Imported ${newTrades.length} trade${newTrades.length === 1 ? "" : "s"}`);
     } finally {
@@ -1390,6 +1396,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       u = [{ ...base, id: Date.now(), createdAt: now }, ...trades];
     }
     await saveTrades(u); setForm(EMPTY_TRADE);
+    phCapture(editId ? "trade_edited" : "trade_logged", { outcome: base.outcome, pair: base.pair, total_trades: u.length });
     showToast("Trade saved");
     setTimeout(() => setSavingTrade(false), 1500);
     setView("history");
@@ -1704,6 +1711,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         `tradr_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
       ].map(k => (window as any).storage.del(k, true).catch(() => {})));
       // Sign out and let Supabase handle auth deletion
+      phReset();
       await supabase.auth.signOut();
       showToast("Account data wiped. Goodbye.");
     } catch (e) {
@@ -2032,7 +2040,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                   <CrownIcon size={10} color={(C as any).live ?? C.green} />
                 )}
               </button>
-              <button onClick={() => supabase.auth.signOut()}
+              <button onClick={() => { phReset(); supabase.auth.signOut(); }}
                 style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 4px", minHeight: "34px" }}>
                 out →
               </button>
@@ -3962,6 +3970,13 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
           </div>
         )}
 
+        {/* ── Lot Size Calculator floating button ── */}
+        <button
+          onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
+          style={{ position: "fixed", bottom: isDesktop ? "28px" : "calc(44px + env(safe-area-inset-bottom) + 16px)", left: "16px", zIndex: 998, background: C.accent ?? "#7c3aed", color: "#fff", border: "none", borderRadius: "999px", padding: "12px 18px", minHeight: "44px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", boxShadow: "0 2px 12px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: 16, lineHeight: 1 }}>⚖️</span> Size
+        </button>
+
         {/* ── Feedback floating button ── */}
         <button
           onClick={() => setFeedbackOpen(true)}
@@ -4163,6 +4178,9 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
             onClose={() => setViewProfile(null)}
             C={C}
           />
+        )}
+        {showCalc && (
+          <LotSizeCalculator C={C} onClose={() => setShowCalc(false)} />
         )}
         {toast && <Toast message={toast} onDone={() => setToast(null)} C={C} />}
       </div>

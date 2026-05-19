@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import { installStorage, clearStorageCache } from "./lib/storage";
 import type { Session } from "@supabase/supabase-js";
 import Tradr from "./TRADR";
+import { BetaGate, betaEnabled, isBetaUnlocked } from "./BetaGate";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 // Warm editorial palette, inspired by dvdrod.com + oddritualgolf.com.
@@ -585,7 +586,8 @@ function LoadingScreen() {
 
 // ─── ROOT AUTH WRAPPER ────────────────────────────────────────────────────────
 export default function TradrAuth() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [session,       setSession]       = useState<Session | null | undefined>(undefined);
+  const [betaUnlocked,  setBetaUnlocked]  = useState<boolean>(() => isBetaUnlocked());
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -600,6 +602,9 @@ export default function TradrAuth() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Show beta gate before anything else if VITE_BETA_PASSWORD is set
+  if (betaEnabled && !betaUnlocked) return <BetaGate onUnlocked={() => setBetaUnlocked(true)} />;
 
   if (session === undefined) return <LoadingScreen />;
   if (!session) return <LandingPage onSuccess={() => {}} />;

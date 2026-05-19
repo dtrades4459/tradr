@@ -313,28 +313,69 @@ export function DataSourcesScreen({
             Live sync and CSV imports
           </div>
         </div>
-        {connections.length > 0 && (
-          <button
-            style={btn("primary")}
-            onClick={handleManualSync}
-            disabled={syncing}
-          >
+        {/* Sync Now button — re-enable when live sync ships */}
+        {false && connections.length > 0 && (
+          <button style={btn("primary")} onClick={handleManualSync} disabled={syncing}>
             {syncing ? "Syncing…" : "↺ Sync Now"}
           </button>
         )}
       </div>
 
-      {/* ── LIVE CONNECTIONS ── */}
+      {/* ── LIVE CONNECTIONS — COMING SOON ── */}
       <SectionHeader C={C}>Live Connections</SectionHeader>
 
-      {loadingConns ? (
-        <div style={{ color: C.muted ?? "#888", fontSize: 13, marginBottom: 16 }}>Loading…</div>
-      ) : connections.length === 0 ? (
+      <div style={{ position: "relative", marginBottom: 24 }}>
+        {/* Blurred preview of what the section will look like */}
+        <div style={{ filter: "blur(3px)", pointerEvents: "none", userSelect: "none", opacity: 0.45 }}>
+          <div style={{ ...card, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Tradovate — Live</div>
+              <div style={{ fontSize: 12, color: C.muted ?? "#888", fontFamily: MONO, marginTop: 2 }}>Last sync: just now · 3 new trades</div>
+            </div>
+          </div>
+          <div style={{ ...card, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Rithmic — Demo</div>
+              <div style={{ fontSize: 12, color: C.muted ?? "#888", fontFamily: MONO, marginTop: 2 }}>Last sync: 5m ago · syncing…</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Coming soon overlay */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          borderRadius: 14,
+          background: "linear-gradient(135deg, rgba(124,58,237,0.13) 0%, rgba(16,16,32,0.7) 100%)",
+          backdropFilter: "blur(1px)",
+          border: `1px solid ${C.border ?? "#333"}`,
+          gap: 8, padding: 20,
+        }}>
+          <div style={{
+            fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
+            textTransform: "uppercase", color: C.accent ?? "#7c3aed",
+            background: `${C.accent ?? "#7c3aed"}18`, padding: "4px 10px", borderRadius: 6,
+          }}>
+            Coming Soon
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text ?? "#e2e8f0", textAlign: "center" }}>
+            Live Broker Sync
+          </div>
+          <div style={{ fontSize: 12, color: C.muted ?? "#888", textAlign: "center", maxWidth: 280, lineHeight: 1.5 }}>
+            Auto-import trades every 5 minutes from Tradovate and Rithmic. Launching soon — use CSV import in the meantime.
+          </div>
+        </div>
+      </div>
+
+      {/* ── DUMMY SECTION BELOW (hidden — preserved for when live sync ships) ── */}
+      {false && connections.length === 0 ? (
         <div style={{ ...card, color: C.muted ?? "#888", fontSize: 14, textAlign: "center", padding: "22px 16px" }}>
           No broker connected yet.<br />
           <span style={{ fontSize: 12 }}>Trades will auto-import every 5 minutes once connected.</span>
         </div>
-      ) : (
+      ) : false && (
         connections.map(conn => (
           <div key={conn.id} style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -384,13 +425,15 @@ export function DataSourcesScreen({
         ))
       )}
 
-      {/* ── ADD BROKER BUTTON ── */}
-      <button
-        style={{ ...btn("ghost"), width: "100%", justifyContent: "center", marginBottom: 24, padding: "11px 16px" }}
-        onClick={() => { setShowConnect(true); setConnectError(""); }}
-      >
-        + Connect Tradovate Account
-      </button>
+      {/* ── ADD BROKER BUTTON — hidden until live sync ships ── */}
+      {false && (
+        <button
+          style={{ ...btn("ghost"), width: "100%", justifyContent: "center", marginBottom: 24, padding: "11px 16px" }}
+          onClick={() => { setShowConnect(true); setConnectError(""); }}
+        >
+          + Connect Tradovate Account
+        </button>
+      )}
 
       {/* ── CSV IMPORT ── */}
       <SectionHeader C={C}>CSV Import</SectionHeader>
