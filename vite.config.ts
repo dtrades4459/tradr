@@ -13,14 +13,14 @@ export default defineConfig({
       srcDir: "src",
       filename: "sw.ts",
 
-      // Point to the existing manifest — vite-plugin-pwa will not overwrite it.
+      // Point to the existing manifest -- vite-plugin-pwa will not overwrite it.
       manifest: false,
 
       // Register the service worker automatically on every page load.
       registerType: "autoUpdate",
 
       injectManifest: {
-        // Only precache compiled JS/CSS/HTML — never trade data or screenshots.
+        // Only precache compiled JS/CSS/HTML -- never trade data or screenshots.
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2}"],
         // Exclude large or frequently-changing assets from the precache so the
         // install payload stays small.
@@ -40,7 +40,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id: string) {
+        manualChunks(id) {
           if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/scheduler")) {
             return "vendor-react";
           }
