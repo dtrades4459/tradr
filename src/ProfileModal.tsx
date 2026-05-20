@@ -1,3 +1,4 @@
+import { storage } from "./lib/storage";
 import { useState, useEffect, useMemo } from "react";
 import { MONO, BODY, DISPLAY, AvatarCircle } from "./shared";
 
@@ -13,24 +14,24 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
       try {
         const norm = handle.replace(/^@/, "").toLowerCase();
         let code: string | null = null;
-        const handleRow = await (window as any).storage.get(`tradr_handle_${norm}`, true);
+        const handleRow = await storage.get(`tradr_handle_${norm}`, true);
         if (handleRow) {
           try { code = JSON.parse(handleRow.value)?.code || null; } catch {}
           if (!code) code = handleRow.owner_id || null;
           setTargetCode(code);
         }
-        const profileRow = await (window as any).storage.get(`tradr_profile_pub_${norm}`, true);
+        const profileRow = await storage.get(`tradr_profile_pub_${norm}`, true);
         if (profileRow) {
           const p = JSON.parse(profileRow.value);
           setPubProfile(p);
           if (p.publicTrades && code) {
-            const feedRow = await (window as any).storage.get(`tradr_feed_${code}`, true);
+            const feedRow = await storage.get(`tradr_feed_${code}`, true);
             if (feedRow) {
               try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
             }
           }
         } else if (code) {
-          const feedRow = await (window as any).storage.get(`tradr_feed_${code}`, true);
+          const feedRow = await storage.get(`tradr_feed_${code}`, true);
           if (feedRow) {
             try {
               const t = JSON.parse(feedRow.value);

@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from "../lib/supabase";
+import { storage } from "../lib/storage";
 import { log } from "../lib/log";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -71,22 +72,12 @@ export const circleKeys = {
   myCirclesCache: () => `tradr_circles`,
 };
 
-// Thin wrapper over window.storage so tests can mock without touching window.
-function store() {
-  return (window as any).storage as {
-    get: (key: string, shared?: boolean) => Promise<{ value: string } | null>;
-    set: (key: string, value: string, shared?: boolean) => Promise<void>;
-    del: (key: string, shared?: boolean) => Promise<void>;
-    delete: (key: string, shared?: boolean) => Promise<void>;
-    listByPrefix: (prefix: string) => Promise<Array<{ key: string; value: string }>>;
-  };
-}
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
 export async function readCircleMeta(code: string): Promise<CircleMeta | null> {
   try {
-    const res = await store().get(circleKeys.meta(code), true);
+    const res = await storage.get(circleKeys.meta(code), true);
     if (!res) return null;
     return JSON.parse(res.value);
   } catch (e) {
@@ -97,7 +88,7 @@ export async function readCircleMeta(code: string): Promise<CircleMeta | null> {
 
 export async function readCircleMembers(code: string, fallback: MemberRecord[] = []): Promise<MemberRecord[]> {
   try {
-    const rows = await store().listByPrefix(circleKeys.memberPrefix(code));
+    const rows = await storage.listByPrefix(circleKeys.memberPrefix(code));
     if (!rows.length) return fallback;
     const out: MemberRecord[] = [];
     for (const r of rows) {
@@ -117,7 +108,7 @@ export async function readLeaderboard(circle: Pick<Circle, "code" | "members">):
   // Fetch all member entries in parallel (was a sequential for..of — O(n) round trips).
   const rows = await Promise.all(
     members.map(m =>
-      store().get(circleKeys.entry(circle.code, m.code), true).catch(e => {
+      storage.get(circleKeys.entry(circle.code, m.code), true).catch(e => {
         log.error("circles.readLeaderboard", e, { code: circle.code, memberCode: m.code });
         return null;
       })
@@ -165,8 +156,8 @@ export async function createCircle(input: {
   // Two writes, both owned by the creator:
   //   - the circle meta row
   //   - the creator's own member row
-  await store().set(circleKeys.meta(code), JSON.stringify(meta), true);
-  await store().set(circleKeys.member(code, me.code), JSON.stringify(me), true);
+  await storage.set(circleKeys.meta(code), JSON.stringify(meta), true);
+  await storage.set(circleKeys.member(code, me.code), JSON.stringify(me), true);
   return { ...meta, members: [me], isOwner: true };
 }
 
@@ -178,7 +169,7 @@ export async function joinCircle(input: {
   const meta = await readCircleMeta(code);
   if (!meta) return null;
   // Write ONLY my own member row. Do not mutate the creator's circle row.
-  await store().set(circleKeys.member(code, input.me.code), JSON.stringify(input.me), true);
+  await storage.set(circleKeys.member(code, input.me.code), JSON.stringify(input.me), true);
   const members = await readCircleMembers(code, [input.me]);
   return { ...meta, members, isOwner: false };
 }
@@ -186,7 +177,7 @@ export async function joinCircle(input: {
 export async function leaveCircle(input: { code: string; myCode: string }): Promise<void> {
   // Only delete my OWN member row. RLS would block deleting anyone else's.
   try {
-    await store().del(circleKeys.member(input.code, input.myCode), true);
+    await storage.del(circleKeys.member(input.code, input.myCode), true);
   } catch (e) {
     log.error("circles.leaveCircle", e, { code: input.code, myCode: input.myCode });
   }
@@ -196,7 +187,7 @@ export async function ensureMyMemberRow(input: { code: string; me: MemberRecord 
   // Idempotent — safe to call on every circle sync. Fixes legacy circles
   // that only had members[] inlined on the creator's meta row.
   try {
-    await store().set(circleKeys.member(input.code, input.me.code), JSON.stringify(input.me), true);
+    await storage.set(circleKeys.member(input.code, input.me.code), JSON.stringify(input.me), true);
   } catch (e) {
     log.error("circles.ensureMyMemberRow", e, { code: input.code });
   }
@@ -207,7 +198,7 @@ export async function publishLeaderboardEntry(input: {
   entry: LeaderboardEntry;
 }): Promise<void> {
   try {
-    await store().set(circleKeys.entry(input.code, input.entry.memberCode), JSON.stringify(input.entry), true);
+    await storage.set(circleKeys.entry(input.code, input.entry.memberCode), JSON.stringify(input.entry), true);
   } catch (e) {
     log.error("circles.publishLeaderboardEntry", e, { code: input.code });
     throw e;

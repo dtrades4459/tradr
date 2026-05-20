@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from "../lib/supabase";
+import { storage } from "../lib/storage";
 import { log } from "../lib/log";
 
 export interface FollowEdge {
@@ -33,15 +34,6 @@ export const followKeys = {
   legacyFollowers: (myCode: string) => `tradr_followers_${myCode}`,
 };
 
-function store() {
-  return (window as any).storage as {
-    get: (key: string, shared?: boolean) => Promise<{ value: string } | null>;
-    set: (key: string, value: string, shared?: boolean) => Promise<void>;
-    del: (key: string, shared?: boolean) => Promise<void>;
-    delete: (key: string, shared?: boolean) => Promise<void>;
-    listByPrefix: (prefix: string) => Promise<Array<{ key: string; value: string }>>;
-  };
-}
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
@@ -53,10 +45,10 @@ export interface FollowGraph {
 export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
   try {
     const [followRows, followerRows, legacyFg, legacyFr] = await Promise.all([
-      store().listByPrefix(followKeys.followPrefix(myCode)),
-      store().listByPrefix(followKeys.followerPrefix(myCode)),
-      store().get(followKeys.legacyFollowing(myCode), true),
-      store().get(followKeys.legacyFollowers(myCode), true),
+      storage.listByPrefix(followKeys.followPrefix(myCode)),
+      storage.listByPrefix(followKeys.followerPrefix(myCode)),
+      storage.get(followKeys.legacyFollowing(myCode), true),
+      storage.get(followKeys.legacyFollowers(myCode), true),
     ]);
 
     const followingSet = new Set<string>();
@@ -95,7 +87,7 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
 // drops the legacy row. Safe because the legacy row is owned by us.
 export async function migrateLegacyFollows(myCode: string): Promise<void> {
   try {
-    const legacyFg = await store().get(followKeys.legacyFollowing(myCode), true);
+    const legacyFg = await storage.get(followKeys.legacyFollowing(myCode), true);
     if (!legacyFg) return;
     const legacy: string[] = (() => {
       try { return JSON.parse(legacyFg.value) || []; }
@@ -104,12 +96,12 @@ export async function migrateLegacyFollows(myCode: string): Promise<void> {
     await Promise.all(legacy.map(async (target) => {
       if (!target || target === myCode) return;
       const edge: FollowEdge = { follower: myCode, target, at: new Date().toISOString() };
-      try { await store().set(followKeys.follow(myCode, target), JSON.stringify(edge), true); }
+      try { await storage.set(followKeys.follow(myCode, target), JSON.stringify(edge), true); }
       catch (e) { log.error("follows.migrateLegacyFollows.follow", e, { target }); }
-      try { await store().set(followKeys.follower(target, myCode), JSON.stringify(edge), true); }
+      try { await storage.set(followKeys.follower(target, myCode), JSON.stringify(edge), true); }
       catch (e) { log.error("follows.migrateLegacyFollows.follower", e, { target }); }
     }));
-    try { await store().del(followKeys.legacyFollowing(myCode), true); }
+    try { await storage.del(followKeys.legacyFollowing(myCode), true); }
     catch (e) { log.error("follows.migrateLegacyFollows.delete", e); }
   } catch (e) {
     log.error("follows.migrateLegacyFollows", e, { myCode });
@@ -122,9 +114,9 @@ export async function followUser(input: { myCode: string; target: string }): Pro
   const target = input.target.trim().toUpperCase();
   if (!target || target === input.myCode) return;
   const edge: FollowEdge = { follower: input.myCode, target, at: new Date().toISOString() };
-  try { await store().set(followKeys.follow(input.myCode, target), JSON.stringify(edge), true); }
+  try { await storage.set(followKeys.follow(input.myCode, target), JSON.stringify(edge), true); }
   catch (e) { log.error("follows.followUser.follow", e, { target }); }
-  try { await store().set(followKeys.follower(target, input.myCode), JSON.stringify(edge), true); }
+  try { await storage.set(followKeys.follower(target, input.myCode), JSON.stringify(edge), true); }
   catch (e) { log.error("follows.followUser.follower", e, { target }); }
 }
 
@@ -132,9 +124,9 @@ export async function unfollowUser(input: { myCode: string; target: string }): P
   const target = input.target.trim().toUpperCase();
   if (!target) return;
   // We own both edges, so RLS lets us delete them.
-  try { await store().del(followKeys.follow(input.myCode, target), true); }
+  try { await storage.del(followKeys.follow(input.myCode, target), true); }
   catch (e) { log.error("follows.unfollowUser.follow", e, { target }); }
-  try { await store().del(followKeys.follower(target, input.myCode), true); }
+  try { await storage.del(followKeys.follower(target, input.myCode), true); }
   catch (e) { log.error("follows.unfollowUser.follower", e, { target }); }
 }
 

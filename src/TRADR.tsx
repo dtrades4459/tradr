@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./lib/supabase";
 import type { User } from "@supabase/supabase-js";
-import { onStorageError } from "./lib/storage";
+import { onStorageError, storage } from "./lib/storage";
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { subscribeToCircle } from "./data/circles";
@@ -568,12 +568,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         //   tradr_follow_<follower>_<target>    — enumerates my "following"
         //   tradr_follower_<target>_<follower>  — enumerates my "followers"
         const [followRows, followerRows, legacyFg, legacyFr] = await Promise.all([
-          (window as any).storage.listByPrefix(`tradr_follow_${mc}_`),
-          (window as any).storage.listByPrefix(`tradr_follower_${mc}_`),
+          storage.listByPrefix(`tradr_follow_${mc}_`),
+          storage.listByPrefix(`tradr_follower_${mc}_`),
           // Legacy fallback — users who followed before the per-row refactor
           // still have single rows. Merge them in for a transparent upgrade.
-          (window as any).storage.get(`tradr_following_${mc}`, true),
-          (window as any).storage.get(`tradr_followers_${mc}`, true),
+          storage.get(`tradr_following_${mc}`, true),
+          storage.get(`tradr_followers_${mc}`, true),
         ]);
         if (!alive) return;
 
@@ -627,10 +627,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             await Promise.all(legacy.map(async (target) => {
               if (!target || target === mc) return;
               const edge = { follower: mc, target, at: new Date().toISOString() };
-              try { await (window as any).storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
-              try { await (window as any).storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
+              try { await storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
+              try { await storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
             }));
-            try { await (window as any).storage.delete(`tradr_following_${mc}`, true); } catch {}
+            try { await storage.delete(`tradr_following_${mc}`, true); } catch {}
           } catch {}
         }
       } catch {}
@@ -664,7 +664,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       const myCode = getMyCode();
       const me = { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: myCode, joinedAt: new Date().toISOString() };
       try {
-        await (window as any).storage.set(`tradr_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
+        await storage.set(`tradr_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
       } catch {}
     }
 
@@ -681,7 +681,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       const refreshed = await Promise.all(current.map(async (c: Circle) => {
         try {
           const [metaRes, members] = await Promise.all([
-            (window as any).storage.get("tradr_circle_" + c.code, true),
+            storage.get("tradr_circle_" + c.code, true),
             readCircleMembers(c.code, c.members || []),
           ]);
           const fresh = metaRes ? JSON.parse(metaRes.value) : c;
@@ -692,7 +692,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       const changed = JSON.stringify(refreshed) !== JSON.stringify(current);
       if (changed) {
         setMyCircles(refreshed);
-        try { await (window as any).storage.set("tradr_circles", JSON.stringify(refreshed)); } catch {}
+        try { await storage.set("tradr_circles", JSON.stringify(refreshed)); } catch {}
       }
     }
     syncCircles();
@@ -745,7 +745,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   }, [loading, profile.uid]);
 
   async function loadAll() {
-    const store = (window as any).storage;
+    const store = storage;
     const [t, pr, fr, ff, sc, sr, dm, ci, st, cs, tv, v2ProfileRes] = await Promise.all([
       store.get("tradr_trades").catch(() => null),
       store.get("tradr_profile").catch(() => null),
@@ -797,7 +797,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             }
             if (changed) {
               setTrades(updated);
-              await (window as any).storage.set("tradr_trades", JSON.stringify(updated));
+              await storage.set("tradr_trades", JSON.stringify(updated));
             }
           })();
         }
@@ -878,7 +878,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
     // Load Stripe customer ID
     try {
-      const store = (window as any).storage;
+      const store = storage;
       const stripeKv = await store.get("tradr_stripe_customer").catch(() => null);
       if (stripeKv?.value) {
         const { customerId } = JSON.parse(stripeKv.value);
@@ -898,7 +898,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     // Rebuild extra strategies from the new set (replaces stale entries).
     addExtraStrategies(Object.fromEntries(u.map((s) => [s.name, s as StrategyDef])));
     setCustomStrategies(u);
-    await (window as any).storage.set("tradr_custom_strategies", JSON.stringify(u));
+    await storage.set("tradr_custom_strategies", JSON.stringify(u));
   }
 
   function openNewStrategy() {
@@ -972,7 +972,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setTrades(u);
     // Always write KV — safety net + fast reads during migration window
     try {
-      await (window as any).storage.set("tradr_trades", JSON.stringify(u));
+      await storage.set("tradr_trades", JSON.stringify(u));
     } catch (e) {
       log.error("saveTrades.kv", e);
     }
@@ -1000,13 +1000,13 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   async function saveProfile(u: Profile) {
     setProfile(u);
     // ── Legacy KV write (always — keeps live app working until v2 cutover) ──
-    await (window as any).storage.set("tradr_profile", JSON.stringify(u));
+    await storage.set("tradr_profile", JSON.stringify(u));
     if (u.handle) {
       registerHandle(u.handle, profile.handle || null);
       // Write public profile so other traders can view it
       const norm = u.handle.replace(/^@/, "").toLowerCase();
       try {
-        await (window as any).storage.set(
+        await storage.set(
           `tradr_profile_pub_${norm}`,
           JSON.stringify({ name: u.name || "Trader", handle: norm, avatar: u.avatar || "", bio: u.bio || "", publicTrades: u.publicTrades || false }),
           true
@@ -1037,9 +1037,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       } catch (e) { log.error("saveProfile.v2", e, { userId: user.id }); }
     }
   }
-  async function saveFriends(u: string[]) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
-  async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
-  async function saveMyCircles(u: Circle[]) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
+  async function saveFriends(u: string[]) { setFriends(u); await storage.set("tradr_friends", JSON.stringify(u)); }
+  async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await storage.set("tradr_checklists", JSON.stringify(u)); }
+  async function saveMyCircles(u: Circle[]) { setMyCircles(u); await storage.set("tradr_circles", JSON.stringify(u)); }
 
   // Each circle is split into two kinds of rows:
   //   tradr_circle_<CODE>                        — metadata, owned by creator
@@ -1070,7 +1070,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       const fullSess: TradovateSession = { ...sess, accountId: acct?.id, accountName: acct?.name };
       setTradovateSession(fullSess);
       setTradovateForm(f => ({ ...f, password: "" })); // clear password from state
-      await (window as any).storage.set("tradr_tradovate", JSON.stringify(fullSess));
+      await storage.set("tradr_tradovate", JSON.stringify(fullSess));
       const positions = await tradovateGetPositions(fullSess);
       setTradovatePositions(positions);
       showToast(`Connected to ${acct?.name ?? "Tradovate"}`);
@@ -1090,7 +1090,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         if (!refreshed) { showToast("Tradovate token expired — please reconnect"); setTradovateSession(null); return; }
         s = refreshed;
         setTradovateSession(s);
-        await (window as any).storage.set("tradr_tradovate", JSON.stringify(s));
+        await storage.set("tradr_tradovate", JSON.stringify(s));
       }
       const positions = await tradovateGetPositions(s);
       setTradovatePositions(positions);
@@ -1124,7 +1124,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       // Update lastSyncTime and positions
       const updatedSess: TradovateSession = { ...sess, lastSyncTime: new Date().toISOString() };
       setTradovateSession(updatedSess);
-      await (window as any).storage.set("tradr_tradovate", JSON.stringify(updatedSess));
+      await storage.set("tradr_tradovate", JSON.stringify(updatedSess));
       const positions = await tradovateGetPositions(updatedSess);
       setTradovatePositions(positions);
     } catch (e) {
@@ -1140,7 +1140,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setTradovatePositions([]);
     setTradovateForm({ username: "", password: "", env: "demo" });
     setTradovateError("");
-    try { await (window as any).storage.del("tradr_tradovate"); } catch { /* noop */ }
+    try { await storage.del("tradr_tradovate"); } catch { /* noop */ }
     showToast("Tradovate disconnected");
   }
 
@@ -1164,7 +1164,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const updated = [...trades, ...deduped];
     setTrades(updated);
     try {
-      const store = (window as any).storage;
+      const store = storage;
       await store.set("tradr_trades", JSON.stringify(updated));
     } catch (e) { log.error("tradovate.fillImport.save", e); }
     return deduped.length;
@@ -1173,7 +1173,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   /** Read the ban list for a circle. Returns a Set of banned member codes. */
   async function readCircleBans(circleCode: string): Promise<Set<string>> {
     try {
-      const r = await (window as any).storage.get(`tradr_circle_bans_${circleCode}`, true);
+      const r = await storage.get(`tradr_circle_bans_${circleCode}`, true);
       if (!r) return new Set();
       const arr = JSON.parse(r.value);
       return new Set(Array.isArray(arr) ? arr : []);
@@ -1183,7 +1183,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   async function readCircleMembers(code: string, fallback: CircleMember[] = []) {
     try {
       const [rows, bans] = await Promise.all([
-        (window as any).storage.listByPrefix(`tradr_circle_member_${code}_`),
+        storage.listByPrefix(`tradr_circle_member_${code}_`),
         readCircleBans(code),
       ]);
       if (!rows.length) return fallback.filter((m: CircleMember) => !bans.has(m.code));
@@ -1206,8 +1206,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
       };
       // Write metadata (owned by me) + my own member row.
-      await (window as any).storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
-      await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      await storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
+      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
       const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
       await saveMyCircles(updated);
       setCircleForm({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
@@ -1225,12 +1225,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (isJoiningCircle) return;
     setIsJoiningCircle(true);
     try {
-      const res = await (window as any).storage.get("tradr_circle_" + code, true);
+      const res = await storage.get("tradr_circle_" + code, true);
       if (!res) { setCircleMsg("Circle not found. Check the code."); setTimeout(() => setCircleMsg(""), 2500); return; }
       const circle = JSON.parse(res.value);
       const me = myMemberRecord();
       // Only write my OWN member row. Do not mutate the creator's circle row.
-      await (window as any).storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
       // Read the fresh member list (includes me, creator, and any others already in).
       const members = await readCircleMembers(code, [me]);
       const updated = [...myCircles, { ...circle, members, isOwner: false }];
@@ -1249,7 +1249,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       // The ban row key is owned by the circle creator so RLS allows the write.
       const bans = await readCircleBans(circleCode);
       bans.add(memberCode);
-      await (window as any).storage.set(
+      await storage.set(
         `tradr_circle_bans_${circleCode}`,
         JSON.stringify([...bans]),
         true
@@ -1276,8 +1276,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const myCode = getMyCode();
     try {
       await Promise.all([
-        (window as any).storage.del(`tradr_circle_member_${circleCode}_${myCode}`, true),
-        (window as any).storage.del(`tradr_circle_entry_${circleCode}_${myCode}`, true),
+        storage.del(`tradr_circle_member_${circleCode}_${myCode}`, true),
+        storage.del(`tradr_circle_entry_${circleCode}_${myCode}`, true),
       ]);
     } catch { /* rows may not exist — that's fine */ }
     const updated = myCircles.filter((c: Circle) => c.code !== circleCode);
@@ -1303,7 +1303,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       topStrategy: Object.entries(stratStats).sort((a, b) => (b[1] as { w: number; count: number }).w / Math.max((b[1] as { w: number; count: number }).count, 1) - (a[1] as { w: number; count: number }).w / Math.max((a[1] as { w: number; count: number }).count, 1))[0]?.[0] || null,
       updatedAt: new Date().toISOString(),
     };
-    try { await (window as any).storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true); }
+    try { await storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true); }
     catch (e) { if (!silent) showToast("Publish failed"); return; }
     if (!silent) showToast("Stats published");
   }
@@ -1319,7 +1319,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const prefix = `tradr_circle_entry_${circle.code}_`;
     let rowMap: Record<string, any> = {};
     try {
-      const rows = await (window as any).storage.listByPrefix(prefix);
+      const rows = await storage.listByPrefix(prefix);
       for (const row of rows || []) {
         try {
           const parsed = JSON.parse(row.value);
@@ -1349,9 +1349,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     return entries;
   }
 
-  async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await (window as any).storage.set("tradr_thresholds", JSON.stringify(u)); }
-  async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await (window as any).storage.set("tradr_rules", JSON.stringify(u)); }
-  async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await (window as any).storage.set("tradr_dark", JSON.stringify(nd)); }
+  async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await storage.set("tradr_thresholds", JSON.stringify(u)); }
+  async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await storage.set("tradr_rules", JSON.stringify(u)); }
+  async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await storage.set("tradr_dark", JSON.stringify(nd)); }
 
   // Swipe — wired via useEffect so we can pass { passive: false } and call
   // preventDefault(), which prevents the browser from interpreting a horizontal
@@ -1603,7 +1603,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   async function resolveHandle(handle: string): Promise<{ code: string; name: string } | null> {
     try {
       const key = `tradr_handle_${normaliseHandle(handle)}`;
-      const r = await (window as any).storage.get(key, true);
+      const r = await storage.get(key, true);
       if (!r) return null;
       return JSON.parse(r.value);
     } catch { return null; }
@@ -1614,9 +1614,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (!norm) return;
     // Clean up old handle row if the handle changed (we own it, RLS allows delete).
     if (oldHandle && normaliseHandle(oldHandle) !== norm) {
-      try { await (window as any).storage.del(`tradr_handle_${normaliseHandle(oldHandle)}`, true); } catch {}
+      try { await storage.del(`tradr_handle_${normaliseHandle(oldHandle)}`, true); } catch {}
     }
-    await (window as any).storage.set(
+    await storage.set(
       `tradr_handle_${norm}`,
       JSON.stringify({ code: mc, name: profile.name || "Trader" }),
       true
@@ -1647,8 +1647,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setFollowing([...following, target]);
     const edge = { follower: mc, target, at: new Date().toISOString() };
     // ── Legacy KV write (always) ──────────────────────────────────────────────
-    try { await (window as any).storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
-    try { await (window as any).storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
+    try { await storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
+    try { await storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
     // ── V2 dual-write (behind flag) ───────────────────────────────────────────
     if (isFlagOn("newFollows") && profile.uid) {
       followUserV2(profile.uid, target).catch(e => log.error("followUser.v2", e));
@@ -1661,8 +1661,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const mc = getMyCode();
     setFollowing(following.filter(c => c !== target));
     // ── Legacy KV delete (always) ─────────────────────────────────────────────
-    try { await (window as any).storage.delete(`tradr_follow_${mc}_${target}`, true); } catch {}
-    try { await (window as any).storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
+    try { await storage.delete(`tradr_follow_${mc}_${target}`, true); } catch {}
+    try { await storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
     // ── V2 dual-write (behind flag) ───────────────────────────────────────────
     if (isFlagOn("newFollows") && profile.uid) {
       unfollowUserV2(profile.uid, target).catch(e => log.error("unfollowUser.v2", e));
@@ -1748,12 +1748,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       const mc = getMyCode();
       // Wipe all user_kv rows (trades, profile, checklists, etc)
       const keys = ["tradr_trades","tradr_profile","tradr_friends","tradr_feed","tradr_checklists","tradr_rules","tradr_dark","tradr_circles","tradr_thresholds","tradr_custom_strategies"];
-      await Promise.all(keys.map(k => (window as any).storage.del(k).catch(() => {})));
+      await Promise.all(keys.map(k => storage.del(k).catch(() => {})));
       // Wipe shared_kv rows we own (circle entries, feed, handle, follows)
       await Promise.all([
         `tradr_feed_${mc}`,
         `tradr_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
-      ].map(k => (window as any).storage.del(k, true).catch(() => {})));
+      ].map(k => storage.del(k, true).catch(() => {})));
       // Sign out and let Supabase handle auth deletion
       phReset();
       await supabase.auth.signOut();
@@ -1801,18 +1801,18 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   async function publishFeed() {
     const mc = getMyCode();
     const items = trades.slice(0, 10).map(t => ({ authorCode: mc, authorName: profile.name || "Trader", authorHandle: profile.handle || "@trader", authorAvatar: profile.avatar || "", tradeId: t.id, pair: t.pair, date: t.date, outcome: t.outcome, pnl: t.pnl, rr: t.rr, strategy: t.strategy, setup: t.setup, notes: t.notes, session: t.session, reactions: t.reactions || {}, comments: (t.comments || []).length, publishedAt: new Date().toISOString() }));
-    await (window as any).storage.set(`tradr_feed_${mc}`, JSON.stringify(items), true);
+    await storage.set(`tradr_feed_${mc}`, JSON.stringify(items), true);
   }
   async function refreshFeed() {
     const items: typeof friendFeed = [];
     // Read feeds from everyone in the new follow system (following) + old friends list
     const allCodes = new Set([...following, ...friends.map((f: { code: string }) => f.code)]);
     for (const code of allCodes) {
-      try { const r = await (window as any).storage.get(`tradr_feed_${code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { }
+      try { const r = await storage.get(`tradr_feed_${code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { }
     }
     items.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
     setFriendFeed(items);
-    await (window as any).storage.set("tradr_feed", JSON.stringify(items));
+    await storage.set("tradr_feed", JSON.stringify(items));
   }
   function reactToFeed(ac: string, tid: number, reaction: string) {
     const key = `${ac}_${tid}_${reaction}`;
@@ -2038,11 +2038,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           // Auto-join TRADR Global circle for every new user (silent — no error on failure).
           if (TRADR_GLOBAL_CODE && !myCircles.find((c: Circle) => c.code === TRADR_GLOBAL_CODE)) {
             try {
-              const res = await (window as any).storage.get("tradr_circle_" + TRADR_GLOBAL_CODE, true);
+              const res = await storage.get("tradr_circle_" + TRADR_GLOBAL_CODE, true);
               if (res) {
                 const circle = JSON.parse(res.value);
                 const me = myMemberRecord();
-                await (window as any).storage.set(`tradr_circle_member_${TRADR_GLOBAL_CODE}_${me.code}`, JSON.stringify(me), true);
+                await storage.set(`tradr_circle_member_${TRADR_GLOBAL_CODE}_${me.code}`, JSON.stringify(me), true);
                 const members = await readCircleMembers(TRADR_GLOBAL_CODE, [me]);
                 await saveMyCircles([...myCircles, { ...circle, members, isOwner: false }]);
               }
@@ -4499,4 +4499,13 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
                     </div>
                     <span style={{ fontFamily: BODY, fontSize: "13px", color: isReq ? C.text : C.text2, flex: 1, lineHeight: 1.5 }}>{item.text}</span>
                     <span style={{ fontFamily: MONO, fontSize: "10px", color: isReq ? C.text : C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{isReq ? "Required" : "Optional"}</span>
- 
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
