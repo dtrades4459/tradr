@@ -293,7 +293,7 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
           fontFamily: MONO, fontSize: 10,
           color: DIM, letterSpacing: "0.06em",
         }}>
-          No code? DM @tradrjournal on X
+          No code? DM <a href="https://instagram.com/dylon.trades" target="_blank" rel="noopener noreferrer" style={{ color: MINT, textDecoration: "none" }}>@dylon.trades</a> on Instagram
         </div>
 
       </div>

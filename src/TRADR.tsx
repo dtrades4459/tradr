@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./lib/supabase";
+import type { User } from "@supabase/supabase-js";
 import { onStorageError } from "./lib/storage";
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
@@ -7,6 +8,7 @@ import { subscribeToCircle } from "./data/circles";
 import { subscribeToFollows, followUserV2, unfollowUserV2, readFollowGraphV2 } from "./data/follows";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
+import { STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap, addExtraStrategies } from "./data/strategies";
 import {
   tradovateAuth,
   tradovateRefresh,
@@ -20,7 +22,7 @@ import {
 } from "./lib/tradovate";
 
 import type { TradeComment, ReactionMap, Trade, Profile, CircleMember, Circle, Insight, StrategyDef } from "./types";
-import { AvatarCircle, Badge, SectionKicker, StrategyPill, StrategySelect, SubNavDropdown, GearButton, Toast, TrMark, CrownIcon, outcomeColor, outcomeLetter, stratCode, stratShort, compressImage, setSharedStrategiesMap, MONO, BODY, DISPLAY } from "./shared";
+import { AvatarCircle, Badge, SectionKicker, StrategyPill, StrategySelect, SubNavDropdown, GearButton, Toast, TrMark, CrownIcon, outcomeColor, outcomeLetter, stratCode, stratShort, compressImage, MONO, BODY, DISPLAY } from "./shared";
 import { TradingCircles } from "./TradingCircles";
 import { FriendsFeed } from "./FriendsFeed";
 import { MiniSparkline, PnLChart, MonthlyPnLChart, WinRateChart, TradeDurationChart, NetDailyPnLChart, DailyCumulativePnLChart, TradeStatCards, AvgStatsCards, DailyInsights, CalendarView, DrawdownCurve, SessionHeatmap, TimeOfDayChart, DayOfWeekChart, MAEMFEChart, generateInsights } from "./charts";
@@ -42,44 +44,7 @@ import { phIdentify, phCapture, phReset } from "./lib/posthog";
 /** The TRADR Global circle — every new user auto-joins on onboarding completion. */
 const TRADR_GLOBAL_CODE = "TRADRG-HB1U";
 
-// Strategy icons are now 2-3 letter mono codes (no emoji).
-const STRATEGIES: Record<string, StrategyDef> = {
-  "ICT / Smart Money": {
-    code: "ICT",
-    setups: ["OTE (Optimal Trade Entry)","FVG (Fair Value Gap)","Order Block","Breaker Block","Liquidity Sweep","SIBI / BISI","Silver Bullet","Judas Swing","Power of 3","MSS (Market Structure Shift)","Other"],
-    checklist: ["HTF bias confirmed (Daily / 4H)","Trading in correct session window","Liquidity swept before entry","POI identified (OB / FVG / BB)","LTF confirmation at POI","Stop loss below / above structure","Minimum R:R met (2R+)","No high-impact news in window"],
-    rules: ["Only trade with HTF narrative — never against it","Wait for liquidity to be taken before entry","Enter only on LTF displacement into a POI","No trades in the first 15 min of session open","Avoid trading 30 min before/after red folder news","Maximum 2 trades per session","Never move SL to breakeven before 1R is hit","If you miss the entry, let it go — no chasing"],
-  },
-  "Supply & Demand": {
-    code: "S&D",
-    setups: ["Fresh Supply Zone","Fresh Demand Zone","Rally Base Rally (RBR)","Drop Base Drop (DBD)","Rally Base Drop (RBD)","Drop Base Rally (DBR)","Zone Retest Entry","Proximal Line Touch","Distal Line Break","Engulfing at Zone","Other"],
-    checklist: ["HTF trend direction identified","Zone is fresh (untested)","Strong impulsive move from zone confirmed","Proximal line clearly defined","Entry near proximal, SL beyond distal","No major S/R levels inside the zone","Minimum 3:1 R:R to next opposing zone","No news events during trade window"],
-    rules: ["Only trade fresh, untested zones","The stronger the departure candle, the better the zone","Avoid zones with too many candles in the base","HTF zones take priority over LTF zones","Never enter mid-zone — wait for proximal line","If price spends too long in a zone, it's weakened","Always check what's on the other side of the zone","Scale out at 2R, let runners go to next zone"],
-  },
-  "Wyckoff / VSA": {
-    code: "WYC",
-    setups: ["Accumulation Schematic","Distribution Schematic","Spring (Phase C)","Upthrust (UT / UTAD)","Sign of Strength (SOS)","Sign of Weakness (SOW)","Last Point of Support (LPS)","Last Supply Point (LPSY)","Shakeout","Creek Break / Jump","Other"],
-    checklist: ["Identified correct Wyckoff phase (A–E)","Volume confirms price action at key point","Composite Operator narrative is clear","Spring or Upthrust tested (Phase C confirmed)","No supply/demand present at entry bar (VSA)","Price above/below key creek or ice level","SOS or SOW bar confirmed on LTF","Trade aligns with higher phase structure"],
-    rules: ["Never trade against the Composite Operator","Volume is king — price action without volume means nothing","Wait for Phase C confirmation before entering","A Spring must close back inside the range","High-volume narrow-spread bars signal absorption","No Demand / No Supply bars are your entry triggers","Always mark your creek/ice before the session","If you can't label the phase, stay out"],
-  },
-  "ORB (Opening Range Breakout)": {
-    code: "ORB",
-    setups: ["5-min ORB","15-min ORB","30-min ORB","1-hour ORB","Breakout + Retest","False Breakout Fade","Gap & Go","VWAP Reclaim after ORB","Pre-market High/Low Break","Other"],
-    checklist: ["Opening range clearly defined (high & low marked)","Pre-market trend / gap direction noted","Volume spike on breakout candle confirmed","Price closed outside the range (no wick-only break)","VWAP alignment with breakout direction","No major news in first 30 min of session","First pullback/retest entry identified","Stop placed inside opening range"],
-    rules: ["Define the opening range before the session starts","Only trade confirmed closes outside the range","Volume must expand on the breakout bar","The best ORBs have a pre-market bias — align with it","Fade false breakouts only after a full close back inside","Avoid ORBs on choppy, low-volume pre-market days","Take partial profits at 1R, trail the rest","No ORB trades after the first 90 min of the session"],
-  },
-};
-const STRATEGY_NAMES = Object.keys(STRATEGIES);
-// ─── EXTRA STRATEGIES ─────────────────────────────────────────────────────────
-// Custom user-defined strategies live here so STRATEGIES itself stays immutable.
-// loadAll() and saveCustomStrategies() write here instead of mutating STRATEGIES.
-let _extraStrategies: Record<string, StrategyDef> = {};
-function getAllStrategiesMap(): Record<string, StrategyDef> {
-  return { ...STRATEGIES, ..._extraStrategies };
-}
-// Seed shared.tsx's stratCode with built-in strategies on module load.
-// (Extra strategies are added later by loadAll / saveCustomStrategies.)
-setSharedStrategiesMap(getAllStrategiesMap());
+// STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap → src/data/strategies.ts
 
 // ─── DEFAULT PROFILE ─────────────────────────────────────────────────────────
 const DEF_PROFILE: Profile = {
@@ -168,7 +133,7 @@ const LIGHT = {
   shadow: "rgba(0,0,0,0.08)",
 };
 
-function calcRR(e: any, s: any, t: any): string {
+function calcRR(e: string, s: string, t: string): string {
   const ev = parseFloat(e), sv = parseFloat(s), tv = parseFloat(t);
   // Guard against missing inputs (NaN) and division-by-zero (entry === stop loss).
   if (isNaN(ev) || isNaN(sv) || isNaN(tv)) return "";
@@ -207,7 +172,16 @@ function useIsDesktop(breakpoint = 900) {
 // Modal-style card rendered inside the Checklist view when the user clicks
 // "+ New" or "Edit". Handles name, code abbreviation, and optional setups list.
 // Checklist items and rules are managed separately in the checklist tab itself.
-function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl }: any) {
+function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl }: {
+  draft: StrategyDef & { name: string };
+  setDraft: React.Dispatch<React.SetStateAction<StrategyDef & { name: string }>>;
+  onSave: () => void;
+  onCancel: () => void;
+  isEdit: boolean;
+  C: typeof DARK;
+  inp: React.CSSProperties;
+  lbl: React.CSSProperties;
+}) {
   const [newSetup, setNewSetup] = useState("");
   const canSave = !!(draft.name || "").trim();
   return (
@@ -222,7 +196,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
         <input
           autoFocus
           value={draft.name}
-          onChange={e => setDraft((d: any) => ({ ...d, name: e.target.value }))}
+          onChange={e => setDraft((d) => ({ ...d, name: e.target.value }))}
           onKeyDown={e => { if (e.key === "Enter" && canSave) onSave(); if (e.key === "Escape") onCancel(); }}
           placeholder="e.g. Opening Range Breakout"
           style={{ ...inp }}
@@ -234,7 +208,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
         <label style={lbl}>Code (up to 4 chars · auto-derived if blank)</label>
         <input
           value={draft.code}
-          onChange={e => setDraft((d: any) => ({ ...d, code: e.target.value.replace(/[^A-Z0-9&]/gi, "").slice(0, 4).toUpperCase() }))}
+          onChange={e => setDraft((d) => ({ ...d, code: e.target.value.replace(/[^A-Z0-9&]/gi, "").slice(0, 4).toUpperCase() }))}
           placeholder={draft.name ? (draft.name.replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "CODE") : "CODE"}
           maxLength={4}
           style={{ ...inp, fontFamily: MONO, letterSpacing: "0.14em", textTransform: "uppercase" }}
@@ -250,7 +224,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
               <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: C.panel2 ?? C.bg, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "4px 10px 4px 12px", fontFamily: MONO, fontSize: "10px", color: C.text2 ?? C.muted, letterSpacing: "0.06em" }}>
                 {s}
                 <button
-                  onClick={() => setDraft((d: any) => ({ ...d, setups: d.setups.filter((_: string, j: number) => j !== i) }))}
+                  onClick={() => setDraft((d) => ({ ...d, setups: d.setups.filter((_: string, j: number) => j !== i) }))}
                   style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 0, fontSize: "13px", lineHeight: 1, display: "flex", alignItems: "center" }}>
                   ×
                 </button>
@@ -264,7 +238,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
             onChange={e => setNewSetup(e.target.value)}
             onKeyDown={e => {
               if (e.key === "Enter" && newSetup.trim()) {
-                setDraft((d: any) => ({ ...d, setups: [...(d.setups || []), newSetup.trim()] }));
+                setDraft((d) => ({ ...d, setups: [...(d.setups || []), newSetup.trim()] }));
                 setNewSetup("");
               }
               if (e.key === "Escape") setNewSetup("");
@@ -274,7 +248,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
           />
           {newSetup.trim() && (
             <button
-              onClick={() => { setDraft((d: any) => ({ ...d, setups: [...(d.setups || []), newSetup.trim()] })); setNewSetup(""); }}
+              onClick={() => { setDraft((d) => ({ ...d, setups: [...(d.setups || []), newSetup.trim()] })); setNewSetup(""); }}
               style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", flexShrink: 0 }}>
               Add
             </button>
@@ -302,7 +276,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
 
 // ─── Position Size Calculator ────────────────────────────────────────────────
 
-export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" | "pro" | "elite" } = {}) {
+export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [draftCount, setDraftCount] = useState(0);
   const [view, setView] = useState("home");
@@ -405,7 +379,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   // Custom strategies: user-defined, same shape as built-ins (name, code, setups, checklist, rules).
   // Merged into STRATEGIES global on load so stratCode/stratShort keep working unchanged.
   const [customStrategies, setCustomStrategies] = useState<any[]>([]);
-  const allStrategyNames = [...STRATEGY_NAMES, ...customStrategies.map((s: any) => s.name)];
+  const allStrategyNames = [...STRATEGY_NAMES, ...customStrategies.map((s: StrategyDef & { name: string }) => s.name)];
   // Custom-strategy editor state
   const [showStrategyEditor, setShowStrategyEditor] = useState(false);
   const [editingStrategy, setEditingStrategy] = useState<any>(null);
@@ -452,8 +426,14 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     Object.fromEntries(STRATEGY_NAMES.map(s => [s, { minCount: Math.ceil(STRATEGIES[s].checklist.length * 0.75), required: [] }]))
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAll(); }, []);
+  // Run once on mount. Using a ref guard instead of [] + suppression so the
+  // linter is satisfied — the ref prevents double-execution in Strict Mode.
+  const _loadedRef = useRef(false);
+  useEffect(() => {
+    if (_loadedRef.current) return;
+    _loadedRef.current = true;
+    void loadAll();
+  });
 
   useEffect(() => {
     // Use fontSize instead of zoom — zoom is non-standard and causes the
@@ -463,7 +443,10 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   }, [fontScale]);
 
   // ── Stripe return URL handler ───────────────────────────────────────────────
+  const _stripeHandledRef = useRef(false);
   useEffect(() => {
+    if (_stripeHandledRef.current) return;
+    _stripeHandledRef.current = true;
     const params = new URLSearchParams(window.location.search);
     if (params.get("upgraded") === "1") {
       const cid = params.get("cid") ?? "";
@@ -475,7 +458,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       showToast("No worries — you're still on the free plan.");
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }); // No deps — ref guard inside the block ensures single execution
 
   // ── ?join= deep-link handler ────────────────────────────────────────────────
   // tradrjournal.xyz/?join=TRADR-ABCD-EFGH → open join flow pre-filled
@@ -511,7 +494,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     if (homeSection !== "circles" || !myCircles.length) return;
     (async () => {
       const msgs: Record<string, any> = {};
-      await Promise.all(myCircles.map(async (c: any) => {
+      await Promise.all(myCircles.map(async (c: Circle) => {
         try {
           const { data } = await supabase
             .from("circle_messages")
@@ -531,37 +514,47 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   // Circles are the product pillar: any time trades change, every circle
   // the user is in must reflect the latest stats without a manual tap.
   // Debounced 800ms to coalesce rapid edits (reactions, comments, rapid saves).
+  // Ref keeps publishToCircle stable so it isn't listed as a dep (it changes
+  // every render due to closure). The effect correctly re-runs on its real deps.
+  const _publishToCircleRef = useRef(publishToCircle);
+  _publishToCircleRef.current = publishToCircle;
   useEffect(() => {
     if (loading) return;
     if (!myCircles.length) return;
+    const publish = _publishToCircleRef.current;
     const t = setTimeout(() => {
-      myCircles.forEach((c: any) => { publishToCircle(c.code, true); });
+      myCircles.forEach((c: Circle) => { publish(c.code, true); });
     }, 800);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statsFingerprint, myCircles, loading]);
 
   // ── Auto-publish my feed whenever trades change ───────────────────
   // Friends see fresh data without the user ever tapping "Publish".
   // Debounced 1 s to avoid hammering on rapid edits.
+  const _publishFeedRef = useRef(publishFeed);
+  _publishFeedRef.current = publishFeed;
   useEffect(() => {
     if (loading) return;
-    const t = setTimeout(() => { publishFeed(); }, 1000);
+    const publish = _publishFeedRef.current;
+    const t = setTimeout(() => { publish(); }, 1000);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades, loading]);
 
   // ── Periodic auto-refresh of inbound friend feed (every 2 min) ───
+  const _refreshFeedRef = useRef(refreshFeed);
+  _refreshFeedRef.current = refreshFeed;
   useEffect(() => {
     if (loading || !friends.length) return;
-    const id = setInterval(() => { refreshFeed(); }, 2 * 60 * 1000);
+    const refresh = _refreshFeedRef.current;
+    const id = setInterval(() => { refresh(); }, 2 * 60 * 1000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, friends]);
 
   // ── Follows sync (every 2 min) ───────────────────────────────────
   // Load my follow lists from shared_kv and refresh periodically so counts
   // update when someone follows you back without a page reload.
+  const syncFollowsRef = useRef(syncFollows);
+  syncFollowsRef.current = syncFollows;
   useEffect(() => {
     if (loading) return;
     if (!profile.uid) return;
@@ -641,14 +634,13 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         }
       } catch {}
     }
-    syncFollows();
+    syncFollowsRef.current();
     // Realtime: re-sync the moment any row touching either side of my follow
     // graph changes. Falls back to the 2-min poll if Realtime is offline.
-    const unsub = subscribeToFollows(getMyCode(), syncFollows);
-    const id = setInterval(syncFollows, 120_000);
+    const unsub = subscribeToFollows(getMyCode(), () => syncFollowsRef.current());
+    const id = setInterval(() => syncFollowsRef.current(), 120_000);
     return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, profile.uid]);
+  }, [loading, profile.uid]); // syncFollows/getMyCode are accessed via refs above
 
   // ── Circle membership sync (every 2 min) ─────────────────────────
   // Fix: local myCircles was snapshotted at create/join time. When another
@@ -664,7 +656,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     let alive = true;
     let migrated = false;
 
-    async function ensureMyMemberRow(circle: any) {
+    async function ensureMyMemberRow(circle: Circle) {
       // For circles created before the per-member-row refactor, each user
       // needs to write their own tradr_circle_member_<CODE>_<myCode> once.
       // Safe to re-run (upsert).
@@ -685,7 +677,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         migrated = true;
         await Promise.all(current.map(ensureMyMemberRow));
       }
-      const refreshed = await Promise.all(current.map(async (c: any) => {
+      const refreshed = await Promise.all(current.map(async (c: Circle) => {
         try {
           const [metaRes, members] = await Promise.all([
             (window as any).storage.get("tradr_circle_" + c.code, true),
@@ -710,7 +702,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     // unsubs in a map keyed by circle code and reconcile on each tick.
     const liveSubs = new Map<string, () => void>();
     function reconcileSubs() {
-      const wantCodes = new Set(myCirclesRef.current.map((c: any) => c.code));
+      const wantCodes = new Set(myCirclesRef.current.map((c: Circle) => c.code));
       // Drop subs for circles we are no longer in.
       for (const code of Array.from(liveSubs.keys())) {
         if (!wantCodes.has(code)) {
@@ -737,8 +729,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       for (const off of liveSubs.values()) { try { off(); } catch {} }
       liveSubs.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, profile.uid]);
+  }, [loading, profile.uid]); // syncCircles accessed via ref above
 
   // Load draft trade count for inbox badge
   useEffect(() => {
@@ -814,7 +805,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
 
     // Profile (v2 → KV fallback)
     try {
-      let p: any = null;
+      let p: Profile | null = null;
       if (v2ProfileRes) {
         const v2 = v2ProfileRes;
         p = {
@@ -869,8 +860,8 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       if (cs) {
         const parsed = JSON.parse(cs.value);
         setCustomStrategies(parsed);
-        _extraStrategies = Object.fromEntries(parsed.map((s: any) => [s.name, s]));
-        setSharedStrategiesMap(getAllStrategiesMap());
+        addExtraStrategies(Object.fromEntries(parsed.map((s: StrategyDef & { name: string }) => [s.name, s as StrategyDef])));
+        
       }
     } catch (e) { log.error("loadAll.customStrategies", e); }
     try {
@@ -902,10 +893,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     setLoading(false);
   }
 
-  async function saveCustomStrategies(u: any[]) {
-    // Rebuild _extraStrategies from the new set (replaces stale entries).
-    _extraStrategies = Object.fromEntries(u.map((s: any) => [s.name, s]));
-    setSharedStrategiesMap(getAllStrategiesMap());
+  async function saveCustomStrategies(u: Array<StrategyDef & { name: string }>) {
+    // Rebuild extra strategies from the new set (replaces stale entries).
+    addExtraStrategies(Object.fromEntries(u.map((s) => [s.name, s as StrategyDef])));
     setCustomStrategies(u);
     await (window as any).storage.set("tradr_custom_strategies", JSON.stringify(u));
   }
@@ -915,7 +905,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     setStrategyDraft({ name: "", code: "", setups: [], checklist: [], rules: [] });
     setShowStrategyEditor(true);
   }
-  function openEditStrategy(s: any) {
+  function openEditStrategy(s: StrategyDef & { name: string }) {
     setEditingStrategy(s.name);
     setStrategyDraft({ ...s, setups: [...(s.setups || [])], checklist: [...(s.checklist || [])], rules: [...(s.rules || [])] });
     setShowStrategyEditor(true);
@@ -924,11 +914,11 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     const d = strategyDraft;
     if (!d.name.trim()) { showToast("Name required"); return; }
     const code = (d.code || d.name).replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "NEW";
-    const clean = { name: d.name.trim(), code, setups: d.setups.filter((x: string) => x?.trim()), checklist: d.checklist.filter((x: any) => x?.text?.trim()), rules: d.rules.filter((x: any) => x?.text?.trim()) };
+    const clean = { name: d.name.trim(), code, setups: d.setups.filter((x: string) => x?.trim()), checklist: d.checklist.filter((x: { text?: string }) => x?.text?.trim()), rules: d.rules.filter((x: { text?: string }) => x?.text?.trim()) };
     // Block overwriting a built-in.
     if (STRATEGY_NAMES.includes(clean.name) && editingStrategy !== clean.name) { showToast("Name clashes with a built-in"); return; }
     let u;
-    if (editingStrategy) u = customStrategies.map((s: any) => s.name === editingStrategy ? clean : s);
+    if (editingStrategy) u = customStrategies.map((s: StrategyDef & { name: string }) => s.name === editingStrategy ? clean : s);
     else u = [...customStrategies, clean];
     await saveCustomStrategies(u);
     // Seed checklist/rules state so the Check tab can render the new strategy immediately.
@@ -944,7 +934,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     showToast(editingStrategy ? "Strategy updated" : "Strategy added");
   }
   async function deleteCustomStrategy(name: string) {
-    const u = customStrategies.filter((s: any) => s.name !== name);
+    const u = customStrategies.filter((s: StrategyDef & { name: string }) => s.name !== name);
     await saveCustomStrategies(u);
     const cl = { ...stratChecklists }; delete cl[name]; await saveStratChecklists(cl);
     const rl = { ...stratRules }; delete rl[name]; await saveStratRules(rl);
@@ -993,7 +983,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         .catch(e => log.error("saveTrades.v2", e));
     }
   }
-  async function handleCsvImport(newTrades: any[]) {
+  async function handleCsvImport(newTrades: Trade[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
     setIsImportingCsv(true);
     try {
@@ -1046,9 +1036,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       } catch (e) { log.error("saveProfile.v2", e, { userId: user.id }); }
     }
   }
-  async function saveFriends(u: any) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
-  async function saveStratChecklists(u: any) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
-  async function saveMyCircles(u: any) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
+  async function saveFriends(u: string[]) { setFriends(u); await (window as any).storage.set("tradr_friends", JSON.stringify(u)); }
+  async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await (window as any).storage.set("tradr_checklists", JSON.stringify(u)); }
+  async function saveMyCircles(u: Circle[]) { setMyCircles(u); await (window as any).storage.set("tradr_circles", JSON.stringify(u)); }
 
   // Each circle is split into two kinds of rows:
   //   tradr_circle_<CODE>                        — metadata, owned by creator
@@ -1157,7 +1147,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
    * Import fills from Tradovate into the journal, deduplicating against
    * any existing trades that have the same source fill ID in their notes.
    */
-  async function handleTradovateFillImport(newTrades: any[]): Promise<number> {
+  async function handleTradovateFillImport(newTrades: Trade[]): Promise<number> {
     // Dedup by fill ID embedded in notes ("Tradovate fill #<id> ·").
     // Using ID substring so manual edits to the notes field don't break dedup.
     const importedIds = new Set(
@@ -1189,14 +1179,14 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     } catch { return new Set(); }
   }
 
-  async function readCircleMembers(code: string, fallback: any[] = []) {
+  async function readCircleMembers(code: string, fallback: CircleMember[] = []) {
     try {
       const [rows, bans] = await Promise.all([
         (window as any).storage.listByPrefix(`tradr_circle_member_${code}_`),
         readCircleBans(code),
       ]);
-      if (!rows.length) return fallback.filter((m: any) => !bans.has(m.code));
-      return rows.map((r: any) => JSON.parse(r.value)).filter((m: any) => !bans.has(m.code));
+      if (!rows.length) return fallback.filter((m: CircleMember) => !bans.has(m.code));
+      return rows.map((r: { value: string }) => JSON.parse(r.value) as CircleMember).filter((m: CircleMember) => !bans.has(m.code));
     } catch { return fallback; }
   }
 
@@ -1264,7 +1254,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
         true
       );
       // Update local state immediately so the UI reflects the kick without a refresh.
-      const filterKicked = (m: any) => m.code !== memberCode;
+      const filterKicked = (m: CircleMember) => m.code !== memberCode;
       const updated = myCircles.map((c: Circle) =>
         c.code !== circleCode ? c : { ...c, members: c.members.filter(filterKicked) }
       );
@@ -1309,7 +1299,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       weekPnL: weekPnL,
       avgRR: avgRR === "—" ? 0 : parseFloat(avgRR),
       streak: streak.count > 0 ? { type: streak.type, count: streak.count } : null,
-      topStrategy: Object.entries(stratStats).sort((a: any, b: any) => b[1].w / Math.max(b[1].count, 1) - a[1].w / Math.max(a[1].count, 1))[0]?.[0] || null,
+      topStrategy: Object.entries(stratStats).sort((a, b) => (b[1] as { w: number; count: number }).w / Math.max((b[1] as { w: number; count: number }).count, 1) - (a[1] as { w: number; count: number }).w / Math.max((a[1] as { w: number; count: number }).count, 1))[0]?.[0] || null,
       updatedAt: new Date().toISOString(),
     };
     try { await (window as any).storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true); }
@@ -1317,7 +1307,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     if (!silent) showToast("Stats published");
   }
 
-  async function fetchCircleLeaderboard(circle: any) {
+  async function fetchCircleLeaderboard(circle: Circle) {
     // Always pull members fresh — sync effect may not have run yet, or a new
     // member may have joined since the last tick. Falls back to whatever's on
     // the passed circle object if the listByPrefix fails.
@@ -1338,7 +1328,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       }
     } catch { /* fall through to per-member defaults */ }
 
-    const entries: any[] = [];
+    const entries: CircleMember[] = [];
     for (const m of members) {
       if (rowMap[m.code]) {
         entries.push(rowMap[m.code]);
@@ -1358,8 +1348,8 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     return entries;
   }
 
-  async function saveStratThresholds(u: any) { setStratThresholds(u); await (window as any).storage.set("tradr_thresholds", JSON.stringify(u)); }
-  async function saveStratRules(u: any) { setStratRules(u); await (window as any).storage.set("tradr_rules", JSON.stringify(u)); }
+  async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await (window as any).storage.set("tradr_thresholds", JSON.stringify(u)); }
+  async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await (window as any).storage.set("tradr_rules", JSON.stringify(u)); }
   async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await (window as any).storage.set("tradr_dark", JSON.stringify(nd)); }
 
   // Swipe — wired via useEffect so we can pass { passive: false } and call
@@ -1396,9 +1386,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     };
   }, []);
 
-  function handleChange(e: any) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
-    const u: any = { ...form, [name]: value };
+    const u = { ...form, [name]: value } as Partial<Trade>;
     if (["entryPrice", "slPrice", "tpPrice"].includes(name)) u.rr = calcRR(name === "entryPrice" ? value : u.entryPrice, name === "slPrice" ? value : u.slPrice, name === "tpPrice" ? value : u.tpPrice);
     if (name === "strategy") u.setup = "";
     setForm(u);
@@ -1430,8 +1420,8 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     setViewHistory(h => { if (h.length > 0) { setView(h[h.length - 1]); return h.slice(0, -1); } setView("history"); return h; });
   }
 
-  function editTrade(t: any) { setForm(t); setEditId(t.id); navigateTo("log"); }
-  async function deleteTrade(id: any) {
+  function editTrade(t: Trade) { setForm(t); setEditId(t.id); navigateTo("log"); }
+  async function deleteTrade(id: number) {
     await saveTrades(trades.filter(t => t.id !== id));
     // Also remove from v2 when flag is on
     if (isFlagOn("newTrades") && user?.id) {
@@ -1440,11 +1430,11 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     setConfirmDelete(null);
     showToast("Trade deleted");
   }
-  async function toggleReaction(tid: any, reaction: any) {
+  async function toggleReaction(tid: number, reaction: string) {
     const myCode = getMyCode();
-    const u = trades.map((t: any) => {
+    const u = trades.map((t: Trade) => {
       if (t.id !== tid) return t;
-      const r: any = { ...(t.reactions || {}) };
+      const r: ReactionMap = { ...(t.reactions || {}) };
       const current = r[reaction];
       if (!Array.isArray(current)) {
         // Migration: old format was a count number. Treat it as having no known reactors
@@ -1463,28 +1453,28 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     });
     await saveTrades(u);
   }
-  async function addComment(tid: any) {
+  async function addComment(tid: number) {
     const text = (commentInputs[tid] || "").trim();
     if (!text) return;
     const c = { id: Date.now(), author: profile.name || "You", text, ts: new Date().toLocaleString() };
     const u = trades.map(t => t.id === tid ? { ...t, comments: [...(t.comments || []), c] } : t);
     await saveTrades(u);
-    setCommentInputs((p: any) => ({ ...p, [tid]: "" }));
+    setCommentInputs((p: Record<number, string>) => ({ ...p, [tid]: "" }));
   }
-  async function deleteComment(tid: any, cid: any) {
+  async function deleteComment(tid: number, cid: number) {
     const myName = profile.name || "You";
     // Guard: only let the comment author delete their own comment.
-    const trade = trades.find((t: any) => t.id === tid);
-    const comment = (trade?.comments || []).find((c: any) => c.id === cid);
+    const trade = trades.find((t: Trade) => t.id === tid);
+    const comment = (trade?.comments || []).find((c: TradeComment) => c.id === cid);
     if (!comment) return;
     const isAuthor = comment.author === myName || comment.author === "You";
     if (!isAuthor) { showToast("Can't delete someone else's comment"); return; }
-    const u = trades.map((t: any) => t.id === tid ? { ...t, comments: (t.comments || []).filter((c: any) => c.id !== cid) } : t);
+    const u = trades.map((t: Trade) => t.id === tid ? { ...t, comments: (t.comments || []).filter((c: TradeComment) => c.id !== cid) } : t);
     await saveTrades(u);
   }
 
   // Screenshot upload
-  async function handleScreenshotUpload(e: any, tradeId: any) {
+  async function handleScreenshotUpload(e: React.ChangeEvent<HTMLInputElement>, tradeId: number | null) {
     const file = e.target.files?.[0]; if (!file) return;
     if (file.size > 15 * 1024 * 1024) { showToast("Image too large — max 15MB"); return; }
     if (!file.type.startsWith("image/")) { showToast("File must be an image"); return; }
@@ -1500,18 +1490,18 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(path);
       const screenshotUrl = urlData.publicUrl;
       if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: screenshotUrl } : t); await saveTrades(u); }
-      else setForm((f: any) => ({ ...f, screenshot: screenshotUrl }));
+      else setForm((f) => ({ ...f, screenshot: screenshotUrl }));
       showToast("Screenshot saved");
     } catch (err) {
       log.error("screenshot.upload", err);
       const compressed = await compressImage(file, 800);
       if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: compressed } : t); await saveTrades(u); }
-      else setForm((f: any) => ({ ...f, screenshot: compressed }));
+      else setForm((f) => ({ ...f, screenshot: compressed }));
       showToast("Saved locally (Storage unavailable)");
     }
   }
-  async function removeScreenshot(tradeId: any) {
-    const existing = tradeId ? trades.find((t: any) => t.id === tradeId)?.screenshot : (form as any)?.screenshot;
+  async function removeScreenshot(tradeId: number | null) {
+    const existing = tradeId ? trades.find((t: Trade) => t.id === tradeId)?.screenshot : (form as any)?.screenshot;
     if (existing && typeof existing === "string" && existing.includes("trade-screenshots")) {
       try {
         const url = new URL(existing);
@@ -1524,11 +1514,11 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       } catch { /* non-fatal */ }
     }
     if (tradeId) { const u = trades.map(t => t.id === tradeId ? { ...t, screenshot: "" } : t); await saveTrades(u); }
-    else setForm((f: any) => ({ ...f, screenshot: "" }));
+    else setForm((f) => ({ ...f, screenshot: "" }));
   }
 
   // Avatar upload
-  async function handleAvatarUpload(e: any) {
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     if (file.size > 5 * 1024 * 1024) { showToast("Avatar too large — max 5MB"); return; }
     if (!file.type.startsWith("image/")) { showToast("File must be an image"); return; }
@@ -1542,13 +1532,13 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       const { error } = await supabase.storage.from("trade-screenshots").upload(path, blob, { contentType: "image/jpeg", upsert: true });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(path);
-      setProfileDraft((d: any) => ({ ...d, avatar: urlData.publicUrl }));
+      setProfileDraft((d) => ({ ...d, avatar: urlData.publicUrl }));
       showToast("Avatar updated");
     } catch (err) {
       log.error("avatar.upload", err);
       // Fall back to base64 so the user still sees their new avatar
       const compressed = await compressImage(file, 300);
-      setProfileDraft((d: any) => ({ ...d, avatar: compressed }));
+      setProfileDraft((d) => ({ ...d, avatar: compressed }));
       showToast("Saved locally (Storage unavailable)");
     }
   }
@@ -1556,15 +1546,15 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   // Checklist helpers
   const checkItems = stratChecklists[activeStrategy] || [];
   const ruleItems = stratRules[activeStrategy] || [];
-  function toggleCheck(id: any) { setChecked((p: any) => ({ ...p, [`${activeStrategy}-${id}`]: !p[`${activeStrategy}-${id}`] })); }
-  function isChecked(id: any) { return !!checked[`${activeStrategy}-${id}`]; }
-  function resetChecklist() { const n = { ...checked }; checkItems.forEach((i: any) => { delete n[`${activeStrategy}-${i.id}`]; }); setChecked(n); }
+  function toggleCheck(id: number) { setChecked((p: Record<string, boolean>) => ({ ...p, [`${activeStrategy}-${id}`]: !p[`${activeStrategy}-${id}`] })); }
+  function isChecked(id: number) { return !!checked[`${activeStrategy}-${id}`]; }
+  function resetChecklist() { const n = { ...checked }; checkItems.forEach((i: { id: number; text: string }) => { delete n[`${activeStrategy}-${i.id}`]; }); setChecked(n); }
   async function addCheckItem() { if (!newCheckText.trim()) return; const u = { ...stratChecklists, [activeStrategy]: [...checkItems, { id: Date.now(), text: newCheckText.trim() }] }; await saveStratChecklists(u); setNewCheckText(""); setAddingCheck(false); }
-  async function deleteCheckItem(id: any) { const u = { ...stratChecklists, [activeStrategy]: checkItems.filter((i: any) => i.id !== id) }; await saveStratChecklists(u); }
-  async function saveEditCheck(id: any, text: string) { const u = { ...stratChecklists, [activeStrategy]: checkItems.map((i: any) => i.id === id ? { ...i, text } : i) }; await saveStratChecklists(u); setEditingCheckItem(null); }
+  async function deleteCheckItem(id: number) { const u = { ...stratChecklists, [activeStrategy]: checkItems.filter((i: { id: number; text: string }) => i.id !== id) }; await saveStratChecklists(u); }
+  async function saveEditCheck(id: number, text: string) { const u = { ...stratChecklists, [activeStrategy]: checkItems.map((i: { id: number; text: string }) => i.id === id ? { ...i, text } : i) }; await saveStratChecklists(u); setEditingCheckItem(null); }
   async function addRule() { if (!newRuleText.trim()) return; const u = { ...stratRules, [activeStrategy]: [...ruleItems, { id: Date.now(), text: newRuleText.trim() }] }; await saveStratRules(u); setNewRuleText(""); setAddingRule(false); }
-  async function deleteRule(id: any) { const u = { ...stratRules, [activeStrategy]: ruleItems.filter((r: any) => r.id !== id) }; await saveStratRules(u); }
-  async function saveEditRule(id: any, text: string) { const u = { ...stratRules, [activeStrategy]: ruleItems.map((r: any) => r.id === id ? { ...r, text } : r) }; await saveStratRules(u); setEditingRule(null); }
+  async function deleteRule(id: number) { const u = { ...stratRules, [activeStrategy]: ruleItems.filter((r: { id: number; text: string }) => r.id !== id) }; await saveStratRules(u); }
+  async function saveEditRule(id: number, text: string) { const u = { ...stratRules, [activeStrategy]: ruleItems.map((r: { id: number; text: string }) => r.id === id ? { ...r, text } : r) }; await saveStratRules(u); setEditingRule(null); }
 
   // Friends
   // ── Stable user code (rename-safe) ──────────────────────────────
@@ -1813,9 +1803,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     await (window as any).storage.set(`tradr_feed_${mc}`, JSON.stringify(items), true);
   }
   async function refreshFeed() {
-    const items: any[] = [];
+    const items: typeof friendFeed = [];
     // Read feeds from everyone in the new follow system (following) + old friends list
-    const allCodes = new Set([...following, ...friends.map((f: any) => f.code)]);
+    const allCodes = new Set([...following, ...friends.map((f: { code: string }) => f.code)]);
     for (const code of allCodes) {
       try { const r = await (window as any).storage.get(`tradr_feed_${code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { }
     }
@@ -1823,7 +1813,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     setFriendFeed(items);
     await (window as any).storage.set("tradr_feed", JSON.stringify(items));
   }
-  function reactToFeed(ac: string, tid: any, reaction: string) {
+  function reactToFeed(ac: string, tid: number, reaction: string) {
     const key = `${ac}_${tid}_${reaction}`;
     const alreadyReacted = myFeedReactions.has(key);
     setMyFeedReactions(prev => {
@@ -1831,7 +1821,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       if (alreadyReacted) { next.delete(key); } else { next.add(key); }
       return next;
     });
-    setFriendFeed((p: any) => p.map((item: any) => {
+    setFriendFeed((p: unknown[]) => p.map((item) => {
       if (item.authorCode !== ac || item.tradeId !== tid) return item;
       const r = { ...item.reactions };
       const cur = typeof r[reaction] === "number" ? r[reaction] : (Array.isArray(r[reaction]) ? r[reaction].length : 0);
@@ -1846,7 +1836,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     const losses  = trades.filter(t => t.outcome === "Loss").length;
     const bes     = trades.filter(t => t.outcome === "Breakeven").length;
     const total   = trades.length;
-    const winRate: any = total ? ((wins / total) * 100).toFixed(1) : 0;
+    const winRate = total ? ((wins / total) * 100).toFixed(1) : 0;
     const totalPnL = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0).toFixed(2);
     return { wins, losses, bes, total, winRate, totalPnL };
   }, [trades]);
@@ -1873,9 +1863,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   const avgRR = rrTrades.length ? (rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length).toFixed(2) : "—";
   const pnlPos = parseFloat(totalPnL) >= 0;
   const streak = (() => { if (!trades.length) return { type: null, count: 0 } as any; let count = 0, type: any = null; for (const t of trades) { if (t.outcome === "Win" || t.outcome === "Loss") { if (type === null) { type = t.outcome; count = 1; } else if (t.outcome === type) count++; else break; } }; return { type, count }; })();
-  const stratStats = trades.reduce((acc: any, t: any) => { if (t.strategy) { if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 }; acc[t.strategy].count++; if (t.outcome === "Win") acc[t.strategy].w++; if (t.outcome === "Loss") acc[t.strategy].l++; if (t.outcome === "Breakeven") acc[t.strategy].be++; acc[t.strategy].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
-  const sessionStats = trades.reduce((acc: any, t: any) => { if (t.session) { if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.session].w++; if (t.outcome === "Loss") acc[t.session].l++; acc[t.session].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
-  const pairStats = trades.reduce((acc: any, t: any) => { if (t.pair) { if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.pair].w++; if (t.outcome === "Loss") acc[t.pair].l++; acc[t.pair].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
+  const stratStats = trades.reduce((acc: Record<string, { w: number; l: number; be: number; pnl: number; count: number }>, t: Trade) => { if (t.strategy) { if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 }; acc[t.strategy].count++; if (t.outcome === "Win") acc[t.strategy].w++; if (t.outcome === "Loss") acc[t.strategy].l++; if (t.outcome === "Breakeven") acc[t.strategy].be++; acc[t.strategy].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
+  const sessionStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.session) { if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.session].w++; if (t.outcome === "Loss") acc[t.session].l++; acc[t.session].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
+  const pairStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.pair) { if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.pair].w++; if (t.outcome === "Loss") acc[t.pair].l++; acc[t.pair].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
   const filteredTrades = useMemo(() => trades.filter(t => {
     if (filter.outcome && t.outcome !== filter.outcome) return false;
     if (filter.setup && t.setup !== filter.setup) return false;
@@ -1886,7 +1876,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
     return true;
   }), [trades, filter]);
 
-  const checkedCount = checkItems.filter((i: any) => isChecked(i.id)).length;
+  const checkedCount = checkItems.filter((i: { id: number; text: string }) => isChecked(i.id)).length;
   const totalItems = checkItems.length;
   const scorePct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
   const insights = useMemo(() => generateInsights(trades), [trades]);
@@ -2045,7 +2035,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
           };
           await saveProfile(updated);
           // Auto-join TRADR Global circle for every new user (silent — no error on failure).
-          if (TRADR_GLOBAL_CODE && !myCircles.find((c: any) => c.code === TRADR_GLOBAL_CODE)) {
+          if (TRADR_GLOBAL_CODE && !myCircles.find((c: Circle) => c.code === TRADR_GLOBAL_CODE)) {
             try {
               const res = await (window as any).storage.get("tradr_circle_" + TRADR_GLOBAL_CODE, true);
               if (res) {
@@ -2166,7 +2156,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                       </button>
                       {ia && sn && (
                         <div style={{ paddingLeft:"28px", paddingBottom:"4px" }}>
-                          {sn.sections.map((sec: any)=>(
+                          {sn.sections.map((sec: { id: string; label: string })=>(
                             <button key={sec.id} onClick={()=>sn.onChange(sec.id)} style={{ display:"block", width:"100%", background:"none", border:"none", padding:"6px 0", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.07em", color:sn.value===sec.id?C.text:C.muted, textAlign:"left", textTransform:"uppercase", transition:"color 0.12s" }}>
                               {sec.label}
                             </button>
@@ -2289,7 +2279,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                                 { label: "WIN RATE", value: `${winRate}%`, color: null },
                                 { label: "AVG R:R", value: avgRR === "—" ? "—" : `${avgRR}R`, color: null },
                                 { label: "STREAK", value: streak.count > 0 ? `${streak.count}${streak.type === "Win" ? "W" : "L"}` : "—", color: streak.count >= 2 ? (streak.type === "Win" ? C.green : C.red) : null },
-                              ].map((s: any, i) => (
+                              ].map((s: { label: string; icon: string }, i) => (
                                 <div key={s.label} style={{ padding: "14px 10px 0", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
                                   <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginBottom: "5px" }}>{s.label}</div>
                                   <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 600, color: s.color ?? C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{s.value}</div>
@@ -2556,7 +2546,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                         BY STRATEGY
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-                        {Object.entries(stratStats).map(([s, v]: any, idx) => {
+                        {Object.entries(stratStats).map(([s, v], idx) => {
                           const wr = v.w + v.l > 0 ? v.w / (v.w + v.l) : 0;
                           return (
                             <div key={s}>
@@ -2620,14 +2610,14 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                     const weekStart = new Date(now.getTime() - msSinceMonday);
                     weekStart.setHours(0, 0, 0, 0);
                     const weekStartStr = weekStart.toISOString().split("T")[0];
-                    const thisWeekItems = friendFeed.filter((item: any) => item.date >= weekStartStr);
+                    const thisWeekItems = friendFeed.filter((item) => item.date >= weekStartStr);
                     if (!thisWeekItems.length) return null;
-                    const counted = thisWeekItems.map((item: any) => {
-                      const total = Object.values(item.reactions || {}).reduce((s: any, v: any) =>
+                    const counted = thisWeekItems.map((item) => {
+                      const total = Object.values(item.reactions || {}).reduce((s: number, v) => =>
                         s + (typeof v === "number" ? v : Array.isArray(v) ? v.length : 0), 0);
                       return { ...item, _rxTotal: total };
                     });
-                    const top = counted.reduce((best: any, item: any) => item._rxTotal > best._rxTotal ? item : best);
+                    const top = counted.reduce((best, item) => item._rxTotal > best._rxTotal ? item : best);
                     if (top._rxTotal === 0) return null;
                     const topPnLPos = parseFloat(top.pnl) >= 0;
                     return (
@@ -2657,7 +2647,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                             </div>
                           )}
                           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                            {Object.entries(top.reactions || {}).map(([rx, v]: any) => {
+                            {Object.entries(top.reactions || {}).map(([rx, v]) => {
                               const count = typeof v === "number" ? v : Array.isArray(v) ? v.length : 0;
                               if (count === 0) return null;
                               return <span key={rx} style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, background: C.panel, border: `1px solid ${C.border}`, borderRadius: "999px", padding: "4px 10px", letterSpacing: "0.04em" }}>{rx} {count}</span>;
@@ -2897,7 +2887,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                   <section>
                     <SectionKicker label="SESSION PERFORMANCE" C={C} />
                     <div style={{ marginTop: "12px", borderTop: `1px solid ${C.border}` }}>
-                      {Object.entries(sessionStats).map(([session, v]: any) => {
+                      {(Object.entries(sessionStats) as [string, { w: number; l: number; pnl: number }][]).map(([session, v]) => {
                         const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
                         return (
                           <div key={session} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "12px", alignItems: "baseline", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -2919,7 +2909,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                             <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em" }}>{calDayTrades.key} · {calDayTrades.trades.length} TRADE{calDayTrades.trades.length !== 1 ? "S" : ""}</span>
                             <button onClick={() => setCalDayTrades(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "12px" }}>close</button>
                           </div>
-                          {calDayTrades.trades.map((t: any) => (
+                          {calDayTrades.trades.map((t: Trade) => (
                             <div key={t.id} className="row-hvr" onClick={() => { navigateTo("history"); setExpandedId(t.id); }}
                               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
                               <span style={{ fontFamily: MONO, fontSize: "12px", color: C.text }}>{t.pair}</span>
@@ -2944,7 +2934,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                       EXECUTION PATTERNS — RULE-BASED ANALYSIS.
                     </div>
                     <div style={{ borderTop: `1px solid ${C.border}` }}>
-                      {insights.map((ins: any, i: number) => {
+                      {insights.map((ins: Insight, i: number) => {
                         const col = ins.type === "positive" ? C.green : ins.type === "warning" ? C.text2 : ins.type === "danger" ? C.red : C.muted;
                         return (
                           <div key={i} style={{ padding: "20px 0", borderBottom: `1px solid ${C.border}`, display: "flex", gap: "16px", alignItems: "baseline" }}>
@@ -2993,11 +2983,11 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "2px", borderTop: `1px solid ${C.border}` }}>
-                      {[...myCircles].sort((a: any, b: any) => {
+                      {[...myCircles].sort((a: Circle, b: Circle) => {
                         const aT = circleLatestMsgs[a.code]?.created_at || "";
                         const bT = circleLatestMsgs[b.code]?.created_at || "";
                         return bT.localeCompare(aT);
-                      }).map((circle: any) => {
+                      }).map((circle: Circle) => {
                         const latest = circleLatestMsgs[circle.code];
                         return (
                           <div
@@ -3047,7 +3037,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                     <StrategySelect strategies={allStrategyNames} value={activeStrategy} onChange={(s: string) => { setActiveStrategy(s); setEditingRule(null); }} C={C} align="right" />
                   </div>
                   <div style={{ borderTop: `1px solid ${C.border}` }}>
-                    {ruleItems.map((rule: any, idx: number) => (
+                    {ruleItems.map((rule: { id: number; text: string }, idx: number) => (
                       <div key={rule.id} className="check-row" style={{ minHeight: "52px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "14px", padding: "8px 0" }}>
                         <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", minWidth: "24px" }}>{String(idx + 1).padStart(2, "0")}</span>
                         {editingRule === rule.id
@@ -3352,7 +3342,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                             {/* Comments */}
                             <div style={{ marginBottom: "16px" }}>
                               <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.12em", marginBottom: "10px" }}>NOTES {(t.comments || []).length > 0 && `(${(t.comments || []).length})`}</div>
-                              {(t.comments || []).map((c: any) => (
+                              {(t.comments || []).map((c: TradeComment) => (
                                 <div key={c.id} style={{ padding: "10px 0", borderTop: `1px solid ${C.border}`, display: "flex", gap: "10px", alignItems: "flex-start" }}>
                                   <AvatarCircle name={c.author} size={26} C={C} />
                                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -3371,7 +3361,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                               ))}
                               <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", borderTop: `1px solid ${C.border}`, paddingTop: "12px" }}>
                                 <AvatarCircle name={profile.name} avatar={profile.avatar} size={26} C={C} />
-                                <input value={commentText} onChange={e => setCommentInputs((p: any) => ({ ...p, [t.id]: e.target.value }))}
+                                <input value={commentText} onChange={e => setCommentInputs((p: Record<number, string>) => ({ ...p, [t.id]: e.target.value }))}
                                   onKeyDown={e => { if (e.key === "Enter") addComment(t.id); }}
                                   placeholder="Add a note..." style={{ ...inp, fontSize: "13px", flex: 1, padding: "6px 0" }} />
                                 <button onClick={() => addComment(t.id)} style={{ ...pillPrimary(!!commentText.trim()), width: "auto", padding: "8px 16px", fontSize: "11px" }}>Post</button>
@@ -3413,9 +3403,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
                       const today = new Date().toISOString().split("T")[0];
                       const wr = total > 0 ? Math.round((wins / total) * 100) : 0;
                       const avgR = total > 0 ? (totalPnL / total).toFixed(2) : "0";
-                      const recentTrades = [...trades].sort((a: any,b: any) => b.date > a.date ? 1 : -1).slice(0, 15);
+                      const recentTrades = [...trades].sort((a, b) => b.date > a.date ? 1 : -1).slice(0, 15);
                       const stratMap: Record<string, {w:number,l:number,pnl:number}> = {};
-                      trades.forEach((t: any) => {
+                      trades.forEach((t: Trade) => {
                         if (!t.strategy) return;
                         if (!stratMap[t.strategy]) stratMap[t.strategy] = {w:0,l:0,pnl:0};
                         if (t.outcome === "Win") stratMap[t.strategy].w++;
@@ -3508,7 +3498,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                   {/* ── Day-of-week bars ── */}
                   {(() => {
                     const dow = [{d:"M",v:0},{d:"T",v:0},{d:"W",v:0},{d:"T",v:0},{d:"F",v:0}];
-                    trades.forEach((t: any) => {
+                    trades.forEach((t: Trade) => {
                       if (!t.date) return;
                       const day = new Date(t.date + "T12:00:00").getDay();
                       if (day >= 1 && day <= 5) dow[day - 1].v += parseFloat(t.pnl) || 0;
@@ -3554,7 +3544,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                         <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Top setups by net R</div>
                       </div>
                       {Object.entries(stratStats)
-                        .map(([s, v]: any) => ({ name: s, count: v.count, r: v.pnl, pct: v.w + v.l > 0 ? Math.round(v.w / (v.w + v.l) * 100) : 0, win: v.pnl >= 0 }))
+                        .map(([s, v]) => { const sv = v as { w: number; l: number; be: number; pnl: number; count: number }; return { name: s, count: sv.count, r: sv.pnl, pct: sv.w + sv.l > 0 ? Math.round(sv.w / (sv.w + sv.l) * 100) : 0, win: sv.pnl >= 0 }; })
                         .sort((a, b) => b.r - a.r)
                         .slice(0, 5)
                         .map((s) => (
@@ -3582,7 +3572,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                     {[
                       { label: "Total P&L", value: pnlMode === "$" && hasDollarData ? `${totalPnlDollar >= 0 ? "+" : "−"}$${Math.abs(totalPnlDollar).toFixed(0)}` : `${pnlPos ? "+" : ""}${totalPnL}R`, color: pnlPos ? C.green : C.red },
                       { label: "Avg R:R", value: avgRR === "—" ? "—" : `${avgRR}R`, color: C.text },
-                      { label: "Best Streak", value: (() => { let best = 0, cur = 0, last: any = null; trades.slice().reverse().forEach((t: any) => { if (t.outcome === "Win") { cur = last === "Win" ? cur + 1 : 1; last = "Win"; best = Math.max(best, cur); } else { last = t.outcome; cur = 0; } }); return best > 0 ? `${best}W` : "—"; })(), color: C.text },
+                      { label: "Best Streak", value: (() => { let best = 0, cur = 0, last: string | null = null; trades.slice().reverse().forEach((t: Trade) => { if (t.outcome === "Win") { cur = last === "Win" ? cur + 1 : 1; last = "Win"; best = Math.max(best, cur); } else { last = t.outcome; cur = 0; } }); return best > 0 ? `${best}W` : "—"; })(), color: C.text },
                     ].map(stat => (
                       <div key={stat.label} style={{ borderRadius: "16px", padding: "14px", background: C.panel, border: `1px solid ${C.border}` }}>
                         <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase" }}>{stat.label}</div>
@@ -3597,7 +3587,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                       <div style={{ padding: "14px 14px 10px" }}>
                         <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Session breakdown</div>
                       </div>
-                      {Object.entries(sessionStats).map(([session, v]: any, i, arr) => {
+                      {Object.entries(sessionStats).map(([session, v], i, arr) => {
                         const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
                         return (
                           <div key={session} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderTop: `1px solid ${C.border}` }}>
@@ -3676,7 +3666,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                     <section>
                       <SectionKicker label="STRATEGY DETAIL" C={C} />
                       <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "18px" }}>
-                        {Object.entries(stratStats).map(([s, v]: any, idx) => {
+                        {Object.entries(stratStats).map(([s, v], idx) => {
                           const wr = v.w + v.l > 0 ? ((v.w / (v.w + v.l)) * 100).toFixed(0) : "0";
                           return (
                             <div key={s}>
@@ -3711,7 +3701,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                         <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em" }}>{calDayTrades.key} · {calDayTrades.trades.length} TRADE{calDayTrades.trades.length !== 1 ? "S" : ""}</span>
                         <button onClick={() => setCalDayTrades(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "12px" }}>close</button>
                       </div>
-                      {calDayTrades.trades.map((t: any) => (
+                      {calDayTrades.trades.map((t: Trade) => (
                         <div key={t.id} className="row-hvr" onClick={() => { navigateTo("history"); setExpandedId(t.id); }}
                           style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
                           <span style={{ fontFamily: MONO, fontSize: "12px", color: C.text }}>{t.pair}</span>
@@ -3819,9 +3809,9 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                 <SectionKicker label={`${checklistTab === "rules" ? "RULES" : "PRE-TRADE"} · ${stratShort(activeStrategy).toUpperCase()}`} C={C} />
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                   <StrategySelect strategies={allStrategyNames} value={activeStrategy} onChange={(s: string) => { setActiveStrategy(s); setEditingCheckItem(null); setEditingRule(null); }} C={C} align="right" />
-                  {customStrategies.find((s: any) => s.name === activeStrategy) && (
+                  {customStrategies.find((s: StrategyDef & { name: string }) => s.name === activeStrategy) && (
                     <>
-                      <button onClick={() => openEditStrategy(customStrategies.find((s: any) => s.name === activeStrategy))}
+                      <button onClick={() => openEditStrategy(customStrategies.find((s: StrategyDef & { name: string }) => s.name === activeStrategy))}
                         style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted }}>
                         Edit
                       </button>
@@ -3861,7 +3851,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                     inp={inp} pillGhost={pillGhost}
                   />
                   <div style={{ borderTop: `1px solid ${C.border}` }}>
-                    {checkItems.map((item: any) => {
+                    {checkItems.map((item: { id: number; text: string }) => {
                       const ch = isChecked(item.id);
                       return (
                         <div key={item.id} className="check-row" style={{ borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "14px", minHeight: "52px" }}>
@@ -3917,7 +3907,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                     Read before every {stratShort(activeStrategy)} session.
                   </div>
                   <div style={{ borderTop: `1px solid ${C.border}` }}>
-                    {ruleItems.map((rule: any, idx: number) => (
+                    {ruleItems.map((rule: { id: number; text: string }, idx: number) => (
                       <div key={rule.id} className="check-row" style={{ minHeight: "52px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "14px", padding: "8px 0" }}>
                         <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.08em", minWidth: "24px" }}>{String(idx + 1).padStart(2, "0")}</span>
                         {editingRule === rule.id
@@ -4372,7 +4362,7 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
 
 // ─── HOME SECTION TABS ───────────────────────────────────────────────────────
 // Replaces the emoji-dropdown with editorial mono text tabs.
-function HomeSectionTabs({ homeSection, setHomeSection, C }: any) {
+function HomeSectionTabs({ homeSection, setHomeSection, C }: { homeSection: string; setHomeSection: (s: string) => void; C: typeof DARK }) {
   const SECTIONS = [
     { id: "feed", label: "Overview" },
     { id: "analytics", label: "Analytics" },
@@ -4393,13 +4383,24 @@ function HomeSectionTabs({ homeSection, setHomeSection, C }: any) {
 }
 
 // ─── CONFLUENCE TRACKER (editorial) ──────────────────────────────────────────
-function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, activeStrategy, C, stratThresholds, saveStratThresholds, inp, pillGhost }: any) {
+function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, activeStrategy, C, stratThresholds, saveStratThresholds, inp, pillGhost }: {
+  checkItems: { id: number; text: string }[];
+  checkedCount: number;
+  totalItems: number;
+  isChecked: (id: number) => boolean;
+  activeStrategy: string;
+  C: typeof DARK;
+  stratThresholds: Record<string, { minCount: number; required: number[] }>;
+  saveStratThresholds: (u: Record<string, { minCount: number; required: number[] }>) => Promise<void>;
+  inp: React.CSSProperties;
+  pillGhost: React.CSSProperties;
+}) {
   const [editMode, setEditMode] = useState(false);
   const thresh = stratThresholds[activeStrategy] || { minCount: Math.ceil(totalItems * 0.75), required: [] };
   const minCount = thresh.minCount || 1;
   const required = thresh.required || [];
 
-  const reqMet = required.every((id: any) => isChecked(id));
+  const reqMet = required.every((id: number) => isChecked(id));
   const countMet = checkedCount >= minCount;
   const greenLight = reqMet && countMet;
   const pct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
@@ -4407,12 +4408,12 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
   const statusCol = greenLight ? C.green : countMet && !reqMet ? C.text2 : C.red;
   const statusText = greenLight ? "CLEAR TO ENTER" : (!countMet) ? `NEED ${minCount - checkedCount} MORE` : "REQUIRED CONFLUENCE MISSING";
 
-  function toggleRequired(id: any) {
-    const updated = required.includes(id) ? required.filter((r: any) => r !== id) : [...required, id];
+  function toggleRequired(id: number) {
+    const updated = required.includes(id) ? required.filter((r: number) => r !== id) : [...required, id];
     const u = { ...stratThresholds, [activeStrategy]: { ...thresh, required: updated } };
     saveStratThresholds(u);
   }
-  function setMin(val: any) {
+  function setMin(val: string) {
     const v = Math.max(1, Math.min(totalItems, parseInt(val) || 1));
     const u = { ...stratThresholds, [activeStrategy]: { ...thresh, minCount: v } };
     saveStratThresholds(u);
@@ -4448,8 +4449,8 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
           <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: `1px solid ${C.border}` }}>
             <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "8px" }}>MUST-HAVES</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.04em" }}>
-              {required.map((rid: any) => {
-                const item = checkItems.find((i: any) => i.id === rid);
+              {required.map((rid: number) => {
+                const item = checkItems.find((i) => i.id === rid);
                 if (!item) return null;
                 const met = isChecked(rid);
                 return (
@@ -4487,7 +4488,7 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
               Toggle any confluence as required — the clear-to-enter signal only fires if these are checked, regardless of minimum count.
             </div>
             <div style={{ borderTop: `1px solid ${C.border}` }}>
-              {checkItems.map((item: any) => {
+              {checkItems.map((item: { id: number; text: string }) => {
                 const isReq = required.includes(item.id);
                 return (
                   <div key={item.id} onClick={() => toggleRequired(item.id)}
@@ -4496,14 +4497,4 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
                       {isReq && <span style={{ color: C.bg, fontSize: "9px", lineHeight: 1 }}>✓</span>}
                     </div>
                     <span style={{ fontFamily: BODY, fontSize: "13px", color: isReq ? C.text : C.text2, flex: 1, lineHeight: 1.5 }}>{item.text}</span>
-                    <span style={{ fontFamily: MONO, fontSize: "10px", color: isReq ? C.text : C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{isReq ? "Required" : "Optional"}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                    <span style={{ fontFamily: MONO, fontSize: "10px", color: isReq ? C.text : C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{isReq ? "Required" : "Optiona
