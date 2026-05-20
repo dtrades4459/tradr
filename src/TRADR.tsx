@@ -4284,4 +4284,70 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
           <div style={{ background: statusCol, height: "1px", width: `${pct}%`, transition: "width 0.35s ease" }} />
           <div style={{ position: "absolute", top: "-3px", bottom: "-3px", left: `${Math.round((minCount / totalItems) * 100)}%`, width: "1px", background: C.text }} />
         </div>
-        <div style={{ displ
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px", fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.04em" }}>
+          <span>{pct}% MET</span>
+          <span>THRESHOLD {Math.round((minCount / totalItems) * 100)}%</span>
+        </div>
+        {required.length > 0 && (
+          <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", marginBottom: "8px" }}>MUST-HAVES</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.04em" }}>
+              {required.map((rid: any) => {
+                const item = checkItems.find((i: any) => i.id === rid);
+                if (!item) return null;
+                const met = isChecked(rid);
+                return (
+                  <span key={rid} style={{ color: met ? C.green : C.red }}>
+                    {met ? "✓" : "✕"} {stratShort(item.text)}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <button onClick={() => setEditMode(!editMode)} style={{ ...pillGhost, marginTop: "16px", width: "100%" }}>
+          {editMode ? "CLOSE SETTINGS" : "ENTRY RULE SETTINGS"}
+        </button>
+      </div>
+
+      {editMode && (
+        <div style={{ padding: "4px 0 20px", marginBottom: "4px" }}>
+          <SectionKicker label={`ENTRY RULES — ${stratShort(activeStrategy).toUpperCase()}`} C={C} />
+          <div style={{ marginTop: "18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", alignItems: "baseline" }}>
+              <label style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>Minimum confluences to enter</label>
+              <span style={{ fontFamily: MONO, fontSize: "13px", color: C.text, letterSpacing: "0.04em" }}>{minCount} / {totalItems}</span>
+            </div>
+            <input type="range" min={1} max={totalItems} value={minCount} onChange={e => setMin(e.target.value)}
+              style={{ width: "100%", accentColor: C.text, cursor: "pointer" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", fontFamily: MONO, fontSize: "9px", color: C.dim, letterSpacing: "0.06em" }}>
+              <span>1 LENIENT</span>
+              <span>{totalItems} STRICT</span>
+            </div>
+          </div>
+          <div style={{ marginTop: "24px" }}>
+            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "8px" }}>MARK AS REQUIRED</div>
+            <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginBottom: "14px", lineHeight: 1.55 }}>
+              Toggle any confluence as required — the clear-to-enter signal only fires if these are checked, regardless of minimum count.
+            </div>
+            <div style={{ borderTop: `1px solid ${C.border}` }}>
+              {checkItems.map((item: any) => {
+                const isReq = required.includes(item.id);
+                return (
+                  <div key={item.id} onClick={() => toggleRequired(item.id)}
+                    style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                    <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: `1px solid ${isReq ? C.text : C.border2}`, background: isReq ? C.text : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {isReq && <span style={{ color: C.bg, fontSize: "9px", lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <span style={{ fontFamily: BODY, fontSize: "13px", color: isReq ? C.text : C.text2, flex: 1, lineHeight: 1.5 }}>{item.text}</span>
+                    <span style={{ fontFamily: MONO, fontSize: "10px", color: isReq ? C.text : C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{isReq ? "Required" : "Optional"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
