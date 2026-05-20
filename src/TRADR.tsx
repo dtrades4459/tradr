@@ -554,8 +554,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   // ── Follows sync (every 2 min) ───────────────────────────────────
   // Load my follow lists from shared_kv and refresh periodically so counts
   // update when someone follows you back without a page reload.
-  const syncFollowsRef = useRef(syncFollows);
-  syncFollowsRef.current = syncFollows;
+  const syncFollowsRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (loading) return;
     if (!profile.uid) return;
@@ -635,6 +634,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         }
       } catch {}
     }
+    syncFollowsRef.current = syncFollows;
     syncFollowsRef.current();
     // Realtime: re-sync the moment any row touching either side of my follow
     // graph changes. Falls back to the 2-min poll if Realtime is offline.
