@@ -100,7 +100,7 @@ const DEF_PROFILE: Profile = {
 };
 const OUTCOMES = ["Win","Loss","Breakeven"];
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
-const TABS = ["home","log","history","stats","circles"];
+const TABS = ["home","log","stats","history","circles"];
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -301,104 +301,6 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
 }
 
 // ─── Position Size Calculator ────────────────────────────────────────────────
-function PositionSizeCalc({ C, inp, profile, saveProfile }: any) {
-  const [balance, setBalance] = useState(profile?.accountBalance || "");
-  const [riskPct, setRiskPct] = useState("1");
-  const [entry, setEntry] = useState("");
-  const [sl, setSl] = useState("");
-  const [tickSize, setTickSize] = useState("0.25");
-  const [tickValue, setTickValue] = useState("12.5");
-
-  const balNum = parseFloat(balance) || 0;
-  const riskNum = parseFloat(riskPct) || 1;
-  const entryNum = parseFloat(entry) || 0;
-  const slNum = parseFloat(sl) || 0;
-  const tickSzNum = parseFloat(tickSize) || 0.25;
-  const tickValNum = parseFloat(tickValue) || 12.5;
-
-  const riskDollar = balNum > 0 ? (balNum * riskNum) / 100 : 0;
-  const priceDiff = Math.abs(entryNum - slNum);
-  const ticks = tickSzNum > 0 ? priceDiff / tickSzNum : 0;
-  const valuePerContract = ticks * tickValNum;
-  const contracts = valuePerContract > 0 ? riskDollar / valuePerContract : 0;
-  const contractsRounded = Math.floor(contracts * 10) / 10;
-
-  const PRESETS = [
-    { label: "ES", tick: "0.25", val: "12.5" },
-    { label: "NQ", tick: "0.25", val: "5" },
-    { label: "MES", tick: "0.25", val: "1.25" },
-    { label: "MNQ", tick: "0.25", val: "0.5" },
-    { label: "CL", tick: "0.01", val: "10" },
-    { label: "GC", tick: "0.1", val: "10" },
-  ];
-
-  function saveBalance() {
-    if (balance && profile) saveProfile({ ...profile, accountBalance: balance });
-  }
-
-  const row: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "4px" };
-  const lbl: React.CSSProperties = { fontFamily: "monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" };
-
-  return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: "10px", padding: "16px", marginTop: "20px" }}>
-      <div style={{ fontFamily: "monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.14em", marginBottom: "14px" }}>POSITION SIZE CALCULATOR</div>
-      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "14px" }}>
-        {PRESETS.map(p => (
-          <button key={p.label} onClick={() => { setTickSize(p.tick); setTickValue(p.val); }}
-            style={{ background: tickSize === p.tick && tickValue === p.val ? C.text : "transparent", color: tickSize === p.tick && tickValue === p.val ? C.bg : C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "4px 10px", cursor: "pointer", fontFamily: "monospace", fontSize: "10px", letterSpacing: "0.08em" }}>
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "14px" }}>
-        <div style={row}>
-          <span style={lbl}>Account ($)</span>
-          <input value={balance} onChange={e => setBalance(e.target.value)} onBlur={saveBalance}
-            placeholder="25000" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-        <div style={row}>
-          <span style={lbl}>Risk %</span>
-          <input value={riskPct} onChange={e => setRiskPct(e.target.value)}
-            placeholder="1" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-        <div style={row}>
-          <span style={lbl}>Entry price</span>
-          <input value={entry} onChange={e => setEntry(e.target.value)}
-            placeholder="5280.00" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-        <div style={row}>
-          <span style={lbl}>Stop loss</span>
-          <input value={sl} onChange={e => setSl(e.target.value)}
-            placeholder="5274.00" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-        <div style={row}>
-          <span style={lbl}>Tick size</span>
-          <input value={tickSize} onChange={e => setTickSize(e.target.value)}
-            placeholder="0.25" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-        <div style={row}>
-          <span style={lbl}>Tick value ($)</span>
-          <input value={tickValue} onChange={e => setTickValue(e.target.value)}
-            placeholder="12.5" style={{ ...inp, fontSize: "13px" }} />
-        </div>
-      </div>
-      <div style={{ border: `1px solid ${contractsRounded > 0 ? C.green + "55" : C.border}`, borderRadius: "8px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontFamily: "monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginBottom: "4px" }}>CONTRACTS</div>
-          <div style={{ fontFamily: DISPLAY, fontSize: "28px", fontWeight: 500, color: contractsRounded > 0 ? C.text : C.muted }}>
-            {contractsRounded > 0 ? contractsRounded.toFixed(1) : "—"}
-          </div>
-        </div>
-        {riskDollar > 0 && (
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "monospace", fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginBottom: "4px" }}>RISK $</div>
-            <div style={{ fontFamily: DISPLAY, fontSize: "20px", color: C.red }}>${riskDollar.toFixed(0)}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -531,10 +433,10 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   const [tradovateError, setTradovateError] = useState("");
   const [tradovateForm, setTradovateForm] = useState<{ username: string; password: string; env: "demo" | "live" }>({ username: "", password: "", env: "demo" });
 
-  // Swipe
-  const swipeRef = useRef<any>(null);
-  const touchStartX = useRef<any>(null);
-  const touchStartY = useRef<any>(null);
+  // Swipe — non-passive listener so preventDefault() stops browser chrome from shifting
+  const swipeRef = useRef<HTMLDivElement | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); }, []);
 
@@ -554,7 +456,9 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   useEffect(() => { loadAll(); }, []);
 
   useEffect(() => {
-    (document.documentElement as any).style.zoom = String(fontScale);
+    // Use fontSize instead of zoom — zoom is non-standard and causes the
+    // browser to shift fixed-position elements (including the bottom nav).
+    document.documentElement.style.fontSize = `${fontScale * 100}%`;
     try { localStorage.setItem("tradr_font_scale", String(fontScale)); } catch {}
   }, [fontScale]);
 
@@ -1458,19 +1362,39 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
   async function saveStratRules(u: any) { setStratRules(u); await (window as any).storage.set("tradr_rules", JSON.stringify(u)); }
   async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await (window as any).storage.set("tradr_dark", JSON.stringify(nd)); }
 
-  // Swipe handlers
-  function onTouchStart(e: any) { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; }
-  function onTouchEnd(e: any) {
-    if (touchStartX.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      const idx = TABS.indexOf(view);
-      if (dx < 0 && idx < TABS.length - 1) setView(TABS[idx + 1]);
-      if (dx > 0 && idx > 0) setView(TABS[idx - 1]);
+  // Swipe — wired via useEffect so we can pass { passive: false } and call
+  // preventDefault(), which prevents the browser from interpreting a horizontal
+  // swipe as a scroll and shifting its bottom chrome up/down.
+  useEffect(() => {
+    const el = swipeRef.current;
+    if (!el) return;
+    function handleTouchStart(e: TouchEvent) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
     }
-    touchStartX.current = null; touchStartY.current = null;
-  }
+    function handleTouchEnd(e: TouchEvent) {
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      const dy = e.changedTouches[0].clientY - touchStartY.current;
+      touchStartX.current = null;
+      touchStartY.current = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        e.preventDefault();
+        setView(v => {
+          const idx = TABS.indexOf(v);
+          if (dx < 0 && idx < TABS.length - 1) return TABS[idx + 1];
+          if (dx > 0 && idx > 0) return TABS[idx - 1];
+          return v;
+        });
+      }
+    }
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    el.addEventListener("touchend", handleTouchEnd, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, []);
 
   function handleChange(e: any) {
     const { name, value } = e.target;
@@ -2174,7 +2098,7 @@ export default function Tradr({ user, jwtPlan }: { user?: any; jwtPlan?: "free" 
       `}</style>
 
       {/* ── PAGE FRAME (responsive: 480px canvas on mobile, up to 960px on desktop) ── */}
-      <div className="tradr-app" ref={swipeRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+      <div className="tradr-app" ref={swipeRef}
         style={{ maxWidth: isDesktop ? "1280px" : "480px", margin: "0 auto", paddingBottom: isDesktop ? "32px" : "96px", minHeight: "100vh", background: C.bg, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }}>
 
         {/* ── MASTHEAD ── */}
@@ -3974,7 +3898,16 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                   }
                   {checkedCount > 0 && <button onClick={resetChecklist} style={{ ...pillGhost, alignSelf: "flex-start" }}>↺ RESET CHECKLIST</button>}
 
-                  <PositionSizeCalc C={C} inp={inp} profile={profile} saveProfile={saveProfile} />
+                  {/* Calculator shortcut — opens the full modal */}
+                  <button
+                    onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
+                    style={{ display: "flex", alignItems: "center", gap: "8px", background: `color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 12%, transparent)`, border: `1px solid color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 25%, transparent)`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", color: (C as any).live ?? "oklch(0.84 0.14 175)", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", width: "100%", marginTop: "8px" }}>
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="10" y1="3" x2="10" y2="17"/><line x1="2" y1="17" x2="18" y2="17"/>
+                      <path d="M2 9l4 5 4-5"/><path d="M18 9l-4 5-4-5"/><line x1="6" y1="9" x2="14" y2="9"/>
+                    </svg>
+                    Open Position Size Calculator
+                  </button>
                 </div>
               )}
 
