@@ -1428,7 +1428,14 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   );
                 })}
               </div>
-              <div style={{ padding:"20px 22px 0", borderTop:`1px solid ${C.border}` }}>
+              <div style={{ padding:"20px 22px 0", borderTop:`1px solid ${C.border}`, display:"flex", flexDirection:"column", gap:"10px" }}>
+                {/* ── Calculator shortcut ── */}
+                <button onClick={() => setShowCalc(true)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:"transparent", border:"none", borderLeft:"2px solid transparent", padding:"8px 0", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:C.dim, textAlign:"left", transition:"color 0.12s" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:0.55, flexShrink:0 }}>
+                    <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/>
+                  </svg>
+                  Calculator
+                </button>
                 <button onClick={toggleDark} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"7px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.08em", color:C.muted, textTransform:"uppercase" }}>
                   {darkMode?"Light Mode":"Dark Mode"}
                 </button>
@@ -1679,8 +1686,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     );
                   })()}
 
-                  {/* Live positions — Tradovate integration */}
-                  <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
+                  {/* Live positions — hidden until broker API is ready */}
+                  {isFlagOn("livePositions") && <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
                     {/* Section label */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -1763,7 +1770,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                         </div>
                       </button>
                     )}
-                  </section>
+                  </section>}
 
                   {/* Zero-state CTA — shown instead of charts when user has no trades */}
                   {trades.length === 0 && (
@@ -1862,8 +1869,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     </section>
                   )}
 
-                  {/* Trade of the Week trophy */}
-                  {(() => {
+                  {/* Friends feed — hidden behind flag until social is polished */}
+                  {isFlagOn("socialFeed") && (() => {
                     if (!friendFeed.length) return null;
                     const now = new Date();
                     const day = now.getDay();
@@ -1973,7 +1980,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     );
                   })()}
 
-                  {/* Friends */}
+                  {isFlagOn("socialFeed") && (
                   <section style={{ marginTop: "clamp(40px, 6vw, 56px)", paddingTop: "32px", borderTop: `1px solid ${C.border}` }}>
                     <FriendsFeed
                       friends={friends} friendFeed={friendFeed} showAddFriend={showAddFriend} setShowAddFriend={setShowAddFriend}
@@ -1989,6 +1996,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       openProfile={openProfile}
                     />
                   </section>
+                  )}
                   {/* Plan row */}
                   <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
                     {isFlagOn("paywall") && profile.plan !== "pro" && profile.plan !== "elite" ? (
@@ -2091,24 +2099,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       <button onClick={exportData}
                         style={{ flex: 1, padding: "11px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                         Export JSON
-                      </button>
-                    </div>
-                  </section>
-
-                  {/* Danger zone */}
-                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
-                    <SectionKicker label="DELETE ACCOUNT" C={C} />
-                    <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                      <input
-                        value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
-                        placeholder="Type DELETE to confirm"
-                        style={{ padding: "11px 14px", background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "8px", color: C.text, fontFamily: MONO, fontSize: "12px", letterSpacing: "0.04em", outline: "none" }}
-                      />
-                      <button
-                        onClick={deleteAccount}
-                        disabled={deletingAccount || deleteConfirm.toUpperCase() !== "DELETE"}
-                        style={{ padding: "11px", border: `1px solid ${deleteConfirm.toUpperCase() === "DELETE" ? C.red : C.border2}`, borderRadius: "8px", background: "transparent", color: deleteConfirm.toUpperCase() === "DELETE" ? C.red : C.muted, cursor: deleteConfirm.toUpperCase() === "DELETE" ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: deletingAccount ? 0.6 : 1, transition: "all 0.2s" }}>
-                        {deletingAccount ? "Deleting…" : "Delete My Account"}
                       </button>
                     </div>
                   </section>
