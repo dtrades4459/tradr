@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useMemo } from "react";
-import { Trade, Profile } from "./types";
+import type { Trade, Profile } from "./types";
 import { MONO, BODY, DISPLAY } from "./shared";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
