@@ -3480,6 +3480,19 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                   </button>
                 );
               })}
+              {/* Calculator — pill in mobile nav */}
+              <button
+                onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
+                title="Position Size Calculator"
+                style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 10px", background: "none", border: "none", borderRadius: "10px", color: C.muted, cursor: "pointer" }}>
+                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="10" y1="3" x2="10" y2="17"/>
+                  <line x1="2" y1="17" x2="18" y2="17"/>
+                  <path d="M2 9l4 5 4-5"/><path d="M18 9l-4 5-4-5"/>
+                  <line x1="6" y1="9" x2="14" y2="9"/>
+                </svg>
+                <span style={{ fontSize: "9px", fontFamily: MONO, letterSpacing: "0.06em" }}>Size</span>
+              </button>
             </div>
           </div>
         )}
