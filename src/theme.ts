@@ -17,7 +17,7 @@ export const DARK = {
   panel: "#131317",
   panel2: "#1A1A20",
   border: "rgba(255,255,255,0.07)",
-  border2: "rgba(255,255,255,0.13)",
+  border2: "rgba(255,255,255,0.12)",
   // Text
   text: "#F2F2EE",
   text2: "#A6A6A2",
@@ -32,7 +32,7 @@ export const DARK = {
   green: "oklch(0.78 0.18 152)",
   red: "oklch(0.70 0.21 25)",
   // Glass/bloom
-  surfaceGlass: "rgba(20,20,26,0.72)",
+  surfaceGlass: "rgba(28,28,34,0.55)",
   orb1: "oklch(0.55 0.22 252)",
   orb2: "oklch(0.45 0.20 268)",
   orb3: "oklch(0.68 0.18 175)",
@@ -64,7 +64,7 @@ export const LIGHT = {
   green: "oklch(0.55 0.18 152)",
   red: "oklch(0.55 0.22 25)",
   // Glass/bloom
-  surfaceGlass: "rgba(244,242,237,0.75)",
+  surfaceGlass: "rgba(255,255,255,0.65)",
   orb1: "oklch(0.78 0.14 252)",
   orb2: "oklch(0.72 0.12 268)",
   orb3: "oklch(0.78 0.10 175)",

@@ -8,7 +8,8 @@
 
 import React from "react";
 import type { Profile } from "./types";
-import { AvatarCircle, MONO, BODY, DISPLAY } from "./shared";
+import { AvatarCircle, Card, Kicker, MONO, BODY, DISPLAY } from "./shared";
+import type { Theme } from "./theme";
 
 export interface SettingsScreenProps {
   C: Record<string, string>;
@@ -87,12 +88,23 @@ export function SettingsScreen({
   };
 
   return (
-    <div style={{ marginTop: "clamp(24px, 5vw, 40px)", display: "flex", flexDirection: "column", gap: "0" }}>
+    <div style={{ padding: "12px 16px 0", display: "flex", flexDirection: "column", gap: 0, marginTop: "clamp(4px, 2vw, 12px)" }}>
 
       {/* ── User card ── */}
-      <div style={{ margin: "0 0 20px", borderRadius: "22px", padding: "18px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "14px" }}>
-        <div onClick={() => document.getElementById("avatarInput")?.click()} style={{ cursor: "pointer" }}>
-          <AvatarCircle name={profile.name} avatar={profileDraft.avatar || profile.avatar} size={50} color={C.text} C={C} />
+      <div style={{ margin: "0 0 16px", borderRadius: 22, padding: 18, background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14 }}>
+        <div onClick={() => document.getElementById("avatarInput")?.click()} style={{ cursor: "pointer", position: "relative" }}>
+          {(profileDraft.avatar || profile.avatar || "").startsWith("data:") || (profileDraft.avatar || profile.avatar || "").startsWith("http") ? (
+            <AvatarCircle name={profile.name} avatar={profileDraft.avatar || profile.avatar} size={50} color={C.text} C={C} />
+          ) : (
+            <div style={{
+              width: 50, height: 50, borderRadius: 999,
+              background: `linear-gradient(135deg, ${(C as any).orb1 ?? "oklch(0.55 0.22 252)"}, ${(C as any).orb2 ?? "oklch(0.45 0.20 268)"})`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontFamily: DISPLAY, fontWeight: 600, fontSize: 16,
+            }}>
+              {(profileDraft.avatar || profile.avatar || profile.name?.[0] || "?").slice(0, 2).toUpperCase()}
+            </div>
+          )}
         </div>
         <input id="avatarInput" type="file" accept="image/jpeg,image/png" onChange={handleAvatarUpload} style={{ display: "none" }} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -101,14 +113,14 @@ export function SettingsScreen({
             {profile.handle || "@—"} · {profile.plan === "pro" || profile.plan === "elite" ? "Pro plan" : "Free plan"}
           </div>
           {(profile.plan === "pro" || profile.plan === "elite") && (
-            <div style={{ marginTop: "6px", display: "inline-flex", padding: "2px 8px", borderRadius: "999px", background: (C as any).liveSoft ?? "rgba(100,220,180,0.08)", color: (C as any).live ?? C.green, fontFamily: MONO, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", border: `1px solid color-mix(in oklch, ${(C as any).live ?? C.green} 30%, transparent)` }}>● PRO PLAN</div>
+            <div style={{ marginTop: "6px", display: "inline-flex", padding: "2px 8px", borderRadius: "999px", background: (C as any).liveSoft ?? "rgba(100,220,180,0.08)", color: (C as any).live ?? C.green, fontFamily: MONO, fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", border: `1px solid color-mix(in oklch, ${(C as any).live ?? C.green} 30%, transparent)` }}>{"●"} PRO PLAN</div>
           )}
         </div>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
       </div>
 
       {/* ── Account section ── */}
-      <div style={{ padding: "0 2px 8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Account</div>
+      <div style={{ padding: "0 4px 8px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Account</div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         {/* Edit profile row */}
         <div onClick={() => { setProfileDraft({ ...profile }); setEditingProfile(!editingProfile); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
@@ -195,7 +207,7 @@ export function SettingsScreen({
       </div>
 
       {/* ── Text size ── */}
-      <div style={{ margin: "16px 0 4px", padding: "0 2px 8px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Text Size</div>
+      <div style={{ margin: "16px 0 4px", padding: "0 4px 8px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Text Size</div>
       <div style={{ borderRadius: "16px", background: C.panel, border: `1px solid ${C.border}`, padding: "14px 16px", marginBottom: "4px" }}>
         <div style={{ display: "flex", gap: "8px" }}>
           {([["S", 0.85], ["M", 1.0], ["L", 1.15], ["XL", 1.3]] as [string, number][]).map(([label, scale]) => (
@@ -205,7 +217,7 @@ export function SettingsScreen({
       </div>
 
       {/* ── Privacy & Data ── */}
-      <div style={{ margin: "16px 0 8px", padding: "0 2px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Privacy & Data</div>
+      <div style={{ margin: "16px 0 8px", padding: "0 4px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Privacy & Data</div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         {/* Public trades toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}` }}>
@@ -306,7 +318,7 @@ export function SettingsScreen({
       </div>
 
       {/* ── Support ── */}
-      <div style={{ margin: "16px 0 8px", padding: "0 2px", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Support</div>
+      <div style={{ margin: "16px 0 8px", padding: "0 4px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Support</div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         <div onClick={() => setFeedbackOpen(true)} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -331,12 +343,12 @@ export function SettingsScreen({
       </div>
 
       {/* Footer */}
-      <div style={{ textAlign: "center", padding: "24px 0 8px", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.12em" }}>
-        Kōda v1.0 · {new Date().getFullYear()}
+      <div style={{ textAlign: "center", padding: "24px 16px 0", fontFamily: MONO, fontSize: 10, color: C.dim, letterSpacing: "0.12em" }}>
+        KŌDA v1.0 · BUILD {new Date().getFullYear()}.05
       </div>
-      <div style={{ display: "flex", gap: "16px", justifyContent: "center", paddingBottom: "8px" }}>
-        <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Privacy</a>
-        <a href="/terms.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Terms</a>
+      <div style={{ display: "flex", gap: 16, justifyContent: "center", padding: "8px 0" }}>
+        <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Privacy</a>
+        <a href="/terms.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Terms</a>
       </div>
     </div>
   );

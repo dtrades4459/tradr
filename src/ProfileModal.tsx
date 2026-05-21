@@ -1,4 +1,5 @@
 import { storage } from "./lib/storage";
+import type React from "react";
 import { useState, useEffect, useMemo } from "react";
 import { MONO, BODY, DISPLAY, AvatarCircle } from "./shared";
 
@@ -68,81 +69,122 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
   const isMe = targetCode === myCode;
   const isFollowing = targetCode ? (following || []).includes(targetCode) : false;
 
+  const isDark = C.bg === "#0A0A0B";
+  const initials = (pubProfile?.name || "?").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}>
-      <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", maxHeight: "88vh", overflowY: "auto", padding: "10px 24px 48px" }}
-        onClick={e => e.stopPropagation()}>
-        <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 24px" }} />
+      <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", maxHeight: "88vh", overflowY: "auto", padding: "10px 16px 48px", position: "relative" }}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        {/* Centered bloom */}
+        <div style={{ position: "absolute", top: 40, left: "50%", transform: "translateX(-50%)", width: 420, height: 420, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb1 ?? C.accent} 0%, ${(C as any).orb2 ?? C.accent} 40%, transparent 65%)`, filter: "blur(80px)", opacity: isDark ? 0.45 : 0.3, pointerEvents: "none" }} />
+        {/* Drag handle */}
+        <div style={{ width: 36, height: 4, background: C.border2, borderRadius: 2, margin: "14px auto 20px", position: "relative", zIndex: 2 }} />
 
         {loading ? (
-          <div style={{ padding: "48px 0", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading profile…</div>
+          <div style={{ padding: "48px 0", textAlign: "center", fontFamily: BODY, fontSize: 13, color: C.muted, fontStyle: "italic" }}>Loading profile…</div>
         ) : !pubProfile ? (
           <div style={{ padding: "48px 0", textAlign: "center" }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontStyle: "italic", color: C.text2, fontWeight: 500, marginBottom: "8px" }}>Profile not found</div>
-            <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted }}>This trader hasn't published their profile yet.</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: 20, fontStyle: "italic", color: C.text2, fontWeight: 500, marginBottom: 8 }}>Profile not found</div>
+            <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted }}>This trader hasn't published their profile yet.</div>
           </div>
         ) : (<>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px" }}>
-            <AvatarCircle name={pubProfile.name} avatar={pubProfile.avatar} size={60} C={C} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em", lineHeight: 1.1 }}>{pubProfile.name}</div>
-              <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.06em", marginTop: "3px" }}>@{pubProfile.handle?.replace(/^@/, "")}</div>
+          {/* ── Avatar hero (centered) ── */}
+          <div style={{ textAlign: "center", position: "relative", zIndex: 2, padding: "4px 0 0" }}>
+            {/* Avatar — gradient orb or AvatarCircle */}
+            <div style={{ width: 88, height: 88, borderRadius: 999, margin: "0 auto", background: `linear-gradient(135deg, ${(C as any).orb1 ?? C.accent}, ${(C as any).orb2 ?? C.accent})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: DISPLAY, fontWeight: 600, fontSize: 30, boxShadow: `0 0 0 4px ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}, 0 12px 36px ${(C as any).orb1 ?? C.accent}40`, border: `2px solid ${C.bg}` }}>
+              {pubProfile.avatar && pubProfile.avatar.length <= 8 && !pubProfile.avatar.startsWith("http") && !pubProfile.avatar.startsWith("data:") ? (
+                <span style={{ fontSize: 40 }}>{pubProfile.avatar}</span>
+              ) : pubProfile.avatar && (pubProfile.avatar.startsWith("http") || pubProfile.avatar.startsWith("data:")) ? (
+                <img src={pubProfile.avatar} alt="" style={{ width: 88, height: 88, borderRadius: 999, objectFit: "cover" }} />
+              ) : initials}
             </div>
-            {!isMe && targetCode && (
-              <button
-                onClick={() => isFollowing ? unfollowUser(targetCode) : followUser(targetCode)}
-                style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "9px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", flexShrink: 0 }}>
-                {isFollowing ? "✓ Following" : "+ Follow"}
-              </button>
+            <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text, marginTop: 14, letterSpacing: "-0.02em" }}>{pubProfile.name}</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: C.text2, marginTop: 4 }}>@{pubProfile.handle?.replace(/^@/, "")}</div>
+            {pubProfile.bio && (
+              <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, marginTop: 10, lineHeight: 1.5, maxWidth: 280, marginLeft: "auto", marginRight: "auto" }}>{pubProfile.bio}</div>
             )}
-            {isMe && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em" }}>YOU</span>}
+
+            {/* Follow + label */}
+            <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "center" }}>
+              {!isMe && targetCode && (
+                <button onClick={() => isFollowing ? unfollowUser(targetCode) : followUser(targetCode)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: isFollowing ? "8px 8px 8px 18px" : "10px 20px", borderRadius: 999, background: isFollowing ? C.text : "transparent", color: isFollowing ? C.bg : C.text, border: isFollowing ? "none" : `1px solid ${C.border2}`, cursor: "pointer", fontFamily: BODY, fontSize: 13, fontWeight: 600 }}>
+                  {isFollowing ? (<>Following<span style={{ width: 22, height: 22, borderRadius: 999, background: (C as any).live ?? C.accent, display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M3 7l3 3 5-6" stroke="#0A0A0A" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></span></>) : "+ Follow"}
+                </button>
+              )}
+              {isMe && <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.1em", padding: "10px 0" }}>YOU</span>}
+            </div>
           </div>
 
-          {pubProfile.bio && (
-            <div style={{ fontFamily: BODY, fontSize: "14px", color: C.text2, lineHeight: 1.65, marginBottom: "22px", paddingBottom: "22px", borderBottom: `1px solid ${C.border}` }}>
-              {pubProfile.bio}
-            </div>
-          )}
-
+          {/* ── Stats triplet ── */}
           {stats && stats.total > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "24px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "22px 0 0", position: "relative", zIndex: 2 }}>
               {[
-                { label: "TOTAL P&L", value: `${stats.totalPnL >= 0 ? "+" : ""}${stats.totalPnL.toFixed(1)}R`, color: stats.totalPnL >= 0 ? C.green : C.red },
-                { label: "WIN RATE", value: `${stats.winRate.toFixed(0)}%`, color: stats.winRate >= 50 ? C.green : C.red },
-                { label: "AVG R", value: stats.avgR ? `${stats.avgR.toFixed(1)}R` : "—", color: C.text },
+                { label: "Trades", value: String(stats.total), sub: "all-time", good: false },
+                { label: "Win rate", value: `${stats.winRate.toFixed(0)}%`, sub: stats.winRate >= 50 ? "strong" : "improving", good: stats.winRate >= 50 },
+                { label: "Avg R", value: stats.avgR ? `+${stats.avgR.toFixed(1)}` : "—", sub: "per trade", good: !!stats.avgR && stats.avgR > 0 },
               ].map(s => (
-                <div key={s.label} style={{ textAlign: "center", padding: "14px 8px", background: C.panel, borderRadius: "10px" }}>
-                  <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: s.color, letterSpacing: "-0.01em" }}>{s.value}</div>
-                  <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginTop: "4px" }}>{s.label}</div>
+                <div key={s.label} style={{ borderRadius: 18, padding: 14, background: C.panel, border: `1px solid ${C.border}`, textAlign: "center" }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>{s.label}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text, marginTop: 6, letterSpacing: "-0.02em" }}>{s.value}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: s.good ? C.green : C.text2, marginTop: 2 }}>{s.sub}</div>
                 </div>
               ))}
             </div>
           )}
 
-          {pubProfile.publicTrades && feedTrades.length > 0 && (<>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", marginBottom: "12px" }}>TRADES · {feedTrades.length}</div>
-            {feedTrades.slice(0, 25).map((t: any, i: number) => {
-              const pos = parseFloat(t.pnl) >= 0;
-              return (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", alignItems: "center", gap: "12px", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                  <div>
-                    <div style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{t.pair || "—"}</div>
-                    <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px" }}>{t.date}{t.strategy ? ` · ${t.strategy}` : ""}</div>
-                  </div>
-                  {t.rr && <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2 }}>{t.rr}R</span>}
-                  {t.pnl !== undefined && <span style={{ fontFamily: MONO, fontSize: "12px", color: pos ? C.green : C.red }}>{pos ? "+" : ""}{t.pnl}R</span>}
+          {/* ── Total P&L card ── */}
+          {stats && stats.totalPnL !== 0 && (
+            <div style={{ marginTop: 14, borderRadius: 22, padding: 18, background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Total P&L</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: stats.totalPnL >= 0 ? C.green : C.red, marginTop: 4, letterSpacing: "-0.02em" }}>{stats.totalPnL >= 0 ? "+" : ""}{stats.totalPnL.toFixed(1)}R</div>
                 </div>
-              );
-            })}
-          </>)}
+              </div>
+            </div>
+          )}
+
+          {/* ── Instruments pills ── */}
+          {pubProfile.instruments && pubProfile.instruments.length > 0 && (
+            <div style={{ marginTop: 14, borderRadius: 22, padding: 18, background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Trades</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+                {pubProfile.instruments.map((s: string) => (
+                  <div key={s} style={{ padding: "6px 12px", borderRadius: 999, background: C.accentSoft, border: `1px solid ${C.border2}`, color: C.accent, fontFamily: MONO, fontSize: 11, fontWeight: 600 }}>{s}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Trades list card ── */}
+          {pubProfile.publicTrades && feedTrades.length > 0 && (
+            <div style={{ marginTop: 14, borderRadius: 22, padding: 18, background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 12 }}>Recent trades · {feedTrades.length}</div>
+              {feedTrades.slice(0, 25).map((tr, i) => {
+                const pos = parseFloat(tr.pnl) >= 0;
+                return (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < Math.min(feedTrades.length, 25) - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.text, letterSpacing: "0.02em" }}>{tr.pair || "—"}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.06em", marginTop: 2 }}>{tr.date}{tr.strategy ? ` · ${tr.strategy}` : ""}</div>
+                    </div>
+                    {tr.rr && <span style={{ fontFamily: MONO, fontSize: 11, color: C.text2 }}>{tr.rr}R</span>}
+                    {tr.pnl !== undefined && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: pos ? C.green : C.red }}>{pos ? "+" : ""}{tr.pnl}R</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {pubProfile.publicTrades && feedTrades.length === 0 && (
-            <div style={{ padding: "20px 0", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>No published trades yet.</div>
+            <div style={{ marginTop: 14, padding: 20, textAlign: "center", fontFamily: BODY, fontSize: 13, color: C.muted, fontStyle: "italic", borderRadius: 22, background: C.panel, border: `1px solid ${C.border}` }}>No published trades yet.</div>
           )}
 
           {!pubProfile.publicTrades && (
-            <div style={{ padding: "16px", background: C.panel, borderRadius: "10px", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted }}>
+            <div style={{ marginTop: 14, padding: 18, background: C.panel, borderRadius: 22, border: `1px solid ${C.border}`, textAlign: "center", fontFamily: BODY, fontSize: 13, color: C.muted, position: "relative", zIndex: 2 }}>
               This trader's trades are private.
             </div>
           )}

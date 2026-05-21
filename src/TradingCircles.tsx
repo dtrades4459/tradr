@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
-import { SectionKicker, StrategyPill, Toast, stratCode, MONO, BODY, DISPLAY } from "./shared";
+import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
 
 export function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -139,86 +139,89 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
   }
 
   return (
-    <div style={{ marginTop: "clamp(16px, 4vw, 28px)" }}>
+    <div style={{ position: "relative" }}>
+      {/* ambient orb */}
+      <div style={{ position: "absolute", top: 120, left: -100, width: 360, height: 360, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb2 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: 0.4, pointerEvents: "none", zIndex: 0 }} />
 
       {/* ── BROWSE ── */}
       {circlesView === "browse" && (
         <>
-          <section>
-            <SectionKicker label="COMPETE. CONNECT. COMPARE." C={C} />
-            <h1 style={{ fontFamily: DISPLAY, fontSize: "clamp(44px, 11vw, 68px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 0.95, color: C.text, marginTop: "20px", marginBottom: "28px" }}>
-              Your <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>circles</span>.
-            </h1>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={() => setCirclesView("create")} style={{ ...pillPrimary(true), width: "auto", padding: "12px 20px" }}>+ Create circle</button>
-              <button onClick={() => setCirclesView("join")} style={{ ...pillGhost, padding: "12px 20px" }}>⤵ JOIN CIRCLE</button>
+          {/* Title */}
+          <div style={{ padding: "12px 6px 14px", position: "relative", zIndex: 2 }}>
+            <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Trading circles</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: "26px", fontWeight: 500, letterSpacing: "-0.02em", marginTop: "4px", color: C.text }}>
+              Compete with <span style={{ fontWeight: 600 }}>your circle</span>
             </div>
-          </section>
+          </div>
+
+          {/* Pill tabs */}
+          <div style={{ display: "flex", gap: "6px", padding: "0 6px 12px", position: "relative", zIndex: 2, flexWrap: "wrap" }}>
+            {["Joined", "Discover"].map((tab, i) => (
+              <button key={tab} style={{ padding: "6px 14px", borderRadius: "999px", background: i === 0 ? C.text : "transparent", color: i === 0 ? C.bg : C.text2, border: i === 0 ? `1px solid ${C.text}` : `1px solid ${C.border2}`, fontFamily: BODY, fontSize: "11px", fontWeight: 500, cursor: "pointer", flexShrink: 0 }}>{tab}</button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setCirclesView("create")} style={{ padding: "6px 14px", borderRadius: "999px", background: "transparent", color: C.text2, border: `1px solid ${C.border2}`, fontFamily: BODY, fontSize: "11px", fontWeight: 500, cursor: "pointer", flexShrink: 0 }}>+ New</button>
+          </div>
 
           {myCircles.length > 0 ? (
             <>
-            {/* TRADR Global pinned above MY CIRCLES */}
-            {myCircles.filter((c: any) => c.code === "TRADRG-HB1U").map((circle: any) => (
-              <section key={circle.id} style={{ marginTop: "clamp(28px, 5vw, 40px)" }}>
-                <SectionKicker label="TRADR GLOBAL" C={C} />
-                <div style={{ marginTop: "12px" }}>
-                  <div className="row-hvr" onClick={() => openCircle(circle)}
-                    style={{ padding: "20px", background: C.panel, borderRadius: "14px", cursor: "pointer", border: `1px solid ${C.border2}` }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                      <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: "22px", color: C.text2, flexShrink: 0, border: `1px solid ${C.border2}` }}>
-                        {circle.emoji || "◆"}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px", marginBottom: "4px" }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{circle.name}</span>
-                          <span style={{ fontFamily: MONO, fontSize: "18px", color: C.muted, flexShrink: 0 }}>›</span>
-                        </div>
-                        {circle.description && <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, lineHeight: 1.5, marginBottom: "10px" }}>{circle.description}</div>}
-                        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
-                          <span>{circle.members?.length || 1} members</span>
-                          <span style={{ color: C.green }}>● PUBLIC</span>
-                        </div>
-                      </div>
-                    </div>
+            {/* Featured / first circle — glass card */}
+            {myCircles.slice(0, 1).map(circle => (
+              <div key={circle.id} onClick={() => openCircle(circle)} style={{ position: "relative", zIndex: 2, cursor: "pointer", borderRadius: "22px", padding: "22px", overflow: "hidden", background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border2}` }}>
+                {/* corner glow */}
+                <div style={{ position: "absolute", top: -60, left: -60, width: 200, height: 200, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.green}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.green})`, filter: "blur(40px)", opacity: 0.4, pointerEvents: "none", zIndex: 0 }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "relative", zIndex: 1 }}>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.accent }}>● LIVE · YOUR CIRCLE</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 600, color: C.text, marginTop: "8px", letterSpacing: "-0.02em" }}>{circle.name}</div>
+                    <div style={{ fontSize: "12px", color: C.text2, marginTop: "4px", fontFamily: MONO }}>{circle.code} · {circle.members?.length || 1} members</div>
+                  </div>
+                  {myRank > 0 && (
+                    <div style={{ padding: "6px 12px", borderRadius: "999px", background: C.text, color: C.bg, fontSize: "11px", fontWeight: 600, fontFamily: BODY }}>#{myRank}</div>
+                  )}
+                </div>
+                {/* Avatar stack */}
+                <div style={{ display: "flex", marginTop: "18px", alignItems: "center", position: "relative", zIndex: 1 }}>
+                  {(circle.members || []).slice(0, 5).map((m, i) => (
+                    <div key={m.code || i} style={{ width: 34, height: 34, borderRadius: "999px", background: `linear-gradient(135deg, oklch(0.7 0.16 ${200 + i * 30}), oklch(0.5 0.18 ${280 + i * 20}))`, border: `2px solid ${C.bg}`, marginLeft: i === 0 ? 0 : -10, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: DISPLAY, fontWeight: 600, fontSize: "10px" }}>{(m.name || "?").slice(0, 2).toUpperCase()}</div>
+                  ))}
+                  {(circle.members?.length || 0) > 5 && (
+                    <div style={{ marginLeft: -10, height: 34, padding: "0 12px", borderRadius: "999px", background: C.panel2, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", color: C.text2, fontSize: "11px", fontFamily: MONO }}>+{(circle.members?.length || 0) - 5}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Other circles list */}
+            {myCircles.length > 1 && (
+            <div style={{ marginTop: "12px", borderRadius: "22px", overflow: "hidden", background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
+              {myCircles.slice(1).map((circle, i, arr) => (
+                <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
+                  style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 14px", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: "14px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <TradrMark size={16} color={C.accent} strokeWidth={2} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{circle.name}</div>
+                    <div style={{ fontSize: "11px", color: C.text2, marginTop: "2px", fontFamily: MONO }}>{circle.code} · {circle.members?.length || 1} members</div>
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: C.text2 }}>
+                    {circle.isOwner ? "OWNER" : "›"}
                   </div>
                 </div>
-              </section>
-            ))}
-            {/* User's own circles */}
-            {myCircles.filter((c: any) => c.code !== "TRADRG-HB1U").length > 0 && (
-            <section style={{ marginTop: "clamp(40px, 6vw, 56px)" }}>
-              <SectionKicker label={`MY CIRCLES · ${myCircles.filter((c: any) => c.code !== "TRADRG-HB1U").length}`} C={C} />
-              <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                {myCircles.filter((c: any) => c.code !== "TRADRG-HB1U").map((circle: any) => (
-                  <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
-                    style={{ padding: "20px", background: C.panel, borderRadius: "14px", cursor: "pointer", border: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                      {/* Symbol mark */}
-                      <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: "22px", color: C.text2, flexShrink: 0, border: `1px solid ${C.border2}` }}>
-                        {circle.emoji || "◆"}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "10px", marginBottom: "4px" }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, letterSpacing: "-0.02em", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{circle.name}</span>
-                          <span style={{ fontFamily: MONO, fontSize: "18px", color: C.muted, flexShrink: 0 }}>›</span>
-                        </div>
-                        {circle.description && <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, lineHeight: 1.5, marginBottom: "10px" }}>{circle.description}</div>}
-                        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
-                          <span>{circle.members?.length || 1} members</span>
-                          {circle.strategy && <span>{stratCode(circle.strategy)}</span>}
-                          <span style={{ color: circle.privacy === "public" ? C.green : C.muted }}>{circle.privacy === "public" ? "● PUBLIC" : "◐ PRIVATE"}</span>
-                          {circle.isOwner && <span style={{ color: C.text2 }}>OWNER</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+              ))}
+            </div>
             )}
+
+            {/* Join circle button */}
+            <div style={{ marginTop: "12px", display: "flex", gap: "8px", position: "relative", zIndex: 2 }}>
+              <button onClick={() => setCirclesView("join")} style={{ flex: 1, background: "transparent", color: C.text, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "12px 18px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                ⤵ Join with code
+              </button>
+            </div>
             </>
           ) : (
-            <section style={{ marginTop: "clamp(40px, 6vw, 56px)", padding: "48px 24px", background: C.panel, borderRadius: "16px", textAlign: "center", border: `1px solid ${C.border}` }}>
+            <section style={{ marginTop: "12px", padding: "48px 24px", background: C.panel, borderRadius: "22px", textAlign: "center", border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
               <div style={{ fontFamily: MONO, fontSize: "32px", color: C.border2, marginBottom: "16px", letterSpacing: "-0.02em" }}>◆</div>
               <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontStyle: "italic", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em", marginBottom: "8px" }}>No circles yet.</div>
               <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6, marginBottom: "24px" }}>
@@ -239,12 +242,14 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
 
       {/* ── CREATE ── */}
       {circlesView === "create" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "18px", position: "relative", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button onClick={() => setCirclesView("browse")} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
-            <SectionKicker label="CREATE A CIRCLE" C={C} />
+            <button onClick={() => setCirclesView("browse")} style={{ width: 36, height: 36, borderRadius: "999px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10l6 6" stroke={C.text} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Create a circle</div>
           </div>
-          <h2 style={{ fontFamily: DISPLAY, fontSize: "clamp(32px, 7vw, 44px)", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, color: C.text, marginTop: "8px" }}>
+          <h2 style={{ fontFamily: DISPLAY, fontSize: "26px", fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.1, color: C.text, marginTop: "4px" }}>
             Start <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>something small</span>.
           </h2>
           {/* Symbol picker */}
@@ -327,8 +332,10 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       {circlesView === "join" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button onClick={() => setCirclesView("browse")} style={{ ...pillGhost, padding: "8px 14px" }}>‹ BACK</button>
-            <SectionKicker label="JOIN A CIRCLE" C={C} />
+            <button onClick={() => setCirclesView("browse")} style={{ width: 36, height: 36, borderRadius: "999px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10l6 6" stroke={C.text} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Join a circle</div>
           </div>
           <div style={{ textAlign: "center", padding: "32px 0" }}>
             <div style={{ fontFamily: MONO, fontSize: "28px", color: C.muted, marginBottom: "20px", letterSpacing: "-0.02em" }}>⤵</div>
@@ -640,7 +647,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                       {!isMe && (
                         <button onClick={() => isFollowing ? unfollowUser(m.code) : followUser(m.code)}
                           style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0 }}>
-                          {isFollowing ? "✓" : "+Follow"}
+                          {isFollowing ? "\u2713" : "+Follow"}
                         </button>
                       )}
                     </div>
@@ -663,11 +670,11 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                 style={{ ...pillPrimary(true), width: "auto", padding: "8px 16px" }}>SHARE</button>
             </div>
             <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.5 }}>
-              LINK copies a join URL · SHARE sends a ready-made invite.
+              LINK copies a join URL \u00b7 SHARE sends a ready-made invite.
             </div>
           </section>
         </div>
       )}
     </div>
-  );
+  ); // TradingCircles render
 }
