@@ -5,7 +5,7 @@ import { onStorageError, storage } from "./lib/storage";
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { subscribeToCircle } from "./data/circles";
-import { subscribeToFollows, followUserV2, unfollowUserV2, readFollowGraphV2 } from "./data/follows";
+import { subscribeToFollows, followUserV2, unfollowUserV2, readFollowGraphV2, migrateLegacyFollows } from "./data/follows";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
 import { STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap, addExtraStrategies } from "./data/strategies";
@@ -566,13 +566,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         // both owned by the follower, so RLS never blocks a second writer:
         //   tradr_follow_<follower>_<target>    — enumerates my "following"
         //   tradr_follower_<target>_<follower>  — enumerates my "followers"
-        const [followRows, followerRows, legacyFg, legacyFr] = await Promise.all([
+        const [followRows, followerRows] = await Promise.all([
           storage.listByPrefix(`tradr_follow_${mc}_`),
           storage.listByPrefix(`tradr_follower_${mc}_`),
-          // Legacy fallback — users who followed before the per-row refactor
-          // still have single rows. Merge them in for a transparent upgrade.
-          storage.get(`tradr_following_${mc}`, true),
-          storage.get(`tradr_followers_${mc}`, true),
         ]);
         if (!alive) return;
 
@@ -596,14 +592,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           }
         }
 
-        // Merge legacy lists (read-only fallback; never overwrites per-row data).
-        if (legacyFg) {
-          try { (JSON.parse(legacyFg.value) || []).forEach((c: string) => followingSet.add(c)); } catch {}
-        }
-        if (legacyFr) {
-          try { (JSON.parse(legacyFr.value) || []).forEach((c: string) => followersSet.add(c)); } catch {}
-        }
-
         // ── V2 merge: read from public.follows when flag is on ────────────
         if (isFlagOn("newFollows") && user?.id) {
           try {
@@ -617,25 +605,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         setFollowers(Array.from(followersSet));
         setFollowerProfiles(profiles);
 
-        // One-time migration: if we still have a legacy `tradr_following_<mc>`
-        // row, materialize each entry as a per-row edge (both sides, owned by
-        // us) and drop the legacy row. Safe because we own the legacy row.
-        if (legacyFg) {
-          try {
-            const legacy: string[] = JSON.parse(legacyFg.value) || [];
-            await Promise.all(legacy.map(async (target) => {
-              if (!target || target === mc) return;
-              const edge = { follower: mc, target, at: new Date().toISOString() };
-              try { await storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
-              try { await storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
-            }));
-            try { await storage.delete(`tradr_following_${mc}`, true); } catch {}
-          } catch {}
-        }
       } catch {}
     }
     syncFollowsRef.current = syncFollows;
     syncFollowsRef.current();
+    // One-time safety net: migrate any remaining legacy blobs to per-row edges.
+    migrateLegacyFollows(getMyCode()).catch(() => {});
     // Realtime: re-sync the moment any row touching either side of my follow
     // graph changes. Falls back to the 2-min poll if Realtime is offline.
     const unsub = subscribeToFollows(getMyCode(), () => syncFollowsRef.current());

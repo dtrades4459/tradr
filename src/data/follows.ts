@@ -29,9 +29,6 @@ export const followKeys = {
   follow: (follower: string, target: string) => `tradr_follow_${follower}_${target}`,
   followerPrefix: (target: string) => `tradr_follower_${target}_`,
   follower: (target: string, follower: string) => `tradr_follower_${target}_${follower}`,
-  // Legacy single-row keys — read-only fallback during migration window.
-  legacyFollowing: (myCode: string) => `tradr_following_${myCode}`,
-  legacyFollowers: (myCode: string) => `tradr_followers_${myCode}`,
 };
 
 
@@ -44,11 +41,9 @@ export interface FollowGraph {
 
 export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
   try {
-    const [followRows, followerRows, legacyFg, legacyFr] = await Promise.all([
+    const [followRows, followerRows] = await Promise.all([
       storage.listByPrefix(followKeys.followPrefix(myCode)),
       storage.listByPrefix(followKeys.followerPrefix(myCode)),
-      storage.get(followKeys.legacyFollowing(myCode), true),
-      storage.get(followKeys.legacyFollowers(myCode), true),
     ]);
 
     const followingSet = new Set<string>();
@@ -61,15 +56,6 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
     for (const row of followerRows || []) {
       const follower = String(row.key).slice(followKeys.followerPrefix(myCode).length);
       if (follower) followersSet.add(follower);
-    }
-
-    if (legacyFg) {
-      try { (JSON.parse(legacyFg.value) || []).forEach((c: string) => followingSet.add(c)); }
-      catch (e) { log.error("follows.readFollowGraph.legacyFg", e); }
-    }
-    if (legacyFr) {
-      try { (JSON.parse(legacyFr.value) || []).forEach((c: string) => followersSet.add(c)); }
-      catch (e) { log.error("follows.readFollowGraph.legacyFr", e); }
     }
 
     return {
@@ -87,7 +73,7 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
 // drops the legacy row. Safe because the legacy row is owned by us.
 export async function migrateLegacyFollows(myCode: string): Promise<void> {
   try {
-    const legacyFg = await storage.get(followKeys.legacyFollowing(myCode), true);
+    const legacyFg = await storage.get(`tradr_following_${myCode}`, true);
     if (!legacyFg) return;
     const legacy: string[] = (() => {
       try { return JSON.parse(legacyFg.value) || []; }
@@ -101,7 +87,7 @@ export async function migrateLegacyFollows(myCode: string): Promise<void> {
       try { await storage.set(followKeys.follower(target, myCode), JSON.stringify(edge), true); }
       catch (e) { log.error("follows.migrateLegacyFollows.follower", e, { target }); }
     }));
-    try { await storage.del(followKeys.legacyFollowing(myCode), true); }
+    try { await storage.del(`tradr_following_${myCode}`, true); }
     catch (e) { log.error("follows.migrateLegacyFollows.delete", e); }
   } catch (e) {
     log.error("follows.migrateLegacyFollows", e, { myCode });
