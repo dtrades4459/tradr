@@ -2497,7 +2497,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           {view === "history" && (
             <div style={{ position: "relative" }}>
               {/* ambient orb */}
-              <div style={{ position: "absolute", top: 100, right: -100, width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb2 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: isDark ? 0.4 : 0.25, pointerEvents: "none", zIndex: 0 }} />
+              <div style={{ position: "absolute", top: 100, right: -100, width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb2 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.4 : 0.25, pointerEvents: "none", zIndex: 0 }} />
               {/* Title + summary */}
               <div style={{ padding: "12px 6px", position: "relative", zIndex: 2 }}>
                 <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Trade history</div>
@@ -2643,9 +2643,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                         {expanded && (
                           <div style={{ padding: "8px 0 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             {/* ── Glass hero card ── */}
-                            <div style={{ margin: "0 2px", borderRadius: 24, padding: 22, position: "relative", overflow: "hidden", background: isDark ? "rgba(20,20,26,0.6)" : "rgba(255,255,255,0.7)", backdropFilter: "blur(20px) saturate(160%)", border: `1px solid ${C.border2}` }}>
+                            <div style={{ margin: "0 2px", borderRadius: 24, padding: 22, position: "relative", overflow: "hidden", background: darkMode ? "rgba(20,20,26,0.6)" : "rgba(255,255,255,0.7)", backdropFilter: "blur(20px) saturate(160%)", border: `1px solid ${C.border2}` }}>
                               {/* corner glow */}
-                              <div style={{ position: "absolute", top: -80, left: -80, width: 240, height: 240, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.accent}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.accent})`, filter: "blur(50px)", opacity: isDark ? 0.5 : 0.3, pointerEvents: "none" }} />
+                              <div style={{ position: "absolute", top: -80, left: -80, width: 240, height: 240, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.accent}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.accent})`, filter: "blur(50px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none" }} />
                               {/* ghost P&L watermark */}
                               {t.pnl && <div style={{ position: "absolute", bottom: -20, right: -10, fontFamily: DISPLAY, fontWeight: 700, fontSize: 130, color: parseFloat(t.pnl) >= 0 ? C.green : C.red, opacity: 0.07, letterSpacing: "-0.04em", lineHeight: 1, pointerEvents: "none" }}>{parseFloat(t.pnl) >= 0 ? "+" : ""}{t.pnl}R</div>}
 
@@ -2846,7 +2846,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           {view === "stats" && (
             <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "12px" }}>
               {/* ambient orb */}
-              <div style={{ position: "absolute", top: -60, right: -100, width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb1 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: isDark ? 0.5 : 0.3, pointerEvents: "none", zIndex: 0 }} />
+              <div style={{ position: "absolute", top: -60, right: -100, width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb1 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none", zIndex: 0 }} />
               {/* title + subtitle */}
               <div style={{ padding: "12px 6px 0", position: "relative", zIndex: 2 }}>
                 <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Edge analysis</div>
