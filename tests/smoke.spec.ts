@@ -94,8 +94,6 @@ test.describe("TRADR smoke", () => {
     await saveButton.click();
 
     // ── Verify trade appears ──────────────────────────────────────────────────
-    // After saving, a trade entry with "NQ" or "100" should be visible
-    const tradeEntry = page.locator("text=/NQ|\00|100\.00/").first();
-    await expect(tradeEntry).toBeVisible({ timeout: 10_000 });
-  });
-});
+    // After saving, a trade entry with "NQ" or "100" should be visible somewhere
+    const tradeEntry = page.locator("text=NQ").or(page.locator("text=100")).first();
+    await expect(tradeEntry).toBeVisible({ timeo
