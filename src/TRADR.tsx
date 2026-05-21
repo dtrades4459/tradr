@@ -1429,16 +1429,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                 })}
               </div>
               <div style={{ padding:"20px 22px 0", borderTop:`1px solid ${C.border}`, display:"flex", flexDirection:"column", gap:"10px" }}>
-                {/* ── Calculator shortcut ── */}
-                <button onClick={() => setShowCalc(true)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:"transparent", border:"none", borderLeft:"2px solid transparent", padding:"8px 0", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:C.dim, textAlign:"left", transition:"color 0.12s" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:0.55, flexShrink:0 }}>
-                    <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/>
-                  </svg>
-                  Calculator
-                </button>
-                <button onClick={toggleDark} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"7px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.08em", color:C.muted, textTransform:"uppercase" }}>
-                  {darkMode?"Light Mode":"Dark Mode"}
-                </button>
               </div>
             </aside>
           )}
@@ -2049,40 +2039,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                         )}
                       </div>
                     )}
-                  </section>
-
-                  {/* Connections */}
-                  <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
-                    <SectionKicker label="CONNECTIONS" C={C} />
-                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column" }}>
-                      {/* Tradovate */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${C.border}` }}>
-                        <div>
-                          <div style={{ fontSize: "13px", fontWeight: 500, color: C.text }}>
-                            Tradovate
-                            {tradovateSession && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green, marginLeft: "8px", letterSpacing: "0.06em" }}>LIVE</span>}
-                          </div>
-                          <div style={{ fontSize: "11px", color: C.muted, marginTop: "2px" }}>
-                            {tradovateSession ? `${tradovateSession.accountName ?? "Connected"} · ${tradovateSession.env.toUpperCase()}` : "Live positions & auto-import"}
-                          </div>
-                        </div>
-                        <button onClick={() => setShowLiveModal(true)}
-                          style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", padding: "5px 10px", fontSize: "11px", color: C.muted, cursor: "pointer", fontFamily: MONO, letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
-                          {tradovateSession ? "Manage →" : "Connect →"}
-                        </button>
-                      </div>
-                      {/* Stripe */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0" }}>
-                        <div>
-                          <div style={{ fontSize: "13px", fontWeight: 500, color: C.text }}>
-                            Stripe Billing
-                            {profile.stripeCustomerId && <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green, marginLeft: "8px", letterSpacing: "0.06em" }}>CONNECTED</span>}
-                          </div>
-                          <div style={{ fontSize: "11px", color: C.muted, marginTop: "2px" }}>Subscription management</div>
-                        </div>
-
-                      </div>
-                    </div>
                   </section>
 
                   {/* Data export */}
@@ -3524,32 +3480,8 @@ ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>
                   </button>
                 );
               })}
-              {/* Calculator — teal accent pill embedded in nav */}
-              <button
-                onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
-                title="Position Size Calculator"
-                style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 10px", borderRadius: "999px", background: `color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 18%, transparent)`, color: (C as any).live ?? "oklch(0.84 0.14 175)", border: `1px solid color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 30%, transparent)`, cursor: "pointer", minHeight: "48px", transition: "opacity 0.15s" }}>
-                {/* Scale/balance SVG icon */}
-                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="10" y1="3" x2="10" y2="17"/>
-                  <line x1="2" y1="17" x2="18" y2="17"/>
-                  <path d="M2 9l4 5 4-5"/>
-                  <path d="M18 9l-4 5-4-5"/>
-                  <line x1="6" y1="9" x2="14" y2="9"/>
-                </svg>
-                <span style={{ fontSize: "9px", fontFamily: MONO, letterSpacing: "0.06em" }}>Size</span>
-              </button>
             </div>
           </div>
-        )}
-
-        {/* ── Lot Size Calculator — desktop floating button only ── */}
-        {isDesktop && (
-          <button
-            onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
-            style={{ position: "fixed", bottom: "28px", left: "16px", zIndex: 998, background: (C as any).live ?? "oklch(0.84 0.14 175)", color: "#0A0A0A", border: "none", borderRadius: "999px", padding: "12px 18px", minHeight: "44px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", boxShadow: `0 2px 16px color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 40%, transparent)`, display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: 16, lineHeight: 1 }}>⚖️</span> Size
-          </button>
         )}
 
         {/* ── Feedback floating button ── */}
@@ -3911,3 +3843,4 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
     </div>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
