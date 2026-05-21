@@ -247,13 +247,20 @@ export function useCircles({
       if (!alive) return;
       const changed = JSON.stringify(refreshed) !== JSON.stringify(current);
       if (changed) {
-        setMyCircles(refreshed);
+        // Merge: preserve circles joined since this sync started (not in `current`)
+        setMyCircles(prev => {
+          const refreshedCodes = new Set(refreshed.map((c: Circle) => c.code));
+          const addedSinceStart = prev.filter((c: Circle) => !refreshedCodes.has(c.code));
+          return [...refreshed, ...addedSinceStart];
+        });
         try { await storage.set("tradr_circles", JSON.stringify(refreshed)); } catch {}
       }
     }
 
     syncCircles();
-    const id = setInterval(syncCircles, 120_000);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") syncCircles();
+    }, 120_000);
 
     // Realtime: subscribe to every circle the user is currently a member of.
     // The set of circles can change (join/leave/create), so we keep the live

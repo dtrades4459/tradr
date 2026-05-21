@@ -93,7 +93,7 @@ export default async function handler(req: any, res: any) {
       options: { redirectTo: APP_URL },
     });
     if (linkErr) throw linkErr;
-    resetLink = data?.properties?.action_link ?? data?.action_link ?? "";
+    resetLink = data?.properties?.action_link ?? "";
   } catch (e) {
     console.error("[reset-password] generateLink:", e);
     return res.status(500).json({ error: "Failed to generate reset link" });
@@ -153,10 +153,10 @@ export default async function handler(req: any, res: any) {
         ? `📧 Emailed via Resend to: ${recoveryEmail}`
         : "⚠️ No recovery email — forward link manually",
       "",
-      "🔗 Reset link:",
-      `${resetLink}`,
-      "",
-      "⏰ Expires in 1 hour",
+      "⏰ Link expires in 1 hour",
+      recoveryEmail
+        ? "(link delivered to user via Resend — not logged here)"
+        : "⚠️ Generate a new link manually: Supabase Dashboard → Auth → Users → find @" + u + " → Send recovery email",
     ].join("\n");
 
     fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

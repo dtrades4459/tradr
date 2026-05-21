@@ -41,7 +41,7 @@ export default defineConfig({
     // Only pick up *.test.ts files inside src/ — exclude Playwright tests in tests/
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["tests/**", "node_modules/**"],
-    environment: "node",
+    environment: "jsdom",
   },
   build: {
     rollupOptions: {

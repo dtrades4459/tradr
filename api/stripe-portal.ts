@@ -85,7 +85,7 @@ export default async function handler(req: any, res: any) {
     const { data: kvRow } = await db
       .from("user_kv")
       .select("value")
-      .eq("uid", authedUser.id)
+      .eq("user_id", authedUser.id)
       .eq("key", "tradr_stripe_customer")
       .maybeSingle();
 

@@ -1,6 +1,47 @@
-# TRADR — Project Context for Claude
+# TRADR — Claude Code Operating Rules & Project Context
 
-> Read this file at the start of every session. It covers the full architecture, all decisions made, known issues, and what's next.
+> Read this file at the start of every session. Follow the Operating Rules without exception, then use the project context below for all decisions.
+
+---
+
+## Operating Rules
+
+These rules apply to every task in this repo.
+
+### Rule 1 — Plan before code
+- Never touch a file before writing a plan.
+- Output the plan as a numbered checklist: files to touch, what changes in each, what could break, how you'll verify.
+- If anything unexpected happens mid-execution (failed test, wrong assumption, scope creep, surprising file state), STOP. Do not "push through." Re-plan from the new reality and show me the revised plan before continuing.
+
+### Rule 2 — Offload hard problems to sub-agents
+- For any task with multiple independent parts (refactor + tests + docs, multi-file investigation, parallel searches), spawn sub-agents via the Task tool.
+- Keep the main context clean: sub-agents do the deep digging and return summaries.
+- Main thread = orchestration and decisions only.
+
+### Rule 3 — Self-improvement loop
+- Every lesson learned (mistake made, wrong assumption corrected, surprising codebase behavior, user correction) gets appended to `tasks/lessons.md` as a rule.
+- Format: `- [YYYY-MM-DD] [category] Rule in imperative form.`
+- Before starting any task, read `tasks/lessons.md` and apply any relevant rules.
+- If a lesson contradicts a rule here, flag it — do not silently override.
+
+### Rule 4 — Prove it works
+- Nothing is marked done until:
+  1. Relevant tests run and pass (or new tests added if none existed).
+  2. Logs checked — no new errors or warnings introduced.
+  3. The change is verified end-to-end in the actual flow it affects, not just in isolation.
+- "It should work" is not done. "I ran it and here's the output" is done.
+
+### Rule 5 — Autonomous bug fixing
+- When a bug is presented:
+  1. Reproduce it first. Don't trust the description — confirm the symptom.
+  2. Go to the logs. Find the actual stack trace or error.
+  3. Trace to root cause — not the first plausible suspect, the actual cause.
+  4. Fix the root cause, not the symptom.
+  5. Add a test or log assertion that would have caught it.
+  6. Verify per Rule 4.
+- Do not ask permission to investigate. Investigate, then propose the fix.
+
+---
 
 ---
 

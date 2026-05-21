@@ -15,6 +15,8 @@
 
 export const config = { runtime: "nodejs" };
 
+import { getUserIdFromJwt } from "./lib/supabaseAdmin";
+
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE = "https://live.tradovateapi.com/v1";
 
@@ -60,6 +62,10 @@ export default async function handler(req: any, res: any) {
   cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
 
+  // All actions require an authenticated TRADR session
+  const userId = await getUserIdFromJwt(req.headers["authorization"] as string);
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
   const action = req.query.action as string | undefined;
   const env    = (req.query.env as string | undefined) || "demo";
   const b      = base(env);
@@ -101,9 +107,9 @@ export default async function handler(req: any, res: any) {
   }
 
   // ── authenticated endpoints ───────────────────────────────────────────────
-  const authHeader = (req.headers["authorization"] as string | undefined) ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  if (!token) return res.status(401).json({ error: "No access token" });
+  // Tradovate token is passed in x-tradovate-token — Authorization is the TRADR JWT (verified above)
+  const token = (req.headers["x-tradovate-token"] as string | undefined) ?? "";
+  if (!token) return res.status(401).json({ error: "No Tradovate access token" });
 
   if (action === "accounts") {
     const { status, data } = await proxy(`${b}/account/list`, "GET", token);

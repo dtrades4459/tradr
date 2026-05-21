@@ -15,6 +15,7 @@
 export const config = { runtime: "nodejs" };
 
 import { checkRateLimit, getClientIp } from "./lib/rateLimit";
+import { getUserIdFromJwt } from "./lib/supabaseAdmin";
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
@@ -30,13 +31,16 @@ function cors(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 export default async function handler(req: any, res: any) {
   cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const userId = await getUserIdFromJwt(req.headers["authorization"] as string);
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
   const ip = getClientIp(req);
   const allowed = await checkRateLimit("feedback", ip, { limit: 5, windowMs: 60_000 });

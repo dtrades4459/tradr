@@ -23,14 +23,18 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
         }
         const profileRow = await storage.get(`tradr_profile_pub_${norm}`, true);
         if (profileRow) {
-          const p = JSON.parse(profileRow.value);
-          setPubProfile(p);
-          if (p.publicTrades && code) {
-            const feedRow = await storage.get(`tradr_feed_${code}`, true);
-            if (feedRow) {
-              try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
+          try {
+            const p = JSON.parse(profileRow.value);
+            if (p) {
+              setPubProfile(p);
+              if (p.publicTrades && code) {
+                const feedRow = await storage.get(`tradr_feed_${code}`, true);
+                if (feedRow) {
+                  try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
+                }
+              }
             }
-          }
+          } catch { /* malformed — leave pubProfile null */ }
         } else if (code) {
           const feedRow = await storage.get(`tradr_feed_${code}`, true);
           if (feedRow) {
@@ -57,7 +61,7 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
 
   const stats = useMemo(() => {
     if (!feedTrades.length) return null;
-    const wins = feedTrades.filter((t: any) => t.outcome === "Win" || parseFloat(t.pnl) > 0).length;
+    const wins = feedTrades.filter((t) => t.outcome === "Win").length;
     const total = feedTrades.length;
     const winRate = total > 0 ? (wins / total * 100) : 0;
     const totalPnL = feedTrades.reduce((s: number, t: any) => s + (parseFloat(t.pnl) || 0), 0);

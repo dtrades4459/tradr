@@ -27,8 +27,11 @@ export default defineConfig([
       "prefer-const": "warn",
       // shared.tsx exports constants alongside components -- acceptable for now.
       "react-refresh/only-export-components": "warn",
-      // eslint-plugin-react-hooks v7 added compiler-aware rules that flag pre-existing
-      // patterns as errors. Downgrade to warn so CI passes while we clean up.
+      // exhaustive-deps has pre-existing violations in TRADR.tsx — kept as warn until
+      // those are addressed in a dedicated cleanup. TODO: promote to error.
+      "react-hooks/exhaustive-deps": "warn",
+      // eslint-plugin-react-hooks v7 React Compiler rules — kept as warn (pre-existing violations)
+      // TODO: promote to error once the compiler migration is complete
       "react-hooks/static-components": "warn",
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/purity": "warn",

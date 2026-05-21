@@ -88,15 +88,12 @@ export default async function handler(req: any, res: any) {
   }
 
   // ── Encrypt tokens ──────────────────────────────────────────────────────────
-  const encryptionKey = process.env.TRADR_ENCRYPTION_KEY;
-  if (!encryptionKey) {
-    return res.status(500).json({ error: "Encryption key not configured" });
-  }
-
+  // encrypt() reads TRADR_ENCRYPTION_KEY from process.env internally and throws
+  // if it is missing or malformed — no need to read it here.
   let accessTokenEnc: string, refreshTokenEnc: string;
   try {
-    accessTokenEnc  = await encrypt(authData.accessToken,  encryptionKey);
-    refreshTokenEnc = await encrypt(authData.mdAccessToken ?? authData.accessToken, encryptionKey);
+    accessTokenEnc  = encrypt(authData.accessToken);
+    refreshTokenEnc = encrypt(authData.mdAccessToken ?? authData.accessToken);
   } catch (err: any) {
     console.error("[broker/connect] Encryption error:", err);
     return res.status(500).json({ error: "Token encryption failed" });
@@ -113,7 +110,7 @@ export default async function handler(req: any, res: any) {
     const acctRes = await fetch(`${base}/account/list`, {
       headers: { Authorization: `Bearer ${authData.accessToken}`, "Content-Type": "application/json" },
     });
-    const accounts: any[] = await acctRes.json();
+    const accounts = (await acctRes.json()) as any[];
     const acct = accounts?.[0];
     if (acct) {
       accountId   = String(acct.id ?? "");

@@ -54,7 +54,7 @@ async function refreshTradovateToken(
       headers: { Authorization: `Bearer ${refreshTokenPlain}`, "Content-Type": "application/json" },
     });
     if (!r.ok) return null;
-    const data = await r.json();
+    const data = (await r.json()) as any;
     return data?.accessToken ? data : null;
   } catch {
     return null;
@@ -184,11 +184,17 @@ async function syncConnection(conn: any): Promise<{
   const env          = conn.env ?? "live";
   const base         = tvBase(env);
 
-  // Mark as syncing
-  await admin
+  // Claim the connection atomically — only update if still in a claimable state.
+  // If another cron invocation already flipped it to "syncing", skip this connection.
+  const { data: claimed } = await admin
     .from("broker_connections")
     .update({ sync_status: "syncing", updated_at: new Date().toISOString() })
-    .eq("id", connectionId);
+    .eq("id", connectionId)
+    .in("sync_status", ["connected", "error"])
+    .select("id")
+    .single();
+
+  if (!claimed) return { connectionId, tradesFound: 0, tradesNew: 0, error: null };
 
   const eventStart = new Date().toISOString();
 
@@ -213,18 +219,37 @@ async function syncConnection(conn: any): Promise<{
               token_expires_at: refreshed.expirationTime,
             })
             .eq("id", connectionId);
+        } else if (Date.now() > expiresAt) {
+          // Token is already expired and refresh failed — stop here rather than
+          // sending an expired token to Tradovate and getting a cryptic 401.
+          throw new Error("Access token expired and refresh failed — please reconnect your account");
+        } else {
+          // Token not yet expired but refresh failed — set error state rather than
+          // silently proceeding with a token that may expire mid-request.
+          await admin
+            .from("broker_connections")
+            .update({ sync_status: "error", sync_error: "Token refresh failed — please reconnect your account" })
+            .eq("id", connectionId);
+          throw new Error("Token refresh failed — please reconnect your account");
         }
       }
     }
 
-    // Fetch fills since last sync (or all if first sync)
-    const allFills: any[] = await tvGet(`${base}/fill/list`, accessToken);
-    if (!Array.isArray(allFills)) throw new Error("Unexpected response from Tradovate fill/list");
+    // Fetch fills. Tradovate returns all fills with no server-side date filter.
+    // Cap to the most recent MAX_FILLS before applying the date filter to prevent
+    // OOM/timeout in the serverless function on high-volume accounts.
+    // On incremental syncs (last_sync_at is set) this cap is effectively never hit.
+    const MAX_FILLS = 5_000;
+    const rawFills = await tvGet(`${base}/fill/list`, accessToken);
+    if (!Array.isArray(rawFills)) throw new Error("Unexpected response from Tradovate fill/list");
+
+    const allFills = rawFills.length > MAX_FILLS
+      ? rawFills.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? "")).slice(0, MAX_FILLS)
+      : rawFills;
 
     const lastSync = conn.last_sync_at;
-    const newFills = lastSync
-      ? allFills.filter(f => (f.timestamp ?? "") > lastSync)
-      : allFills;
+    const since = lastSync ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const newFills = allFills.filter(f => (f.timestamp ?? "") > since);
 
     const tradesFound = newFills.length;
 
@@ -360,7 +385,7 @@ export default async function handler(req: any, res: any) {
     if (!conns?.length) return res.status(200).json({ ok: true, results: [], message: "No connected accounts" });
 
     const results = await runWithConcurrency(
-      conns.map(conn => () => syncConnection(conn)),
+      (conns ?? []).map((conn) => () => syncConnection(conn)),
       5
     );
 
@@ -370,7 +395,9 @@ export default async function handler(req: any, res: any) {
   // ── SCHEDULED mode: GET with cron secret ──────────────────────────────────
   if (req.method === "GET") {
     const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && req.headers["x-cron-secret"] !== cronSecret)
+    if (!cronSecret)
+      return res.status(500).json({ error: "CRON_SECRET not configured" });
+    if (req.headers["x-cron-secret"] !== cronSecret)
       return res.status(401).json({ error: "Invalid cron secret" });
 
     const { data: conns, error } = await admin
@@ -382,7 +409,7 @@ export default async function handler(req: any, res: any) {
     if (!conns?.length) return res.status(200).json({ ok: true, synced: 0 });
 
     const results = await runWithConcurrency(
-      conns.map(conn => () => syncConnection(conn)),
+      (conns ?? []).map((conn) => () => syncConnection(conn)),
       10
     );
 

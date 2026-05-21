@@ -462,10 +462,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           typeof tr.screenshot === "string" && tr.screenshot.startsWith("data:")
         );
         if (toMigrate.length > 0) {
+          let migrationAlive = true;
           (async () => {
             let updated = [...loadedTrades];
             let changed = false;
             for (const tr of toMigrate) {
+              if (!migrationAlive) break;
               try {
                 const res = await fetch(tr.screenshot!);
                 const blob = await res.blob();
@@ -481,7 +483,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                 changed = true;
               } catch { /* skip — will retry next session */ }
             }
-            if (changed) {
+            if (changed && migrationAlive) {
               setTrades(updated);
               await storage.set("tradr_trades", JSON.stringify(updated));
             }
