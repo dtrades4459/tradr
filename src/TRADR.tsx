@@ -5,6 +5,7 @@ import { onStorageError, storage } from "./lib/storage";
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { useFollows } from "./hooks/useFollows";
+import { useFeed } from "./hooks/useFeed";
 import { useCircles } from "./hooks/useCircles";
 import type { CircleStats } from "./hooks/useCircles";
 import { getProfile, upsertProfile } from "./data/profile";
@@ -310,12 +311,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState<Profile>(DEF_PROFILE);
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
-  const [friends, setFriends] = useState<string[]>([]);
-  const [friendFeed, setFriendFeed] = useState<any[]>([]);
-  // Track which feed reactions the current user has already added this session.
-  // Key format: `${authorCode}_${tradeId}_${reaction}`. Prevents spam and gives
-  // true toggle semantics even though feed reactions aren't persisted remotely.
-  const [myFeedReactions, setMyFeedReactions] = useState<Set<string>>(new Set());
   const [pnlMode, setPnlMode] = useState<"r" | "$">("$");
   const [timeMode, setTimeMode] = useState<"week" | "all">("week");
   // Follow system — state + sync managed by useFollows (wired below after getMyCode).
@@ -327,9 +322,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
-  const [showAddFriend, setShowAddFriend] = useState(false);
-  const [friendCodeInput, setFriendCodeInput] = useState("");
-  const [friendMsg, setFriendMsg] = useState("");
   const [toast, setToast] = useState<any>(null);
   const [homeSection, setHomeSection] = useState("feed");
   // Supabase JWT access token — used by DataSourcesScreen for broker API calls.
@@ -462,28 +454,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   }, [trades]);
 
 
-  // ── Auto-publish my feed whenever trades change ───────────────────
-  // Friends see fresh data without the user ever tapping "Publish".
-  // Debounced 1 s to avoid hammering on rapid edits.
-  const _publishFeedRef = useRef(publishFeed);
-  _publishFeedRef.current = publishFeed;
-  useEffect(() => {
-    if (loading) return;
-    const publish = _publishFeedRef.current;
-    const t = setTimeout(() => { publish(); }, 1000);
-    return () => clearTimeout(t);
-  }, [trades, loading]);
-
-  // ── Periodic auto-refresh of inbound friend feed (every 2 min) ───
-  const _refreshFeedRef = useRef(refreshFeed);
-  _refreshFeedRef.current = refreshFeed;
-  useEffect(() => {
-    if (loading || !friends.length) return;
-    const refresh = _refreshFeedRef.current;
-    const id = setInterval(() => { refresh(); }, 2 * 60 * 1000);
-    return () => clearInterval(id);
-  }, [loading, friends]);
-
   // ── Follows sync (every 2 min) ───────────────────────────────────
   // Load my follow lists from shared_kv and refresh periodically so counts
 
@@ -502,11 +472,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   async function loadAll() {
     const store = storage;
-    const [t, pr, fr, ff, sc, sr, dm, ci, st, cs, v2ProfileRes] = await Promise.all([
+    const [t, pr, sc, sr, dm, ci, st, cs, v2ProfileRes] = await Promise.all([
       store.get("tradr_trades").catch(() => null),
       store.get("tradr_profile").catch(() => null),
-      store.get("tradr_friends").catch(() => null),
-      store.get("tradr_feed", true).catch(() => null),
       store.get("tradr_checklists").catch(() => null),
       store.get("tradr_rules").catch(() => null),
       store.get("tradr_dark").catch(() => null),
@@ -598,10 +566,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       if (p.uid) phIdentify(p.uid, { handle: p.handle, plan: p.plan ?? "free" });
     } catch (e) { log.error("loadAll.profile", e); }
 
-    try { if (fr) setFriends(JSON.parse(fr.value)); }
-    catch (e) { log.error("loadAll.friends", e); }
-    try { if (ff) setFriendFeed(JSON.parse(ff.value)); }
-    catch (e) { log.error("loadAll.feed", e); }
     try { if (sc) setStratChecklists(JSON.parse(sc.value)); }
     catch (e) { log.error("loadAll.checklists", e); }
     try { if (sr) setStratRules(JSON.parse(sr.value)); }
@@ -859,7 +823,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       } catch (e) { log.error("saveProfile.v2", e, { userId: user.id }); }
     }
   }
-  async function saveFriends(u: string[]) { setFriends(u); await storage.set("tradr_friends", JSON.stringify(u)); }
   async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await storage.set("tradr_checklists", JSON.stringify(u)); }
 
   async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await storage.set("tradr_thresholds", JSON.stringify(u)); }
@@ -1104,18 +1067,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     showToast,
   });
 
-  async function addFriend() {
-    const code = friendCodeInput.trim().toUpperCase();
-    if (!code) return;
-    if (friends.find(f => f.code === code)) { setFriendMsg("Already added."); setTimeout(() => setFriendMsg(""), 2000); return; }
-    const u = [...friends, { code, name: code.split("-")[0], addedAt: new Date().toISOString() }];
-    await saveFriends(u);
-    setFriendCodeInput("");
-    setFriendMsg("Friend added.");
-    setTimeout(() => setFriendMsg(""), 2500);
-  }
-  async function removeFriend(code: string) { await saveFriends(friends.filter(f => f.code !== code)); }
-
   // ── Handle registry ────────────────────────────────────────────
   // Maps @handle → { code, name } in shared_kv. Owner = the handle's user,
   // so only they can update/delete their own handle row (RLS-safe).
@@ -1131,6 +1082,15 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       return JSON.parse(r.value);
     } catch { return null; }
   }
+  // ── Feed system (friends, feed, reactions, follow-by-handle) ─────────────
+  const {
+    friends, friendFeed, myFeedReactions,
+    showAddFriend, setShowAddFriend,
+    friendCodeInput, setFriendCodeInput, friendMsg, addFriend, removeFriend, saveFriends,
+    followHandleInput, setFollowHandleInput, followHandleMsg, followHandleLoading, followByHandle,
+    publishFeed, refreshFeed, reactToFeed,
+  } = useFeed({ loading, trades, profile, following, followUser, getMyCode, resolveHandle });
+
   async function registerHandle(handle: string, oldHandle: string | null): Promise<void> {
     const mc = getMyCode();
     const norm = normaliseHandle(handle);
@@ -1250,70 +1210,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     }
   }
 
-  // ── Follow by @handle (resolves handle → code, then follows) ──
-  const [followHandleInput, setFollowHandleInput] = useState("");
-  const [followHandleMsg, setFollowHandleMsg] = useState("");
-  const [followHandleLoading, setFollowHandleLoading] = useState(false);
-  async function followByHandle() {
-    const raw = followHandleInput.trim();
-    if (!raw) return;
-    setFollowHandleLoading(true);
-    setFollowHandleMsg("");
-    try {
-      const resolved = await resolveHandle(raw);
-      if (!resolved) {
-        setFollowHandleMsg("User not found. Check the username.");
-        setTimeout(() => setFollowHandleMsg(""), 3000);
-        return;
-      }
-      if (resolved.code === getMyCode()) {
-        setFollowHandleMsg("That's you.");
-        setTimeout(() => setFollowHandleMsg(""), 2000);
-        return;
-      }
-      await followUser(resolved.code);
-      setFollowHandleInput("");
-      setFollowHandleMsg(`Now following @${normaliseHandle(raw)}.`);
-      setTimeout(() => setFollowHandleMsg(""), 2500);
-    } finally {
-      setFollowHandleLoading(false);
-    }
-  }
-
   // Friends = mutual follows (I follow them + they follow me).
   const friendCodes = following.filter(c => followers.includes(c));
-  async function publishFeed() {
-    const mc = getMyCode();
-    const items = trades.slice(0, 10).map(t => ({ authorCode: mc, authorName: profile.name || "Trader", authorHandle: profile.handle || "@trader", authorAvatar: profile.avatar || "", tradeId: t.id, pair: t.pair, date: t.date, outcome: t.outcome, pnl: t.pnl, rr: t.rr, strategy: t.strategy, setup: t.setup, notes: t.notes, session: t.session, reactions: t.reactions || {}, comments: (t.comments || []).length, publishedAt: new Date().toISOString() }));
-    await storage.set(`tradr_feed_${mc}`, JSON.stringify(items), true);
-  }
-  async function refreshFeed() {
-    const items: typeof friendFeed = [];
-    // Read feeds from everyone in the new follow system (following) + old friends list
-    const allCodes = new Set([...following, ...friends.map((f: { code: string }) => f.code)]);
-    for (const code of allCodes) {
-      try { const r = await storage.get(`tradr_feed_${code}`, true); if (r) { const d = JSON.parse(r.value); items.push(...d); } } catch { }
-    }
-    items.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
-    setFriendFeed(items);
-    await storage.set("tradr_feed", JSON.stringify(items));
-  }
-  function reactToFeed(ac: string, tid: number, reaction: string) {
-    const key = `${ac}_${tid}_${reaction}`;
-    const alreadyReacted = myFeedReactions.has(key);
-    setMyFeedReactions(prev => {
-      const next = new Set(prev);
-      if (alreadyReacted) { next.delete(key); } else { next.add(key); }
-      return next;
-    });
-    setFriendFeed((p: unknown[]) => p.map((item) => {
-      if (item.authorCode !== ac || item.tradeId !== tid) return item;
-      const r = { ...item.reactions };
-      const cur = typeof r[reaction] === "number" ? r[reaction] : (Array.isArray(r[reaction]) ? r[reaction].length : 0);
-      r[reaction] = alreadyReacted ? Math.max(0, cur - 1) : cur + 1;
-      return { ...item, reactions: r };
-    }));
-  }
 
   // Stats — memoised so derived values only recompute when `trades` changes.
   const { wins, losses, bes, total, winRate, totalPnL } = useMemo(() => {
@@ -3994,3 +3892,4 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
     </div>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
