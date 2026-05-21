@@ -202,7 +202,7 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "48px" }}>
           <TrMark size={28} bg={C.panel} />
-          <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>TRADR</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>Kōda</span>
         </div>
 
         <div style={{ display: "flex", gap: "6px", marginBottom: "44px" }}>

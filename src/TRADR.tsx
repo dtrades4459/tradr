@@ -4,22 +4,13 @@ import type { User } from "@supabase/supabase-js";
 import { onStorageError, storage } from "./lib/storage";
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
-import { subscribeToCircle } from "./data/circles";
-import { subscribeToFollows, followUserV2, unfollowUserV2, readFollowGraphV2, migrateLegacyFollows } from "./data/follows";
+import { useFollows } from "./hooks/useFollows";
+import { useCircles } from "./hooks/useCircles";
+import type { CircleStats } from "./hooks/useCircles";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
 import { STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap, addExtraStrategies } from "./data/strategies";
-import {
-  tradovateAuth,
-  tradovateRefresh,
-  tradovateTokenExpiring,
-  tradovateGetAccount,
-  tradovateGetPositions,
-  tradovateGetFills,
-  fillsToTrades,
-  type TradovateSession,
-  type TradovatePosition,
-} from "./lib/tradovate";
+import { useTradovate } from "./hooks/useTradovate";
 
 import type { TradeComment, ReactionMap, Trade, Profile, CircleMember, Circle, Insight, StrategyDef } from "./types";
 import { AvatarCircle, Badge, SectionKicker, StrategyPill, StrategySelect, SubNavDropdown, GearButton, Toast, TrMark, CrownIcon, outcomeColor, outcomeLetter, stratCode, stratShort, compressImage, MONO, BODY, DISPLAY } from "./shared";
@@ -302,13 +293,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setViewHistory([]);
     setView(v);
   }
-  // ── Circles state ──────────────────────────────────────────────
-  const [myCircles, setMyCircles] = useState<Circle[]>([]);
-  const [circlesView, setCirclesView] = useState<string>("browse");
-  const [activeCircle, setActiveCircle] = useState<Circle | null>(null);
-  const [circleForm, setCircleForm] = useState<{ name: string; description: string; strategy: string; privacy: string; emoji: string; metric: string }>({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
-  const [circleJoinCode, setCircleJoinCode] = useState<string>("");
-  const [circleMsg, setCircleMsg] = useState<string>("");
+  // ── Circles state + actions managed by useCircles (wired below after stats) ─
   const [darkMode, setDarkMode] = useState(true);
   const isDesktop = useIsDesktop(900);
   const C: typeof DARK = darkMode ? DARK : LIGHT;
@@ -333,11 +318,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [myFeedReactions, setMyFeedReactions] = useState<Set<string>>(new Set());
   const [pnlMode, setPnlMode] = useState<"r" | "$">("$");
   const [timeMode, setTimeMode] = useState<"week" | "all">("week");
-  // Follow system: one-way. following = codes I follow, followers = codes following me.
-  // Friends = intersect(following, followers) — i.e. mutual follows.
-  const [following, setFollowing] = useState<string[]>([]);
-  const [followers, setFollowers] = useState<string[]>([]);
-  const [followerProfiles, setFollowerProfiles] = useState<Array<{ code: string; name: string; handle: string }>>([]);
+  // Follow system — state + sync managed by useFollows (wired below after getMyCode).
   const [viewProfile, setViewProfile] = useState<string | null>(null);
   function openProfile(handle: string) { if (handle) setViewProfile(handle.replace(/^@/, "")); }
   // Tour: shown once to new users after onboarding. Skipped if localStorage flag already set.
@@ -360,7 +341,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     );
     return () => _atSub.unsubscribe();
   }, []);
-  const [circleLatestMsgs, setCircleLatestMsgs] = useState<Record<string, any>>({});
   const [activeStrategy, setActiveStrategy] = useState(STRATEGY_NAMES[0]);
   const [stratChecklists, setStratChecklists] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].checklist.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
   const [stratRules, setStratRules] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].rules.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
@@ -392,21 +372,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showCalc,    setShowCalc]    = useState(false);
 
-  // Circle action loading states
-  const [isCreatingCircle, setIsCreatingCircle] = useState(false);
-  const [isJoiningCircle, setIsJoiningCircle] = useState(false);
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [fontScale, setFontScale] = useState<number>(() => {
     try { return parseFloat(localStorage.getItem("tradr_font_scale") ?? "1") || 1; } catch { return 1; }
   });
 
-  // ── Tradovate integration ────────────────────────────────────────────────────
-  const [tradovateSession, setTradovateSession] = useState<TradovateSession | null>(null);
-  const [tradovatePositions, setTradovatePositions] = useState<TradovatePosition[]>([]);
-  const [tradovateConnecting, setTradovateConnecting] = useState(false);
-  const [tradovateSyncing, setTradovateSyncing] = useState(false);
-  const [tradovateError, setTradovateError] = useState("");
-  const [tradovateForm, setTradovateForm] = useState<{ username: string; password: string; env: "demo" | "live" }>({ username: "", password: "", env: "demo" });
+  // Tradovate — state + handlers managed by useTradovate (wired below after saveTrades).
 
   // Swipe — non-passive listener so preventDefault() stops browser chrome from shifting
   const swipeRef = useRef<HTMLDivElement | null>(null);
@@ -452,7 +423,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (params.get("upgraded") === "1") {
       const cid = params.get("cid") ?? "";
       setProfile(p => ({ ...p, plan: "pro" as const, ...(cid ? { stripeCustomerId: cid } : {}) }));
-      showToast("⚡ You're on TRADR OS Pro — welcome!");
+      showToast("⚡ You're on Kōda Pro — welcome!");
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (params.get("cancelled") === "1") {
@@ -490,44 +461,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     return `${w}:${l}:${pnl.toFixed(2)}:${avgRR}`;
   }, [trades]);
 
-  // ─── FETCH LATEST CIRCLE MESSAGES FOR HOME TAB ───────────────────────────────
-  useEffect(() => {
-    if (homeSection !== "circles" || !myCircles.length) return;
-    (async () => {
-      const msgs: Record<string, any> = {};
-      await Promise.all(myCircles.map(async (c: Circle) => {
-        try {
-          const { data } = await supabase
-            .from("circle_messages")
-            .select("text, author_name, created_at")
-            .eq("circle_code", c.code)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (data) msgs[c.code] = data;
-        } catch {}
-      }));
-      setCircleLatestMsgs(msgs);
-    })();
-  }, [homeSection, myCircles]);
-
-  // ── Auto-publish to circles ──────────────────────────────────────
-  // Circles are the product pillar: any time trades change, every circle
-  // the user is in must reflect the latest stats without a manual tap.
-  // Debounced 800ms to coalesce rapid edits (reactions, comments, rapid saves).
-  // Ref keeps publishToCircle stable so it isn't listed as a dep (it changes
-  // every render due to closure). The effect correctly re-runs on its real deps.
-  const _publishToCircleRef = useRef(publishToCircle);
-  _publishToCircleRef.current = publishToCircle;
-  useEffect(() => {
-    if (loading) return;
-    if (!myCircles.length) return;
-    const publish = _publishToCircleRef.current;
-    const t = setTimeout(() => {
-      myCircles.forEach((c: Circle) => { publish(c.code, true); });
-    }, 800);
-    return () => clearTimeout(t);
-  }, [statsFingerprint, myCircles, loading]);
 
   // ── Auto-publish my feed whenever trades change ───────────────────
   // Friends see fresh data without the user ever tapping "Publish".
@@ -553,159 +486,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   // ── Follows sync (every 2 min) ───────────────────────────────────
   // Load my follow lists from shared_kv and refresh periodically so counts
-  // update when someone follows you back without a page reload.
-  const syncFollowsRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    if (loading) return;
-    if (!profile.uid) return;
-    let alive = true;
-    async function syncFollows() {
-      const mc = getMyCode();
-      try {
-        // New canonical source: per-row edges. Each follow writes TWO rows,
-        // both owned by the follower, so RLS never blocks a second writer:
-        //   tradr_follow_<follower>_<target>    — enumerates my "following"
-        //   tradr_follower_<target>_<follower>  — enumerates my "followers"
-        const [followRows, followerRows] = await Promise.all([
-          storage.listByPrefix(`tradr_follow_${mc}_`),
-          storage.listByPrefix(`tradr_follower_${mc}_`),
-        ]);
-        if (!alive) return;
 
-        const followingSet = new Set<string>();
-        const followersSet = new Set<string>();
-
-        // Per-row edges are the source of truth.
-        for (const row of (followRows || [])) {
-          const target = String(row.key).slice(`tradr_follow_${mc}_`.length);
-          if (target) followingSet.add(target);
-        }
-        const profiles: Array<{ code: string; name: string; handle: string }> = [];
-        for (const row of (followerRows || [])) {
-          const follower = String(row.key).slice(`tradr_follower_${mc}_`.length);
-          if (follower) {
-            followersSet.add(follower);
-            try {
-              const edge = JSON.parse(row.value || "{}");
-              profiles.push({ code: follower, name: edge.name || follower, handle: edge.handle || "" });
-            } catch { profiles.push({ code: follower, name: follower, handle: "" }); }
-          }
-        }
-
-        // ── V2 merge: read from public.follows when flag is on ────────────
-        if (isFlagOn("newFollows") && user?.id) {
-          try {
-            const v2Graph = await readFollowGraphV2(user.id);
-            v2Graph.following.forEach((c: string) => followingSet.add(c));
-            v2Graph.followers.forEach((c: string) => followersSet.add(c));
-          } catch (e) { log.error("loadAll.follows.v2", e); }
-        }
-
-        setFollowing(Array.from(followingSet));
-        setFollowers(Array.from(followersSet));
-        setFollowerProfiles(profiles);
-
-      } catch {}
-    }
-    syncFollowsRef.current = syncFollows;
-    syncFollowsRef.current();
-    // One-time safety net: migrate any remaining legacy blobs to per-row edges.
-    migrateLegacyFollows(getMyCode()).catch(() => {});
-    // Realtime: re-sync the moment any row touching either side of my follow
-    // graph changes. Falls back to the 2-min poll if Realtime is offline.
-    const unsub = subscribeToFollows(getMyCode(), () => syncFollowsRef.current());
-    const id = setInterval(() => syncFollowsRef.current(), 120_000);
-    return () => { alive = false; clearInterval(id); try { unsub(); } catch {} };
-  }, [loading, profile.uid]); // syncFollows/getMyCode are accessed via refs above
-
-  // ── Circle membership sync (every 2 min) ─────────────────────────
-  // Fix: local myCircles was snapshotted at create/join time. When another
-  // member joined, this side never re-read the canonical tradr_circle_<code>
-  // from shared storage, so the members list (and therefore the leaderboard
-  // fetch) stayed stale. Pull fresh on mount + every 2 min so the social
-  // loop feels live without needing a manual refresh.
-  const myCirclesRef = useRef<any[]>(myCircles);
-  myCirclesRef.current = myCircles;
-  useEffect(() => {
-    if (loading) return;
-    if (!profile.uid) return;
-    let alive = true;
-    let migrated = false;
-
-    async function ensureMyMemberRow(circle: Circle) {
-      // For circles created before the per-member-row refactor, each user
-      // needs to write their own tradr_circle_member_<CODE>_<myCode> once.
-      // Safe to re-run (upsert).
-      const myCode = getMyCode();
-      const me = { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: myCode, joinedAt: new Date().toISOString() };
-      try {
-        await storage.set(`tradr_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
-      } catch {}
-    }
-
-    async function syncCircles() {
-      const current = myCirclesRef.current;
-      if (!current.length) return;
-      // One-shot migration on first tick: ensure every circle I'm in has my
-      // own member row in shared_kv. Fixes old data that only had inline
-      // members[] on the creator's row.
-      if (!migrated) {
-        migrated = true;
-        await Promise.all(current.map(ensureMyMemberRow));
-      }
-      const refreshed = await Promise.all(current.map(async (c: Circle) => {
-        try {
-          const [metaRes, members] = await Promise.all([
-            storage.get("tradr_circle_" + c.code, true),
-            readCircleMembers(c.code, c.members || []),
-          ]);
-          const fresh = metaRes ? JSON.parse(metaRes.value) : c;
-          return { ...fresh, members, isOwner: c.isOwner };
-        } catch { return c; }
-      }));
-      if (!alive) return;
-      const changed = JSON.stringify(refreshed) !== JSON.stringify(current);
-      if (changed) {
-        setMyCircles(refreshed);
-        try { await storage.set("tradr_circles", JSON.stringify(refreshed)); } catch {}
-      }
-    }
-    syncCircles();
-    const id = setInterval(syncCircles, 120_000);
-
-    // Realtime: subscribe to every circle the user is currently a member of.
-    // The set of circles can change (join/leave/create), so we keep the live
-    // unsubs in a map keyed by circle code and reconcile on each tick.
-    const liveSubs = new Map<string, () => void>();
-    function reconcileSubs() {
-      const wantCodes = new Set(myCirclesRef.current.map((c: Circle) => c.code));
-      // Drop subs for circles we are no longer in.
-      for (const code of Array.from(liveSubs.keys())) {
-        if (!wantCodes.has(code)) {
-          try { liveSubs.get(code)!(); } catch {}
-          liveSubs.delete(code);
-        }
-      }
-      // Add subs for new circles.
-      for (const code of wantCodes) {
-        if (!liveSubs.has(code)) {
-          try { liveSubs.set(code, subscribeToCircle(code, () => { syncCircles(); })); } catch {}
-        }
-      }
-    }
-    reconcileSubs();
-    // Reconcile every tick so newly-joined circles get a live channel without
-    // waiting for a full reload. Cheap — Map lookups + a few subscribe calls.
-    const recId = setInterval(reconcileSubs, 30_000);
-
-    return () => {
-      alive = false;
-      clearInterval(id);
-      clearInterval(recId);
-      for (const off of liveSubs.values()) { try { off(); } catch {} }
-      liveSubs.clear();
-    };
-  }, [loading, profile.uid]); // syncCircles accessed via ref above
 
   // Load draft trade count for inbox badge
   useEffect(() => {
@@ -721,7 +502,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   async function loadAll() {
     const store = storage;
-    const [t, pr, fr, ff, sc, sr, dm, ci, st, cs, tv, v2ProfileRes] = await Promise.all([
+    const [t, pr, fr, ff, sc, sr, dm, ci, st, cs, v2ProfileRes] = await Promise.all([
       store.get("tradr_trades").catch(() => null),
       store.get("tradr_profile").catch(() => null),
       store.get("tradr_friends").catch(() => null),
@@ -732,7 +513,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       store.get("tradr_circles").catch(() => null),
       store.get("tradr_thresholds").catch(() => null),
       store.get("tradr_custom_strategies").catch(() => null),
-      store.get("tradr_tradovate").catch(() => null),
       (isFlagOn("newProfile") && user?.id)
         ? getProfile(user.id).catch(() => null)
         : Promise.resolve(null),
@@ -840,16 +620,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         
       }
     } catch (e) { log.error("loadAll.customStrategies", e); }
-    try {
-      if (tv) {
-        const sess: TradovateSession = JSON.parse(tv.value);
-        if (sess?.accessToken) {
-          setTradovateSession(sess);
-          // Refresh positions in the background — don't block the rest of loadAll.
-          tradovateGetPositions(sess).then(setTradovatePositions).catch(e => log.error("loadAll.tradovate.positions", e));
-        }
-      }
-    } catch (e) { log.error("loadAll.tradovate", e); }
+    // Tradovate session loaded by useTradovate hook after loading completes.
 
     // Load Stripe customer ID
     try {
@@ -959,6 +730,82 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         .catch(e => log.error("saveTrades.v2", e));
     }
   }
+  // ── Tradovate ─────────────────────────────────────────────────────────────
+  // Placed here because saveTrades (defined above) must exist before the hook.
+  const {
+    tradovateSession, tradovatePositions,
+    tradovateConnecting, tradovateSyncing,
+    tradovateError, tradovateForm,
+    setTradovateSession, setTradovateForm, setTradovateError,
+    connectTradovate, refreshTradovatePositions,
+    syncTradovateFills, disconnectTradovate,
+  } = useTradovate({ loading, trades, saveTrades, showToast });
+
+  // ── Circles ───────────────────────────────────────────────────────────────
+  // circleStats is a memo so it can be computed here (before loadAll / the
+  // main render-body stats block) without duplicating the render-path consts.
+  // The hook stores it in a ref so publishToCircle always reads the latest
+  // snapshot, even though the hook is called before the render-body stats.
+  const circleStats = useMemo((): CircleStats => {
+    const w = trades.filter(t => t.outcome === "Win").length;
+    const l = trades.filter(t => t.outcome === "Loss").length;
+    const total = trades.length;
+    const winRate = total ? ((w / total) * 100).toFixed(1) : 0;
+    const totalPnL = trades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0).toFixed(2);
+    const totalPnlDollar = trades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
+    const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7);
+    const weekPnL = trades.filter(t => new Date(t.date) >= weekStart).reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
+    const rrTs = trades.filter(t => t.rr);
+    const avgRR = rrTs.length ? (rrTs.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTs.length).toFixed(2) : "—";
+    const streak = (() => {
+      if (!trades.length) return { type: null as string | null, count: 0 };
+      let count = 0, type: string | null = null;
+      for (const t of trades) {
+        if (t.outcome === "Win" || t.outcome === "Loss") {
+          if (type === null) { type = t.outcome; count = 1; }
+          else if (t.outcome === type) count++;
+          else break;
+        }
+      }
+      return { type, count };
+    })();
+    const stratStats = trades.reduce((acc: Record<string, { w: number; l: number; be: number; pnl: number; count: number }>, t) => {
+      if (t.strategy) {
+        if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 };
+        acc[t.strategy].count++;
+        if (t.outcome === "Win") acc[t.strategy].w++;
+        if (t.outcome === "Loss") acc[t.strategy].l++;
+        if (t.outcome === "Breakeven") acc[t.strategy].be++;
+        acc[t.strategy].pnl += parseFloat(t.pnl) || 0;
+      }
+      return acc;
+    }, {});
+    return { wins: w, losses: l, total, winRate, totalPnL, totalPnlDollar, weekPnL, avgRR, streak, stratStats };
+  }, [trades]);
+
+  const {
+    myCircles, setMyCircles,
+    circlesView, setCirclesView,
+    activeCircle, setActiveCircle,
+    circleForm, setCircleForm,
+    circleJoinCode, setCircleJoinCode,
+    circleMsg, setCircleMsg,
+    circleLatestMsgs,
+    isCreatingCircle, isJoiningCircle,
+    saveMyCircles, myMemberRecord, readCircleMembers,
+    createCircle, joinCircle, kickMember, leaveCircle,
+    publishToCircle, fetchCircleLeaderboard,
+  } = useCircles({
+    loading,
+    uid: profile.uid,
+    profile,
+    getMyCode,
+    homeSection,
+    stats: circleStats,
+    statsFingerprint,
+    showToast,
+  });
+
   async function handleCsvImport(newTrades: Trade[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
     setIsImportingCsv(true);
@@ -1014,315 +861,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   }
   async function saveFriends(u: string[]) { setFriends(u); await storage.set("tradr_friends", JSON.stringify(u)); }
   async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await storage.set("tradr_checklists", JSON.stringify(u)); }
-  async function saveMyCircles(u: Circle[]) { setMyCircles(u); await storage.set("tradr_circles", JSON.stringify(u)); }
-
-  // Each circle is split into two kinds of rows:
-  //   tradr_circle_<CODE>                        — metadata, owned by creator
-  //   tradr_circle_member_<CODE>_<memberCode>    — membership, owned by each member
-  // This avoids the RLS bug where Jason couldn't update Dylon's circle row.
-  // Each member only writes their own row, so auth.uid() = owner_id always holds.
-  function myMemberRecord() {
-    const storageCode = getMyCode();
-    // alias is the user's chosen display ID (shown on leaderboards).
-    // Falls back to the hash-based storage code if not set.
-    const alias = profile.alias?.trim() || storageCode;
-    return { name: profile.name || "Trader", handle: profile.handle || "@trader", avatar: profile.avatar || "", code: storageCode, alias, joinedAt: new Date().toISOString() };
-  }
-  // ── Tradovate connect / sync / disconnect ────────────────────────────────────
-
-  async function connectTradovate() {
-    const { username, password, env } = tradovateForm;
-    if (!username.trim() || !password.trim()) {
-      setTradovateError("Username and password are required");
-      return;
-    }
-    setTradovateConnecting(true);
-    setTradovateError("");
-    try {
-      const sess = await tradovateAuth(username.trim(), password, env);
-      if (!sess) { setTradovateError("Invalid credentials — check username and password"); return; }
-      const acct = await tradovateGetAccount(sess);
-      const fullSess: TradovateSession = { ...sess, accountId: acct?.id, accountName: acct?.name };
-      setTradovateSession(fullSess);
-      setTradovateForm(f => ({ ...f, password: "" })); // clear password from state
-      await storage.set("tradr_tradovate", JSON.stringify(fullSess));
-      const positions = await tradovateGetPositions(fullSess);
-      setTradovatePositions(positions);
-      showToast(`Connected to ${acct?.name ?? "Tradovate"}`);
-    } catch (e) {
-      log.error("tradovate.connect", e);
-      setTradovateError("Connection failed — check credentials and try again");
-    } finally {
-      setTradovateConnecting(false);
-    }
-  }
-
-  async function refreshTradovatePositions(sess: TradovateSession) {
-    try {
-      let s = sess;
-      if (tradovateTokenExpiring(s)) {
-        const refreshed = await tradovateRefresh(s);
-        if (!refreshed) { showToast("Tradovate token expired — please reconnect"); setTradovateSession(null); return; }
-        s = refreshed;
-        setTradovateSession(s);
-        await storage.set("tradr_tradovate", JSON.stringify(s));
-      }
-      const positions = await tradovateGetPositions(s);
-      setTradovatePositions(positions);
-    } catch (e) { log.error("tradovate.refreshPositions", e); }
-  }
-
-  async function syncTradovateFills() {
-    if (!tradovateSession) return;
-    setTradovateSyncing(true);
-    try {
-      let sess = tradovateSession;
-      if (tradovateTokenExpiring(sess)) {
-        const refreshed = await tradovateRefresh(sess);
-        if (!refreshed) { showToast("Tradovate token expired — please reconnect"); setTradovateSession(null); setTradovateSyncing(false); return; }
-        sess = refreshed;
-        setTradovateSession(sess);
-      }
-      const since = sess.lastSyncTime;
-      const fills = await tradovateGetFills(sess, since);
-      const newTrades = fillsToTrades(fills);
-      if (newTrades.length === 0) {
-        showToast("No new fills since last sync");
-      } else {
-        const imported = await handleTradovateFillImport(newTrades);
-        if (imported === 0) {
-          showToast("All fills already in journal — nothing new");
-        } else {
-          showToast(`${imported} trade${imported === 1 ? "" : "s"} imported from Tradovate`);
-        }
-      }
-      // Update lastSyncTime and positions
-      const updatedSess: TradovateSession = { ...sess, lastSyncTime: new Date().toISOString() };
-      setTradovateSession(updatedSess);
-      await storage.set("tradr_tradovate", JSON.stringify(updatedSess));
-      const positions = await tradovateGetPositions(updatedSess);
-      setTradovatePositions(positions);
-    } catch (e) {
-      log.error("tradovate.syncFills", e);
-      showToast("Sync failed — try reconnecting");
-    } finally {
-      setTradovateSyncing(false);
-    }
-  }
-
-  async function disconnectTradovate() {
-    setTradovateSession(null);
-    setTradovatePositions([]);
-    setTradovateForm({ username: "", password: "", env: "demo" });
-    setTradovateError("");
-    try { await storage.del("tradr_tradovate"); } catch { /* noop */ }
-    showToast("Tradovate disconnected");
-  }
-
-  /**
-   * Import fills from Tradovate into the journal, deduplicating against
-   * any existing trades that have the same source fill ID in their notes.
-   */
-  async function handleTradovateFillImport(newTrades: Trade[]): Promise<number> {
-    // Dedup by fill ID embedded in notes ("Tradovate fill #<id> ·").
-    // Using ID substring so manual edits to the notes field don't break dedup.
-    const importedIds = new Set(
-      trades
-        .map(t => { const m = (t.notes || "").match(/Tradovate fill #(\d+)/); return m ? m[1] : null; })
-        .filter(Boolean)
-    );
-    const deduped = newTrades.filter(t => {
-      const m = (t.notes || "").match(/Tradovate fill #(\d+)/);
-      return m ? !importedIds.has(m[1]) : true;
-    });
-    if (!deduped.length) return 0;
-    const updated = [...trades, ...deduped];
-    setTrades(updated);
-    try {
-      const store = storage;
-      await store.set("tradr_trades", JSON.stringify(updated));
-    } catch (e) { log.error("tradovate.fillImport.save", e); }
-    return deduped.length;
-  }
-
-  /** Read the ban list for a circle. Returns a Set of banned member codes. */
-  async function readCircleBans(circleCode: string): Promise<Set<string>> {
-    try {
-      const r = await storage.get(`tradr_circle_bans_${circleCode}`, true);
-      if (!r) return new Set();
-      const arr = JSON.parse(r.value);
-      return new Set(Array.isArray(arr) ? arr : []);
-    } catch { return new Set(); }
-  }
-
-  async function readCircleMembers(code: string, fallback: CircleMember[] = []) {
-    try {
-      const [rows, bans] = await Promise.all([
-        storage.listByPrefix(`tradr_circle_member_${code}_`),
-        readCircleBans(code),
-      ]);
-      if (!rows.length) return fallback.filter((m: CircleMember) => !bans.has(m.code));
-      return rows.map((r: { value: string }) => JSON.parse(r.value) as CircleMember).filter((m: CircleMember) => !bans.has(m.code));
-    } catch { return fallback; }
-  }
-
-  async function createCircle() {
-    if (!circleForm.name.trim() || isCreatingCircle) return;
-    setIsCreatingCircle(true);
-    try {
-      const code = circleForm.name.replace(/\s+/g, "").toUpperCase().slice(0, 6) + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-      const me = myMemberRecord();
-      const circle = {
-        id: Date.now(), code, name: circleForm.name.trim(),
-        description: circleForm.description.trim(),
-        strategy: circleForm.strategy, privacy: circleForm.privacy,
-        emoji: circleForm.emoji || "◆",
-        metric: circleForm.metric || "dollar",
-        createdBy: profile.name || "Trader", createdAt: new Date().toISOString(),
-      };
-      // Write metadata (owned by me) + my own member row.
-      await storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
-      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
-      const updated = [...myCircles, { ...circle, members: [me], isOwner: true }];
-      await saveMyCircles(updated);
-      setCircleForm({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
-      setCirclesView("browse");
-      showToast("Circle created");
-    } finally {
-      setIsCreatingCircle(false);
-    }
-  }
-
-  async function joinCircle() {
-    const code = circleJoinCode.trim().toUpperCase();
-    if (!code) { setCircleMsg("Enter a circle code."); return; }
-    if (myCircles.find(c => c.code === code)) { setCircleMsg("Already a member."); setTimeout(() => setCircleMsg(""), 2000); return; }
-    if (isJoiningCircle) return;
-    setIsJoiningCircle(true);
-    try {
-      const res = await storage.get("tradr_circle_" + code, true);
-      if (!res) { setCircleMsg("Circle not found. Check the code."); setTimeout(() => setCircleMsg(""), 2500); return; }
-      const circle = JSON.parse(res.value);
-      const me = myMemberRecord();
-      // Only write my OWN member row. Do not mutate the creator's circle row.
-      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
-      // Read the fresh member list (includes me, creator, and any others already in).
-      const members = await readCircleMembers(code, [me]);
-      const updated = [...myCircles, { ...circle, members, isOwner: false }];
-      await saveMyCircles(updated);
-      setCircleJoinCode("");
-      setCircleMsg("Joined.");
-      setTimeout(() => setCircleMsg(""), 2000);
-    } catch { setCircleMsg("Error joining. Try again."); setTimeout(() => setCircleMsg(""), 2500); }
-    finally { setIsJoiningCircle(false); }
-  }
-
-  /** Circle owner removes a member via ban list (RLS-safe — owner writes a row they own). */
-  async function kickMember(circleCode: string, memberCode: string) {
-    try {
-      // Read the current ban list, add the member, write it back.
-      // The ban row key is owned by the circle creator so RLS allows the write.
-      const bans = await readCircleBans(circleCode);
-      bans.add(memberCode);
-      await storage.set(
-        `tradr_circle_bans_${circleCode}`,
-        JSON.stringify([...bans]),
-        true
-      );
-      // Update local state immediately so the UI reflects the kick without a refresh.
-      const filterKicked = (m: CircleMember) => m.code !== memberCode;
-      const updated = myCircles.map((c: Circle) =>
-        c.code !== circleCode ? c : { ...c, members: c.members.filter(filterKicked) }
-      );
-      await saveMyCircles(updated);
-      setActiveCircle((prev: Circle | null) =>
-        prev?.code !== circleCode ? prev : { ...prev, members: prev.members.filter(filterKicked) }
-      );
-      showToast("Member removed");
-    } catch (e) {
-      log.error("kickMember", e);
-      showToast("Couldn't remove member — try again");
-    }
-  }
-
-  /** Member leaves a circle they joined. Deletes their own member + entry rows
-   *  (they own both, so RLS allows it) and removes from local state. */
-  async function leaveCircle(circleCode: string) {
-    const myCode = getMyCode();
-    try {
-      await Promise.all([
-        storage.del(`tradr_circle_member_${circleCode}_${myCode}`, true),
-        storage.del(`tradr_circle_entry_${circleCode}_${myCode}`, true),
-      ]);
-    } catch { /* rows may not exist — that's fine */ }
-    const updated = myCircles.filter((c: Circle) => c.code !== circleCode);
-    await saveMyCircles(updated);
-    setActiveCircle(null);
-    setCirclesView("browse");
-    showToast("Left circle");
-  }
-
-  async function publishToCircle(circleCode: string, silent = false) {
-    const myCode = getMyCode();
-    const entry = {
-      memberCode: myCode, name: profile.name || "Trader",
-      handle: profile.handle || "@trader", avatar: profile.avatar || "",
-      alias: profile.alias?.trim() || myCode,
-      wins, losses, total,
-      winRate: parseFloat(winRate as any),
-      totalPnL: parseFloat(totalPnL),
-      totalPnLDollar: totalPnlDollar,
-      weekPnL: weekPnL,
-      avgRR: avgRR === "—" ? 0 : parseFloat(avgRR),
-      streak: streak.count > 0 ? { type: streak.type, count: streak.count } : null,
-      topStrategy: Object.entries(stratStats).sort((a, b) => (b[1] as { w: number; count: number }).w / Math.max((b[1] as { w: number; count: number }).count, 1) - (a[1] as { w: number; count: number }).w / Math.max((a[1] as { w: number; count: number }).count, 1))[0]?.[0] || null,
-      updatedAt: new Date().toISOString(),
-    };
-    try { await storage.set("tradr_circle_entry_" + circleCode + "_" + myCode, JSON.stringify(entry), true); }
-    catch (e) { if (!silent) showToast("Publish failed"); return; }
-    if (!silent) showToast("Stats published");
-  }
-
-  async function fetchCircleLeaderboard(circle: Circle) {
-    // Always pull members fresh — sync effect may not have run yet, or a new
-    // member may have joined since the last tick. Falls back to whatever's on
-    // the passed circle object if the listByPrefix fails.
-    const members = await readCircleMembers(circle.code, circle.members || []);
-
-    // Batch fetch all entry rows for this circle in a single query instead of
-    // one request per member (avoids N+1 round-trips).
-    const prefix = `tradr_circle_entry_${circle.code}_`;
-    let rowMap: Record<string, any> = {};
-    try {
-      const rows = await storage.listByPrefix(prefix);
-      for (const row of rows || []) {
-        try {
-          const parsed = JSON.parse(row.value);
-          const memberCode = row.key.slice(prefix.length);
-          rowMap[memberCode] = parsed;
-        } catch { /* skip malformed rows */ }
-      }
-    } catch { /* fall through to per-member defaults */ }
-
-    const entries: CircleMember[] = [];
-    for (const m of members) {
-      if (rowMap[m.code]) {
-        entries.push(rowMap[m.code]);
-      } else {
-        entries.push({ memberCode: m.code, name: m.name, handle: m.handle, avatar: m.avatar, wins: 0, losses: 0, total: 0, winRate: 0, totalPnL: 0, avgRR: 0, streak: null, topStrategy: null, updatedAt: null });
-      }
-    }
-    const m = circle.metric || "dollar";
-    entries.sort((a, b) => {
-      if (m === "dollar")  return (b.totalPnLDollar || 0) - (a.totalPnLDollar || 0);
-      if (m === "r")       return (b.totalPnL || 0) - (a.totalPnL || 0);
-      if (m === "winrate") return (b.winRate || 0) - (a.winRate || 0);
-      if (m === "trades")  return (b.total || 0) - (a.total || 0);
-      if (m === "avgr")    return (b.avgRR || 0) - (a.avgRR || 0);
-      return (b.totalPnLDollar || 0) - (a.totalPnLDollar || 0);
-    });
-    return entries;
-  }
 
   async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await storage.set("tradr_thresholds", JSON.stringify(u)); }
   async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await storage.set("tradr_rules", JSON.stringify(u)); }
@@ -1556,6 +1094,16 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     saveProfile({ ...profile, uid, code });
     return code;
   }
+
+  // ── Follow system ───────────────────────────────────────────────────────
+  const { following, followers, followerProfiles, followUser, unfollowUser } = useFollows({
+    loading,
+    userId: user?.id,
+    getMyCode,
+    uid: profile.uid,
+    showToast,
+  });
+
   async function addFriend() {
     const code = friendCodeInput.trim().toUpperCase();
     if (!code) return;
@@ -1605,45 +1153,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   }
 
   // ── Follow system (per-row edges, one-way) ─────────────────────
-  // Every follow writes TWO rows, both owned by the follower:
-  //   tradr_follow_<follower>_<target>    — for prefix-listing my "following"
-  //   tradr_follower_<target>_<follower>  — for prefix-listing my "followers"
-  // A single shared list failed RLS the moment a second follower tried to
-  // append (first writer owns the row, second writer's UPDATE is blocked).
-  // Per-row edges sidestep this: each follow creates *new* rows the follower
-  // owns, never updates someone else's.
-  async function followUser(code: string) {
-    const target = code.trim().toUpperCase();
-    if (!target) return;
-    const mc = getMyCode();
-    if (target === mc) { showToast("That's you"); return; }
-    if (following.includes(target)) return;
-    // Optimistic local state
-    setFollowing([...following, target]);
-    const edge = { follower: mc, target, at: new Date().toISOString() };
-    // ── Legacy KV write (always) ──────────────────────────────────────────────
-    try { await storage.set(`tradr_follow_${mc}_${target}`, JSON.stringify(edge), true); } catch {}
-    try { await storage.set(`tradr_follower_${target}_${mc}`, JSON.stringify(edge), true); } catch {}
-    // ── V2 dual-write (behind flag) ───────────────────────────────────────────
-    if (isFlagOn("newFollows") && profile.uid) {
-      followUserV2(profile.uid, target).catch(e => log.error("followUser.v2", e));
-    }
-    showToast("Following");
-  }
-  async function unfollowUser(code: string) {
-    const target = code.trim().toUpperCase();
-    if (!target) return;
-    const mc = getMyCode();
-    setFollowing(following.filter(c => c !== target));
-    // ── Legacy KV delete (always) ─────────────────────────────────────────────
-    try { await storage.delete(`tradr_follow_${mc}_${target}`, true); } catch {}
-    try { await storage.delete(`tradr_follower_${target}_${mc}`, true); } catch {}
-    // ── V2 dual-write (behind flag) ───────────────────────────────────────────
-    if (isFlagOn("newFollows") && profile.uid) {
-      unfollowUserV2(profile.uid, target).catch(e => log.error("unfollowUser.v2", e));
-    }
-    showToast("Unfollowed");
-  }
   // ── Data export ──────────────────────────────────────────────────────────
   function exportData() {
     const data = {
@@ -1840,6 +1349,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const pnlPos = parseFloat(totalPnL) >= 0;
   const streak = (() => { if (!trades.length) return { type: null, count: 0 } as any; let count = 0, type: any = null; for (const t of trades) { if (t.outcome === "Win" || t.outcome === "Loss") { if (type === null) { type = t.outcome; count = 1; } else if (t.outcome === type) count++; else break; } }; return { type, count }; })();
   const stratStats = trades.reduce((acc: Record<string, { w: number; l: number; be: number; pnl: number; count: number }>, t: Trade) => { if (t.strategy) { if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 }; acc[t.strategy].count++; if (t.outcome === "Win") acc[t.strategy].w++; if (t.outcome === "Loss") acc[t.strategy].l++; if (t.outcome === "Breakeven") acc[t.strategy].be++; acc[t.strategy].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
+
   const sessionStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.session) { if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.session].w++; if (t.outcome === "Loss") acc[t.session].l++; acc[t.session].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
   const pairStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.pair) { if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.pair].w++; if (t.outcome === "Loss") acc[t.pair].l++; acc[t.pair].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
   const filteredTrades = useMemo(() => trades.filter(t => {
@@ -1969,7 +1479,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       </div>
       {/* Wordmark */}
       <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: "18px", letterSpacing: "0.22em", color: DARK.text }}>TRADR</span>
+        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: "18px", letterSpacing: "0.22em", color: DARK.text }}>Kōda</span>
         <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: "9px", letterSpacing: "0.16em", color: DARK.text2, padding: "2px 5px", borderRadius: "4px", border: `1px solid ${DARK.border2}`, lineHeight: 1 }}>OS</span>
       </div>
       {/* Breathing dots */}
@@ -2088,7 +1598,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               ) : (
                 <>
                   <TrMark size={isDesktop ? 24 : 22} bg={C.panel} />
-                  <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "15px" : "14px", fontWeight: 600, letterSpacing: "0.22em", color: C.text, lineHeight: 1 }}>TRADR</span>
+                  <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "15px" : "14px", fontWeight: 600, letterSpacing: "0.22em", color: C.text, lineHeight: 1 }}>Kōda</span>
                   <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: "9px", letterSpacing: "0.16em", color: C.text2, padding: "2px 5px", borderRadius: "4px", border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
                 </>
               )}
@@ -2729,7 +2239,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <span style={{ fontSize: "15px" }}>⚡</span>
                           <div>
-                            <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>TRADR Pro</span>
+                            <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>Kōda Pro</span>
                             <span style={{ fontFamily: MONO, fontSize: "10px", color: C.green, marginLeft: "8px", letterSpacing: "0.06em" }}>ACTIVE</span>
                           </div>
                         </div>
@@ -2839,7 +2349,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       Terms
                     </a>
                     <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginLeft: "auto" }}>
-                      TRADR OS © {new Date().getFullYear()}
+                      Kōda © {new Date().getFullYear()}
                     </span>
                   </div>
                 </div>
@@ -3389,7 +2899,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                         stratMap[t.strategy].pnl += parseFloat(t.pnl)||0;
                       });
                       const topStrats = Object.entries(stratMap).sort((a,b)=>b[1].pnl-a[1].pnl).slice(0,5);
-                      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TRADR Report — ${profile.name||"Trader"} — ${today}</title><style>
+                      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kōda Report — ${profile.name||"Trader"} — ${today}</title><style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111;padding:40px;max-width:800px;margin:0 auto}
 h1{font-size:28px;font-weight:600;letter-spacing:-0.02em;margin-bottom:4px}
 .meta{font-size:12px;color:#888;font-family:monospace;letter-spacing:0.08em;margin-bottom:40px}
@@ -3407,7 +2917,7 @@ td{padding:8px 0;border-bottom:1px solid #f0f0f0}
 </style></head><body>
 <button class="no-print" onclick="window.print()" style="margin-bottom:24px;padding:10px 20px;background:#111;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-family:monospace;letter-spacing:0.08em">Print / Save as PDF</button>
 <h1>${profile.name||"Trader"}</h1>
-<div class="meta">@${norm} &nbsp;·&nbsp; TRADR OS PERFORMANCE REPORT &nbsp;·&nbsp; ${today}</div>
+<div class="meta">@${norm} &nbsp;·&nbsp; KŌDA PERFORMANCE REPORT &nbsp;·&nbsp; ${today}</div>
 <div class="grid">
 <div class="card"><div class="card-n">${total}</div><div class="card-l">Trades</div></div>
 <div class="card"><div class="card-n ${wr>=50?"green":"red"}">${wr}%</div><div class="card-l">Win Rate</div></div>
@@ -3422,7 +2932,7 @@ ${topStrats.map(([name,s]:[string,any])=>`<tr><td>${name}</td><td>${s.w}</td><td
 <table><tr><th>Date</th><th>Pair</th><th>Strategy</th><th>Session</th><th>Outcome</th><th>P&L</th></tr>
 ${recentTrades.map((t:any)=>`<tr><td>${t.date}</td><td>${t.pair||"—"}</td><td>${t.strategy||"—"}</td><td>${t.session||"—"}</td><td class="${t.outcome==="Win"?"green":t.outcome==="Loss"?"red":""}">${t.outcome||"—"}</td><td class="${parseFloat(t.pnl)>=0?"green":"red"}">${parseFloat(t.pnl)>=0?"+":""}${t.pnl||0}R</td></tr>`).join("")}
 </table>
-<div class="footer">Generated by TRADR OS · tradrjournal.xyz · ${today}</div>
+<div class="footer">Generated by Kōda · tradrjournal.xyz · ${today}</div>
 </body></html>`;
                       const w = window.open("", "_blank");
                       if (w) { w.document.write(html); w.document.close(); }

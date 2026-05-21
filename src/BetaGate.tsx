@@ -144,7 +144,7 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
             <span style={{
               fontFamily: BODY, fontSize: 16, fontWeight: 600,
               letterSpacing: "0.20em", color: TEXT, lineHeight: 1,
-            }}>TRADR</span>
+            }}>Kōda</span>
             <span style={{
               fontFamily: MONO, fontWeight: 500, fontSize: 10,
               letterSpacing: "0.16em", color: TEXT,
@@ -185,7 +185,7 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
           fontSize: 14, color: TEXT2, lineHeight: 1.65,
           marginBottom: 40, fontWeight: 400,
         }}>
-          TRADR is in closed beta. Enter your invite code to access the platform.
+          Kōda is in closed beta. Enter your invite code to access the platform.
         </p>
 
         {/* Form */}

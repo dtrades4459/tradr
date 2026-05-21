@@ -381,7 +381,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <TrMark size={26} />
             <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-              <span style={{ fontFamily: BODY, fontSize: "15px", fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>TRADR</span>
+              <span style={{ fontFamily: BODY, fontSize: "15px", fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: "9px", letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: "4px", border: `1.5px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
           </div>
@@ -470,7 +470,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         <footer style={{ marginTop: "clamp(80px, 10vw, 128px)", paddingTop: "24px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.08em" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <TrMark size={18} />
-            <span>TRADR OS · KEEP THE EDGE YOU EARNED</span>
+            <span>KŌDA · KEEP THE EDGE YOU EARNED</span>
           </div>
           <span>v0.1 / {new Date().getFullYear()}</span>
         </footer>

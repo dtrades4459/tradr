@@ -282,7 +282,7 @@ export function SettingsScreen({
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 4l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Rate TRADR OS</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Rate Kōda</div>
             <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>App Store</div>
           </div>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -291,7 +291,7 @@ export function SettingsScreen({
 
       {/* Footer */}
       <div style={{ textAlign: "center", padding: "24px 0 8px", fontFamily: MONO, fontSize: "10px", color: C.dim, letterSpacing: "0.12em" }}>
-        TRADR OS v1.0 · {new Date().getFullYear()}
+        Kōda v1.0 · {new Date().getFullYear()}
       </div>
       <div style={{ display: "flex", gap: "16px", justifyContent: "center", paddingBottom: "8px" }}>
         <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textDecoration: "none" }}>Privacy</a>
