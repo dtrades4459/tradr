@@ -8,7 +8,7 @@ export interface DisciplineScore {
 }
 
 export function computeDisciplineScore(
-  trades: Trade[],
+  trades: Pick<Trade, "date" | "ruleAdherence">[],
   today: string   // YYYY-MM-DD
 ): DisciplineScore | null {
   const cutoff = new Date(today);
@@ -22,8 +22,8 @@ export function computeDisciplineScore(
   if (relevant.length === 0) return null;
 
   const followed = relevant.filter(t => t.ruleAdherence === true).length;
-  const broken   = relevant.filter(t => t.ruleAdherence === false).length;
-  const total    = followed + broken;
+  const broken   = relevant.length - followed;
+  const total    = relevant.length;
 
   return { pct: Math.round((followed / total) * 100), followed, broken, total };
 }

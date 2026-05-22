@@ -1256,6 +1256,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const totalItems = checkItems.length;
   const scorePct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
   const insights = useMemo(() => generateInsights(trades), [trades]);
+  const disciplineScore = useMemo(
+    () => computeDisciplineScore(trades, new Date().toISOString().split("T")[0]),
+    [trades]
+  );
   const _allStratMap = getAllStrategiesMap();
   const allSetups = allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 
@@ -2306,41 +2310,36 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     </div>
                   </section>
                   {/* ── Discipline ── */}
-                  {(() => {
-                    const score = computeDisciplineScore(trades, new Date().toISOString().split("T")[0]);
-                    if (!score) return (
-                      <section>
-                        <SectionKicker label="DISCIPLINE SCORE" C={C} />
-                        <p style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginTop: "12px" }}>
-                          Log your first trade with a discipline check to see your score.
-                        </p>
-                      </section>
-                    );
-                    const color = score.pct >= 80 ? C.green : score.pct >= 50 ? C.text2 : C.red;
-                    return (
-                      <section>
-                        <SectionKicker label="DISCIPLINE SCORE — LAST 30 DAYS" C={C} />
+                  <section>
+                    <SectionKicker label="DISCIPLINE SCORE — LAST 30 DAYS" C={C} />
+                    {!disciplineScore ? (
+                      <p style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginTop: "12px" }}>
+                        Log your first trade with a discipline check to see your score.
+                      </p>
+                    ) : (() => {
+                      const color = disciplineScore.pct >= 80 ? C.green : disciplineScore.pct >= 50 ? C.text2 : C.red;
+                      return (
                         <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                           <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
                             <span style={{ fontFamily: MONO, fontSize: "clamp(32px, 8vw, 48px)", fontWeight: 700, color, letterSpacing: "-0.02em" }}>
-                              {score.pct}%
+                              {disciplineScore.pct}%
                             </span>
                             <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text2 }}>
                               rules followed
                             </span>
                           </div>
                           <div style={{ height: "6px", borderRadius: "3px", background: C.border2, overflow: "hidden" }}>
-                            <div style={{ width: `${score.pct}%`, height: "100%", background: color, borderRadius: "3px", transition: "width 0.4s ease" }} />
+                            <div style={{ width: `${disciplineScore.pct}%`, height: "100%", background: color, borderRadius: "3px", transition: "width 0.4s ease" }} />
                           </div>
                           <div style={{ display: "flex", gap: "24px" }}>
-                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.green, letterSpacing: "0.04em" }}>{score.followed} followed</span>
-                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.red, letterSpacing: "0.04em" }}>{score.broken} broken</span>
-                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>{score.total} logged</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.green, letterSpacing: "0.04em" }}>{disciplineScore.followed} followed</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.red, letterSpacing: "0.04em" }}>{disciplineScore.broken} broken</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>{disciplineScore.total} logged</span>
                           </div>
                         </div>
-                      </section>
-                    );
-                  })()}
+                      );
+                    })()}
+                  </section>
                 </div>
               )}
 
