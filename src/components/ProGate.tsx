@@ -1,5 +1,6 @@
 import React from "react";
 import { MONO } from "../shared";
+import type { Profile } from "../types";
 
 export function ProGate({
   plan,
@@ -8,7 +9,7 @@ export function ProGate({
   onUpgrade,
   label = "Pro feature",
 }: {
-  plan: string;
+  plan: Profile["plan"];
   children: React.ReactNode;
   C: Record<string, string>;
   onUpgrade: () => void;
@@ -32,6 +33,7 @@ export function ProGate({
           {label}
         </span>
         <button
+          type="button"
           onClick={onUpgrade}
           style={{
             padding: "8px 16px",
