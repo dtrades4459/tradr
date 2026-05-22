@@ -247,7 +247,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   // handleGearTap — toggle: tap to open settings, tap again to go back
   function handleGearTap() {
     if (view === "home" && homeSection === "settings") {
-      goBack();
+      if (viewHistory.length > 0) goBack();
+      else setHomeSection("feed");   // fallback: no history → return to feed
     } else {
       if (view !== "home") setViewHistory(h => [...h, view]);
       setView("home");
