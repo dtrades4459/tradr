@@ -6,6 +6,7 @@ import { calcRR, calcWinRate, calcStreak, calcWeeklyPnL, calcTotalPnL } from "./
 import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { computeDisciplineScore } from "./lib/discipline";
+import { groupBySetup } from "./lib/setupBreakdown";
 import { useFollows } from "./hooks/useFollows";
 import { useFeed } from "./hooks/useFeed";
 import { useCircles, KODA_GLOBAL_CODE } from "./hooks/useCircles";
@@ -1260,6 +1261,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     () => computeDisciplineScore(trades, new Date().toISOString().split("T")[0]),
     [trades]
   );
+  const setupRows = useMemo(() => groupBySetup(trades), [trades]);
   const _allStratMap = getAllStrategiesMap();
   const allSetups = allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 
@@ -2340,6 +2342,24 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       );
                     })()}
                   </section>
+                  {/* ── Setup P&L breakdown ── */}
+                  {setupRows.length > 0 && (
+                    <section>
+                      <SectionKicker label="P&L BY STRATEGY" C={C} />
+                      <div style={{ marginTop: "12px", borderTop: `1px solid ${C.border}` }}>
+                        {setupRows.map(row => (
+                          <div key={row.strategy} style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "12px", alignItems: "baseline", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+                            <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{row.strategy}</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.04em" }}>{row.count}T</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: C.text2, letterSpacing: "0.04em" }}>{row.winRate}%</span>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: row.totalPnl >= 0 ? C.green : C.red, letterSpacing: "0.04em", minWidth: "60px", textAlign: "right" }}>
+                              {row.totalPnl >= 0 ? "+" : ""}{row.totalPnl.toFixed(1)}R
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                 </div>
               )}
 
