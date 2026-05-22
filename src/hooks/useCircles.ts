@@ -302,6 +302,11 @@ export function useCircles({
 
   async function createCircle() {
     if (!circleForm.name.trim() || isCreatingCircle) return;
+    const plan = profileRef.current.plan ?? "free";
+    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.length >= 1) {
+      showToast("Upgrade to Pro for unlimited Trading Circles");
+      return;
+    }
     setIsCreatingCircle(true);
     try {
       const code =
@@ -340,6 +345,12 @@ export function useCircles({
     if (myCirclesRef.current.find(c => c.code === code)) {
       setCircleMsg("Already a member.");
       setTimeout(() => setCircleMsg(""), 2000);
+      return;
+    }
+    const plan = profileRef.current.plan ?? "free";
+    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.length >= 1) {
+      setCircleMsg("Upgrade to Pro for unlimited circles.");
+      setTimeout(() => setCircleMsg(""), 3000);
       return;
     }
     if (isJoiningCircle) return;

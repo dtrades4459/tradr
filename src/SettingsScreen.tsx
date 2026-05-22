@@ -323,7 +323,13 @@ export function SettingsScreen({
               <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Track evaluation targets on dashboard</div>
             </div>
             <button
-              onClick={() => saveProfile({ ...profile, propFirmMode: !profile.propFirmMode })}
+              onClick={() => {
+                if (!profile.propFirmMode && profile.plan !== "pro" && profile.plan !== "elite") {
+                  setShowUpgrade(true);
+                  return;
+                }
+                saveProfile({ ...profile, propFirmMode: !profile.propFirmMode });
+              }}
               style={{ width: "38px", height: "22px", borderRadius: "999px", border: "none", cursor: "pointer", background: profile.propFirmMode ? (C as any).live ?? C.green : C.border2, position: "relative", transition: "background 0.2s", flexShrink: 0 }}
             >
               <div style={{ position: "absolute", top: "2px", left: profile.propFirmMode ? "18px" : "2px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />

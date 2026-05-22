@@ -152,8 +152,8 @@ export default async function handler(req: any, res: any) {
       const sub = event.data.object as Stripe.Subscription;
       const uid = sub.metadata?.userId ?? "";
       if (uid) {
-        // Treat active/trialing as pro; any other status (past_due, cancelled, etc.) as free
-        const plan = sub.status === "active" || sub.status === "trialing" ? "pro" : "free";
+        // past_due = Stripe is retrying payment — keep access, don't punish mid-retry
+        const plan = ["active", "trialing", "past_due"].includes(sub.status) ? "pro" : "free";
         await setUserPlan(uid, plan, { subscriptionId: sub.id });
       }
 
