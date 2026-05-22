@@ -34,6 +34,7 @@ import { PaywallScreen } from "./PaywallScreen";
 import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
+import { ProGate } from "./components/ProGate";
 import { DARK, LIGHT, makeStyles } from "./theme";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -326,6 +327,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const handleShowUpgrade = () => setShowUpgrade(true);
   // showPaywall: true after onboarding completes, OR when user returns from Stripe cancel (?paywall=1)
   const [showPaywall, setShowPaywall] = useState(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paywall") === "1"
@@ -2441,12 +2443,14 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
               {/* SETTINGS */}
               {homeSection === "eval" && profile.propFirmMode && (
-                <EvalAccountScreen
-                  profile={profile}
-                  trades={trades}
-                  C={C}
-                  onEditTargets={() => setHomeSection("settings")}
-                />
+                <ProGate plan={profile.plan ?? "free"} C={C} onUpgrade={handleShowUpgrade} label="Prop firm mode — Pro feature">
+                  <EvalAccountScreen
+                    profile={profile}
+                    trades={trades}
+                    C={C}
+                    onEditTargets={() => setHomeSection("settings")}
+                  />
+                </ProGate>
               )}
 
               {homeSection === "settings" && (
@@ -2891,9 +2895,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {!isDesktop && (<>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 6px", position: "relative", zIndex: 2, flexWrap: "wrap" }}>
                   <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} />
-                  <button onClick={openExportPdf} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" as const, color: C.muted, whiteSpace: "nowrap" as const }}>
-                    Export PDF ↗
-                  </button>
+                  <ProGate plan={profile.plan ?? "free"} C={C} onUpgrade={handleShowUpgrade} label="PDF export — Pro feature">
+                    <button onClick={openExportPdf} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" as const, color: C.muted, whiteSpace: "nowrap" as const }}>
+                      Export PDF ↗
+                    </button>
+                  </ProGate>
                   </div>
                   <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
               </>)}
@@ -3022,28 +3028,32 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   </div>
 
                   {/* ── Discipline score card ── */}
-                  {(() => {
-                    const month = new Date().toISOString().slice(0, 7);
-                    const monthTrades = trades.filter(t => t.date?.startsWith(month));
-                    const tagged = monthTrades.filter(t => t.ruleAdherence !== null && t.ruleAdherence !== undefined);
-                    if (tagged.length < 3) return null;
-                    const followedPct = Math.round(tagged.filter(t => t.ruleAdherence === true).length / tagged.length * 100);
-                    const grade = followedPct >= 80 ? "Excellent" : followedPct >= 60 ? "Good" : followedPct >= 40 ? "Needs work" : "Struggling";
-                    const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? (C as any).warn ?? "#f59e0b" : C.red;
-                    return (
-                      <div style={{ borderRadius: "22px", padding: "18px 20px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "16px" }}>
-                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, color: gradeColor }}>{followedPct}%</span>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Discipline · This month</div>
-                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, lineHeight: 1.5 }}>
-                            You followed your rules on <strong style={{ color: gradeColor }}>{followedPct}%</strong> of trades — <span style={{ color: C.muted }}>{grade}.</span>
+                  <ProGate plan={profile.plan ?? "free"} C={C} onUpgrade={handleShowUpgrade} label="Discipline score — Pro feature">
+                    <div>
+                      {(() => {
+                        const month = new Date().toISOString().slice(0, 7);
+                        const monthTrades = trades.filter(t => t.date?.startsWith(month));
+                        const tagged = monthTrades.filter(t => t.ruleAdherence !== null && t.ruleAdherence !== undefined);
+                        if (tagged.length < 3) return null;
+                        const followedPct = Math.round(tagged.filter(t => t.ruleAdherence === true).length / tagged.length * 100);
+                        const grade = followedPct >= 80 ? "Excellent" : followedPct >= 60 ? "Good" : followedPct >= 40 ? "Needs work" : "Struggling";
+                        const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? (C as any).warn ?? "#f59e0b" : C.red;
+                        return (
+                          <div style={{ borderRadius: "22px", padding: "18px 20px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "16px" }}>
+                            <div style={{ width: "48px", height: "48px", borderRadius: "50%", border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, color: gradeColor }}>{followedPct}%</span>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Discipline · This month</div>
+                              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, lineHeight: 1.5 }}>
+                                You followed your rules on <strong style={{ color: gradeColor }}>{followedPct}%</strong> of trades — <span style={{ color: C.muted }}>{grade}.</span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                        );
+                      })()}
+                    </div>
+                  </ProGate>
 
                   {/* ── Prop firm progress ── */}
                   {profile.propFirmMode && profile.propFirmBalance && (
@@ -3382,35 +3392,39 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           )}
 
               {statsTab === "heatmap" && (
-                <section style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
-                  <div>
-                    <SectionKicker label="P&L BY SESSION × DAY" C={C} />
-                    <div style={{ marginTop:"14px" }}><SessionHeatmap trades={trades} C={C} /></div>
-                  </div>
-                  <div>
-                    <SectionKicker label="P&L BY DAY OF WEEK" C={C} />
-                    <div style={{ marginTop:"14px" }}><DayOfWeekChart trades={trades} C={C} /></div>
-                  </div>
-                  <div>
-                    <SectionKicker label="P&L BY TIME OF DAY" C={C} />
-                    <div style={{ fontFamily: MONO, fontSize:"9px", color:C.muted, letterSpacing:"0.1em", margin:"6px 0 14px" }}>REQUIRES ENTRY TIME ON TRADES</div>
-                    <TimeOfDayChart trades={trades} C={C} />
-                  </div>
-                  <div>
-                    <SectionKicker label="DRAWDOWN CURVE" C={C} />
-                    <div style={{ marginTop: "14px" }}><DrawdownCurve trades={trades} C={C} /></div>
-                  </div>
-                </section>
+                <ProGate plan={profile.plan ?? "free"} C={C} onUpgrade={handleShowUpgrade} label="Session charts — Pro feature">
+                  <section style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
+                    <div>
+                      <SectionKicker label="P&L BY SESSION × DAY" C={C} />
+                      <div style={{ marginTop:"14px" }}><SessionHeatmap trades={trades} C={C} /></div>
+                    </div>
+                    <div>
+                      <SectionKicker label="P&L BY DAY OF WEEK" C={C} />
+                      <div style={{ marginTop:"14px" }}><DayOfWeekChart trades={trades} C={C} /></div>
+                    </div>
+                    <div>
+                      <SectionKicker label="P&L BY TIME OF DAY" C={C} />
+                      <div style={{ fontFamily: MONO, fontSize:"9px", color:C.muted, letterSpacing:"0.1em", margin:"6px 0 14px" }}>REQUIRES ENTRY TIME ON TRADES</div>
+                      <TimeOfDayChart trades={trades} C={C} />
+                    </div>
+                    <div>
+                      <SectionKicker label="DRAWDOWN CURVE" C={C} />
+                      <div style={{ marginTop: "14px" }}><DrawdownCurve trades={trades} C={C} /></div>
+                    </div>
+                  </section>
+                </ProGate>
               )}
 
               {statsTab === "maemfe" && (
-                <section>
-                  <SectionKicker label="MAE vs MFE — TRADE EFFICIENCY" C={C} />
-                  <div style={{ marginTop: "8px", fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, marginBottom: "16px" }}>
-                    MAE = how far price moved against you · MFE = how far it moved in your favour · capture efficiency = P&L ÷ MFE
-                  </div>
-                  <MAEMFEChart trades={trades} C={C} />
-                </section>
+                <ProGate plan={profile.plan ?? "free"} C={C} onUpgrade={handleShowUpgrade} label="MAE / MFE — Pro feature">
+                  <section>
+                    <SectionKicker label="MAE vs MFE — TRADE EFFICIENCY" C={C} />
+                    <div style={{ marginTop: "8px", fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, marginBottom: "16px" }}>
+                      MAE = how far price moved against you · MFE = how far it moved in your favour · capture efficiency = P&L ÷ MFE
+                    </div>
+                    <MAEMFEChart trades={trades} C={C} />
+                  </section>
+                </ProGate>
               )}
 
           {/* ══════════════════════════ CHECKLIST ══════════════════════════ */}
