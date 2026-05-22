@@ -2,7 +2,7 @@ import { useState } from "react";
 import { MONO, BODY, DISPLAY, TrMark } from "./shared";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-export const ONBOARDING_STEPS = ["welcome", "ready"] as const;
+export const ONBOARDING_STEPS = ["welcome", "instruments", "strategy", "ready"] as const;
 export type OnboardingStep = typeof ONBOARDING_STEPS[number];
 
 export const AVATAR_EMOJIS = [
@@ -115,6 +115,8 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   const [avatar, setAvatar] = useState("");
   const [saving, setSaving] = useState(false);
   const [nameErr, setNameErr] = useState("");
+  const [instruments, setInstruments] = useState<string[]>([]);
+  const [strategy, setStrategy] = useState<string>("");
 
   function onNameChange(v: string) {
     setName(v);
@@ -143,7 +145,7 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   async function finish() {
     if (saving) return;
     setSaving(true);
-    await onComplete({ name, handle, avatar, bio: "", twitter: "", instruments: [], strategy: "" });
+    await onComplete({ name, handle, avatar, bio: "", twitter: "", instruments, strategy });
     setSaving(false);
   }
 
@@ -265,9 +267,97 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
           </div>
         )}
 
-        {step === "ready" && (
+        {step === "instruments" && (
           <div style={{ animation: "rise 0.3s ease" }}>
             <StepBadge n={2} />
+            <Heading line1="What do you" line2="trade?" />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "28px" }}>
+              Pick all that apply. This helps Kōda show the right stats and circles.
+            </p>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "32px" }}>
+              {FUTURES_INSTRUMENTS.map(inst => {
+                const active = instruments.includes(inst.code);
+                return (
+                  <button key={inst.code}
+                    onClick={() => setInstruments(prev =>
+                      active ? prev.filter(c => c !== inst.code) : [...prev, inst.code]
+                    )}
+                    style={{
+                      padding: "10px 16px", borderRadius: "999px",
+                      background: active ? C.text : "transparent",
+                      color: active ? C.bg : C.text2,
+                      border: `1px solid ${active ? C.text : C.border2}`,
+                      fontFamily: MONO, fontSize: "11px", fontWeight: 500,
+                      cursor: "pointer", letterSpacing: "0.06em",
+                      transition: "background 0.15s, color 0.15s",
+                    }}>
+                    {inst.code} <span style={{ opacity: 0.6, fontSize: "10px" }}>{inst.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button onClick={goNext} style={pillPrimary(true)}>
+              {instruments.length === 0 ? "Skip →" : "Continue →"}
+            </button>
+          </div>
+        )}
+
+        {step === "strategy" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <StepBadge n={3} />
+            <Heading line1="What's your" line2="trading style?" />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "28px" }}>
+              Choose the approach that best fits how you trade.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "32px" }}>
+              {[
+                { code: "scalp",   label: "Scalping",       desc: "Quick in-and-out, seconds to minutes" },
+                { code: "day",     label: "Day Trading",     desc: "Open and close within the same session" },
+                { code: "swing",   label: "Swing Trading",   desc: "Holding overnight to a few days" },
+                { code: "news",    label: "News / Events",   desc: "Trading around catalysts and data" },
+                { code: "algo",    label: "Algo / Systems",  desc: "Rules-based or automated strategies" },
+                { code: "other",   label: "Other",           desc: "My own unique approach" },
+              ].map(s => {
+                const active = strategy === s.code;
+                return (
+                  <button key={s.code}
+                    onClick={() => setStrategy(active ? "" : s.code)}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "14px 16px", borderRadius: "14px",
+                      background: active ? C.panel : "transparent",
+                      border: `1px solid ${active ? C.text : C.border2}`,
+                      cursor: "pointer", textAlign: "left",
+                      transition: "background 0.15s, border-color 0.15s",
+                    }}>
+                    <div>
+                      <div style={{ fontFamily: BODY, fontSize: "14px", fontWeight: 500, color: C.text }}>
+                        {s.label}
+                      </div>
+                      <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginTop: "2px", letterSpacing: "0.04em" }}>
+                        {s.desc}
+                      </div>
+                    </div>
+                    {active && (
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: C.text, flexShrink: 0 }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button onClick={goNext} style={pillPrimary(true)}>
+              {strategy === "" ? "Skip →" : "Continue →"}
+            </button>
+          </div>
+        )}
+
+        {step === "ready" && (
+          <div style={{ animation: "rise 0.3s ease" }}>
+            <StepBadge n={4} />
             <h1 style={{
               fontFamily: DISPLAY, fontSize: "clamp(32px, 8vw, 44px)", fontWeight: 700,
               letterSpacing: "-0.03em", lineHeight: 1.05, color: C.text, marginBottom: "16px",
@@ -276,7 +366,7 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
               <span style={{ fontStyle: "italic", fontWeight: 500, color: C.text2 }}>{name || "trader"}.</span>
             </h1>
             <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, marginBottom: "32px" }}>
-              Your edge is built one trade at a time. Log your first — the stats follow automatically.
+              You've been added to the Kōda circle. Log your first trade — the stats follow automatically.
             </p>
 
             <div style={{
