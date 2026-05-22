@@ -30,6 +30,7 @@ import { SESSIONS, BIAS, EMOTION_TAGS, getEmotionTags, EMPTY_TRADE } from "./tra
 import { TourOverlay, OnboardingFlow } from "./OnboardingFlow";
 import type { OnboardingData } from "./OnboardingFlow";
 import { UpgradeModal } from "./UpgradeModal";
+import { PaywallScreen } from "./PaywallScreen";
 import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
@@ -325,6 +326,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  // showPaywall: true after onboarding completes, OR when user returns from Stripe cancel (?paywall=1)
+  const [showPaywall, setShowPaywall] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paywall") === "1"
+  );
   const [showCalc,    setShowCalc]    = useState(false);
 
   const [showLiveModal, setShowLiveModal] = useState(false);
@@ -1383,8 +1388,34 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             try { await joinCircleByCode(TRADR_GLOBAL_CODE); }
             catch { /* silently ignore — circle may not exist yet */ }
           }
+          // Show paywall before the main app — tour fires after paywall resolves.
+          setShowPaywall(true);
+        }}
+      />
+    );
+  }
+
+  // Paywall: shown after onboarding completes, or when returning from Stripe cancel (?paywall=1).
+  // Only gate when profile is fully onboarded (guards against stale URL param for existing users).
+  const _cancelledFromStripe = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paywall") === "1";
+  if (showPaywall && profile.onboarded) {
+    return (
+      <PaywallScreen
+        C={C}
+        userId={profile.uid ?? ""}
+        userEmail={profile.email ?? user?.email ?? ""}
+        stripeCustomerId={profile.stripeCustomerId}
+        cancelledFromStripe={_cancelledFromStripe}
+        onSuccess={() => {
+          window.history.replaceState({}, "", window.location.pathname);
+          setShowPaywall(false);
           setView("log");
-          // Show the first-run tour unless they've already seen it
+          if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
+        }}
+        onSkip={() => {
+          window.history.replaceState({}, "", window.location.pathname);
+          setShowPaywall(false);
+          setView("log");
           if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
         }}
       />

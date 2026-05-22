@@ -2,9 +2,10 @@
 // TRADR · Stripe Webhook
 //
 // Verifies Stripe signature, then:
-//   checkout.session.completed     → sets profile.plan = "pro"  (KV + JWT claim)
-//   customer.subscription.deleted  → sets profile.plan = "free" (KV + JWT claim)
-//   invoice.payment_failed         → logs only (Stripe handles retries)
+//   checkout.session.completed       → plan = "pro"; stores subscription_id + customer_id
+//   customer.subscription.updated    → re-evaluates active/cancelled state
+//   customer.subscription.deleted    → plan = "free"
+//   invoice.payment_failed           → logs only (Stripe handles retries)
 //
 // Plan is written to TWO places on every event so plan gating is server-enforced:
 //   1. user_kv tradr_profile blob  — persisted source of truth, synced to client
@@ -19,7 +20,8 @@
 //
 // IMPORTANT: Add this endpoint in Stripe Dashboard → Webhooks:
 //   URL: https://tradrjournal.xyz/api/stripe-webhook
-//   Events: checkout.session.completed, customer.subscription.deleted, invoice.payment_failed
+//   Events: checkout.session.completed, customer.subscription.updated,
+//           customer.subscription.deleted, invoice.payment_failed
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import Stripe from "stripe";
@@ -28,8 +30,10 @@ import { createClient } from "@supabase/supabase-js";
 // Must disable body parsing — Stripe needs the raw body to verify the signature
 export const config = { runtime: "nodejs", api: { bodyParser: false } };
 
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: "2024-11-20.acacia" as any });
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY not configured");
+  return new Stripe(key, { apiVersion: "2024-11-20.acacia" as any });
 }
 
 function getSupabase() {
@@ -45,7 +49,11 @@ async function rawBody(req: any): Promise<Buffer> {
   });
 }
 
-async function setUserPlan(userId: string, plan: "free" | "pro") {
+async function setUserPlan(
+  userId: string,
+  plan: "free" | "pro",
+  extras?: { subscriptionId?: string; customerId?: string }
+) {
   const db = getSupabase();
 
   // ── 1. Update tradr_profile KV blob ─────────────────────────────────────────
@@ -59,25 +67,45 @@ async function setUserPlan(userId: string, plan: "free" | "pro") {
   if (!data?.value) {
     console.warn("[webhook] No profile for userId:", userId);
     // Still stamp app_metadata so the JWT reflects the plan even if the KV row
-    // hasn't been created yet (edge case: user purchases before completing onboarding).
+    // hasn't been created yet (edge case: purchase before onboarding completes).
   } else {
     const profile = JSON.parse(data.value);
     profile.plan = plan;
-    await db.from("user_kv").upsert({
-      user_id: userId,
-      key: "tradr_profile",
-      value: JSON.stringify(profile),
-    }, { onConflict: "user_id,key" });
+    await db.from("user_kv").upsert(
+      { user_id: userId, key: "tradr_profile", value: JSON.stringify(profile) },
+      { onConflict: "user_id,key" }
+    );
   }
 
-  // ── 2. Stamp plan into auth app_metadata (server-enforced JWT claim) ─────────
-  // This causes the next JWT refresh to include app_metadata.plan = plan.
-  // Serverless functions can verify this claim without a DB lookup.
+  // ── 2. Store subscription + customer IDs in user_kv ─────────────────────────
+  if (extras?.subscriptionId || extras?.customerId) {
+    const { data: stripeKv } = await db
+      .from("user_kv")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("key", "tradr_stripe_customer")
+      .maybeSingle();
+
+    let existing: Record<string, string> = {};
+    if (stripeKv?.value) {
+      try { existing = JSON.parse(stripeKv.value); } catch { /* ignore */ }
+    }
+    const updated = {
+      ...existing,
+      ...(extras.customerId ? { customerId: extras.customerId } : {}),
+      ...(extras.subscriptionId ? { subscriptionId: extras.subscriptionId } : {}),
+    };
+    await db.from("user_kv").upsert(
+      { user_id: userId, key: "tradr_stripe_customer", value: JSON.stringify(updated) },
+      { onConflict: "user_id,key" }
+    );
+  }
+
+  // ── 3. Stamp plan into auth app_metadata (server-enforced JWT claim) ─────────
   const { error: metaErr } = await db.auth.admin.updateUserById(userId, {
     app_metadata: { plan },
   });
   if (metaErr) {
-    // Log but don't fail — KV write above already succeeded.
     console.error("[webhook] app_metadata update failed:", metaErr.message);
   }
 
@@ -87,13 +115,23 @@ async function setUserPlan(userId: string, plan: "free" | "pro") {
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).end();
 
+  // ── Env preflight ─────────────────────────────────────────────────────────
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error("[webhook] STRIPE_SECRET_KEY not configured");
+    return res.status(500).json({ error: "Stripe not configured" });
+  }
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error("[webhook] STRIPE_WEBHOOK_SECRET not configured");
+    return res.status(500).json({ error: "Webhook secret not configured" });
+  }
+
   const sig = req.headers["stripe-signature"] as string;
   if (!sig) return res.status(400).json({ error: "Missing stripe-signature" });
 
   let event: Stripe.Event;
   try {
     const body = await rawBody(req);
-    event = getStripe().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = getStripe().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err: any) {
     console.error("[webhook] Bad signature:", err.message);
     return res.status(400).json({ error: `Webhook error: ${err.message}` });
@@ -103,11 +141,27 @@ export default async function handler(req: any, res: any) {
     if (event.type === "checkout.session.completed") {
       const s = event.data.object as Stripe.Checkout.Session;
       const uid = s.client_reference_id ?? (s.metadata?.userId ?? "");
-      if (uid) await setUserPlan(uid, "pro");
+      if (uid) {
+        await setUserPlan(uid, "pro", {
+          subscriptionId: typeof s.subscription === "string" ? s.subscription : s.subscription?.id,
+          customerId: typeof s.customer === "string" ? s.customer : s.customer?.id,
+        });
+      }
+
+    } else if (event.type === "customer.subscription.updated") {
+      const sub = event.data.object as Stripe.Subscription;
+      const uid = sub.metadata?.userId ?? "";
+      if (uid) {
+        // Treat active/trialing as pro; any other status (past_due, cancelled, etc.) as free
+        const plan = sub.status === "active" || sub.status === "trialing" ? "pro" : "free";
+        await setUserPlan(uid, plan, { subscriptionId: sub.id });
+      }
+
     } else if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object as Stripe.Subscription;
       const uid = sub.metadata?.userId ?? "";
-      if (uid) await setUserPlan(uid, "free");
+      if (uid) await setUserPlan(uid, "free", { subscriptionId: sub.id });
+
     } else if (event.type === "invoice.payment_failed") {
       const inv = event.data.object as Stripe.Invoice;
       console.warn("[webhook] Payment failed, customer:", (inv as any).customer);

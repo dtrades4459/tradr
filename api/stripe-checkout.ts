@@ -1,15 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRADR · Stripe Checkout API
 //
-// POST { userId, email, stripeCustomerId? }
+// POST { userId, email, billing?, stripeCustomerId?, promoCode? }
 // → Verifies the caller's Supabase JWT (Authorization: Bearer <token>)
 // → Finds or creates a Stripe customer
-// → Creates a hosted Checkout Session for the Pro monthly plan
+// → Creates a hosted Checkout Session
 // → Returns { url, customerId }
 //
 // Required Vercel environment variables:
 //   STRIPE_SECRET_KEY          sk_live_... or sk_test_...
-//   STRIPE_PRICE_ID            price_... (Pro $24.99/month recurring)
+//   STRIPE_PRICE_ID_MONTHLY    price_... (£24.99/month recurring)
+//   STRIPE_PRICE_ID_ANNUAL     price_... (£199.99/year recurring)
+//   STRIPE_PROMO_CODE_ID_K0DA  promo_... (Stripe promotion code object ID for K0DA)
 //   SUPABASE_URL               same value as VITE_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY  Supabase → Settings → API → service_role key
 //   APP_URL                    https://tradrjournal.xyz
@@ -20,9 +22,18 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
+// Minimal Vercel handler types (avoids pulling in @vercel/node).
+type Req = { method?: string; headers: Record<string, string | string[] | undefined>; body: Record<string, unknown>; query: Record<string, string | string[] | undefined> };
+type Res = { status(n: number): Res; json(d: unknown): Res; end(): void; setHeader(k: string, v: string): void };
+
 const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
 
-// ── CORS ─────────────────────────────────────────────────────────────────────
+// Known promo codes — validated server-side before applying Stripe discount.
+// Key = human-readable code (uppercase), value = env var that holds the Stripe promo_xxx ID.
+const PROMO_CODE_MAP: Record<string, string | undefined> = {
+  K0DA: process.env.STRIPE_PROMO_CODE_ID_K0DA,
+};
+
 const ALLOWED_ORIGINS = new Set([
   "https://tradrjournal.xyz",
   "https://www.tradrjournal.xyz",
@@ -30,7 +41,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:4173",
 ]);
 
-function cors(req: any, res: any) {
+function cors(req: Req, res: Res) {
   const origin = req.headers["origin"] ?? "";
   const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
   res.setHeader("Access-Control-Allow-Origin", allowed);
@@ -39,113 +50,137 @@ function cors(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
-function stripe() {
-  if (!process.env.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY not set");
-  return new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: "2024-11-20.acacia" as any });
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw Object.assign(new Error("STRIPE_SECRET_KEY not configured"), { status: 500 });
+  return new Stripe(key, { apiVersion: "2024-11-20.acacia" as any });
 }
 
-// Service-role client — used for reads/writes that bypass RLS (webhook, server-side only)
 function supabaseAdmin() {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
-// ── JWT verification helper ───────────────────────────────────────────────────
-// Extracts the Bearer token from the Authorization header and verifies it with
-// Supabase. Returns the authenticated user, or throws with a 401-friendly message.
-async function verifyToken(req: any): Promise<{ id: string; email?: string }> {
+async function verifyToken(req: Req): Promise<{ id: string; email?: string }> {
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) throw Object.assign(new Error("Missing auth token"), { status: 401 });
-
-  // Use the anon key client to verify the JWT — getUser validates signature server-side
   const anon = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const { data: { user }, error } = await anon.auth.getUser(token);
   if (error || !user) throw Object.assign(new Error("Invalid or expired token"), { status: 401 });
   return user;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function handler(req: any, res: any) {
+export default async function handler(req: Req, res: Res) {
   cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // ── Auth: verify the caller is who they say they are ─────────────────────
+    // ── Env var preflight ────────────────────────────────────────────────────
+    // Check price IDs before doing anything that has side effects.
+    const monthlyPriceId = process.env.STRIPE_PRICE_ID_MONTHLY ?? process.env.STRIPE_PRICE_ID ?? "";
+    const annualPriceId  = process.env.STRIPE_PRICE_ID_ANNUAL  ?? "";
+    if (!monthlyPriceId) {
+      return res.status(500).json({ error: "STRIPE_PRICE_ID_MONTHLY not configured" });
+    }
+
+    // ── Auth ─────────────────────────────────────────────────────────────────
     let authedUser: { id: string; email?: string };
     try {
       authedUser = await verifyToken(req);
-    } catch (e: any) {
-      return res.status(e.status ?? 401).json({ error: e.message });
+    } catch (e: unknown) {
+      const status = typeof e === "object" && e !== null && "status" in e ? Number((e as { status: unknown }).status) : 401;
+      const message = e instanceof Error ? e.message : "Auth failed";
+      return res.status(status).json({ error: message });
     }
 
-    const { userId, email, stripeCustomerId } = req.body as {
+    const { userId, email, billing = "monthly", stripeCustomerId, promoCode } = req.body as {
       userId: string;
       email: string;
+      billing?: "monthly" | "annual";
       stripeCustomerId?: string;
+      promoCode?: string;
     };
 
-    if (!userId || !email) {
-      return res.status(400).json({ error: "userId and email are required" });
-    }
+    if (!userId || !email) return res.status(400).json({ error: "userId and email are required" });
+    if (authedUser.id !== userId) return res.status(403).json({ error: "Forbidden" });
 
-    // Guard: the authenticated user must match the requested userId
-    if (authedUser.id !== userId) {
-      return res.status(403).json({ error: "Forbidden" });
+    // Validate billing param
+    if (billing === "annual" && !annualPriceId) {
+      return res.status(500).json({ error: "STRIPE_PRICE_ID_ANNUAL not configured" });
     }
+    const priceId = billing === "annual" ? annualPriceId : monthlyPriceId;
 
-    const s = stripe();
+    const s = getStripe();
     const db = supabaseAdmin();
 
-    // Find or create Stripe customer
+    // ── Find or create Stripe customer ───────────────────────────────────────
     let customerId = stripeCustomerId ?? "";
-
     if (!customerId) {
-      // Check if we already stored one in Supabase
       const { data: kvRow } = await db
         .from("user_kv")
         .select("value")
         .eq("user_id", userId)
         .eq("key", "tradr_stripe_customer")
         .maybeSingle();
-
       if (kvRow?.value) {
-        try { customerId = JSON.parse(kvRow.value).customerId ?? ""; } catch { /* ignore JSON parse error */ }
+        try { customerId = JSON.parse(kvRow.value).customerId ?? ""; } catch { /* ignore */ }
       }
     }
-
     if (!customerId) {
       const customer = await s.customers.create({ email, metadata: { userId } });
       customerId = customer.id;
-      await db.from("user_kv").upsert({
-        user_id: userId,
-        key: "tradr_stripe_customer",
-        value: JSON.stringify({ customerId }),
-      }, { onConflict: "user_id,key" });
+      await db.from("user_kv").upsert(
+        { user_id: userId, key: "tradr_stripe_customer", value: JSON.stringify({ customerId }) },
+        { onConflict: "user_id,key" }
+      );
     }
 
-    if (!process.env.STRIPE_PRICE_ID) {
-      return res.status(500).json({ error: "STRIPE_PRICE_ID not configured" });
+    // ── Resolve promo code → Stripe promotion code object ID ────────────────
+    let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
+    let allowPromoCodes = true;
+    if (promoCode) {
+      const normalized = promoCode.trim().toUpperCase();
+      const stripePromoId = PROMO_CODE_MAP[normalized];
+      if (stripePromoId) {
+        discounts = [{ promotion_code: stripePromoId }];
+        allowPromoCodes = false; // pre-applied — disable the Stripe field to avoid confusion
+
+        // Log promo code usage to Supabase (fire-and-forget)
+        db.from("user_kv").upsert(
+          {
+            user_id: userId,
+            key: "tradr_promo_applied",
+            value: JSON.stringify({
+              promoCode: normalized,
+              planSelected: billing,
+              appliedAt: new Date().toISOString(),
+            }),
+          },
+          { onConflict: "user_id,key" }
+        ).then(() => {}).catch(() => {});
+      }
     }
 
+    // ── Create Checkout Session ───────────────────────────────────────────────
     const session = await s.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       payment_method_types: ["card"],
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${APP_URL}?upgraded=1&cid=${customerId}`,
-      cancel_url: `${APP_URL}?cancelled=1`,
+      cancel_url: `${APP_URL}?paywall=1`,
       client_reference_id: userId,
       subscription_data: { metadata: { userId } },
-      allow_promotion_codes: true,
+      ...(discounts ? { discounts } : { allow_promotion_codes: allowPromoCodes }),
     });
 
     res.json({ url: session.url, customerId });
   } catch (err: unknown) {
     console.error("[stripe-checkout]", err);
-    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+    const status = typeof err === "object" && err !== null && "status" in err ? Number((err as { status: unknown }).status) : 500;
+    res.status(status).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
   }
 }
