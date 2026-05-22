@@ -227,6 +227,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [draftCount, setDraftCount] = useState(0);
   const [view, setView] = useState("home");
   const [viewHistory, setViewHistory] = useState<string[]>([]);
+  const lastGearTap = useRef<number>(0);
 
   // navigateTo — push current view to history, then switch
   function navigateTo(v: string) {
@@ -246,6 +247,19 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   function primaryNav(v: string) {
     setViewHistory([]);
     setView(v);
+  }
+  // handleGearTap — double-tap within 300ms goes back; single tap opens settings
+  function handleGearTap() {
+    const now = Date.now();
+    if (now - lastGearTap.current < 300) {
+      lastGearTap.current = 0;
+      goBack();
+    } else {
+      lastGearTap.current = now;
+      if (view !== "home") setViewHistory(h => [...h, view]);
+      setView("home");
+      setHomeSection("settings");
+    }
   }
   // ── Circles state + actions managed by useCircles (wired below after stats) ─
   const [darkMode, setDarkMode] = useState(true);
@@ -2908,7 +2922,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     </button>
                   </ProGate>
                   </div>
-                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
+                  <GearButton onClick={handleGearTap} active={false} C={C} />
               </>)}
 
               {statsTab === "overview" && total === 0 && <EmptyState C={C} icon="&#128202;" headline="Your stats live here." body="Log your first trade and watch your edge emerge — win rate, R-multiples, streaks, and more." cta="Log a trade →" onCta={() => navigateTo("log")} />}
@@ -3483,7 +3497,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {!isDesktop && (
                 <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}`, marginTop: "4px" }}>
                   <SubNavDropdown sections={CHECKLIST_SECTIONS} value={checklistTab} onChange={setChecklistTab} C={C} />
-                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
+                  <GearButton onClick={handleGearTap} active={false} C={C} />
                 </div>
               )}
 
@@ -3618,7 +3632,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
                 {!isDesktop && (
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
+                    <GearButton onClick={handleGearTap} active={false} C={C} />
                   </div>
                 )}
 
