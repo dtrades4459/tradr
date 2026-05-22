@@ -131,6 +131,13 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
     }
   }
 
+  async function signInWithOAuth(provider: "google" | "twitter" | "apple") {
+    await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+  }
+
   /* ── Reset sent ── */
   if (mode === "reset-sent") {
     return (
@@ -244,9 +251,9 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
             </div>
 
             {/* OAuth buttons */}
-            <OAuthBtn label="Continue with Google" provider="google" />
-            <OAuthBtn label="Continue with X" provider="x" />
-            <OAuthBtn label="Continue with Apple" provider="apple" />
+            <OAuthBtn label="Continue with Google" provider="google" onClick={() => signInWithOAuth("google")} />
+            <OAuthBtn label="Continue with X" provider="x" onClick={() => signInWithOAuth("twitter")} />
+            <OAuthBtn label="Continue with Apple" provider="apple" onClick={() => signInWithOAuth("apple")} />
 
             <button onClick={() => { setMode("reset"); setError(""); }} style={{
               background: "none", border: "none", color: C.muted, fontSize: 12,
