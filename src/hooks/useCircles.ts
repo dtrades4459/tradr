@@ -17,6 +17,10 @@ import { log } from "../lib/log";
 import { subscribeToCircle } from "../data/circles";
 import type { Circle, CircleMember, Profile } from "../types";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+export const KODA_GLOBAL_CODE = "KODA-GLOBAL";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** Shape of a leaderboard row returned by fetchCircleLeaderboard. */
@@ -303,7 +307,7 @@ export function useCircles({
   async function createCircle() {
     if (!circleForm.name.trim() || isCreatingCircle) return;
     const plan = profileRef.current.plan ?? "free";
-    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.length >= 1) {
+    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).length >= 1) {
       showToast("Upgrade to Pro for unlimited Trading Circles");
       return;
     }
@@ -348,7 +352,7 @@ export function useCircles({
       return;
     }
     const plan = profileRef.current.plan ?? "free";
-    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.length >= 1) {
+    if (plan !== "pro" && plan !== "elite" && myCirclesRef.current.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).length >= 1) {
       setCircleMsg("Upgrade to Pro for unlimited circles.");
       setTimeout(() => setCircleMsg(""), 3000);
       return;
@@ -383,7 +387,19 @@ export function useCircles({
   /** Silent join by code — used by onboarding. Reads from ref to avoid stale closure. */
   async function joinCircleByCode(code: string): Promise<void> {
     if (myCirclesRef.current.find((c: Circle) => c.code === code)) return;
-    const res = await storage.get("tradr_circle_" + code, true);
+    let res = await storage.get("tradr_circle_" + code, true);
+    if (!res && code === KODA_GLOBAL_CODE) {
+      const circle = {
+        id: 1,
+        code: KODA_GLOBAL_CODE,
+        name: "Kōda",
+        description: "The official Kōda community. All traders welcome.",
+        strategy: "", privacy: "public", emoji: "◆", metric: "dollar",
+        createdBy: "Kōda", createdAt: new Date().toISOString(),
+      };
+      try { await storage.set("tradr_circle_" + KODA_GLOBAL_CODE, JSON.stringify(circle), true); } catch {}
+      res = await storage.get("tradr_circle_" + code, true);
+    }
     if (!res) return;
     const circle = JSON.parse(res.value);
     const me = myMemberRecord();

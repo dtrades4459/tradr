@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
+import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
 
 export function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -140,6 +141,10 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     }
   }
 
+  const sortedCircles = [...myCircles].sort((a, b) =>
+    a.code === KODA_GLOBAL_CODE ? -1 : b.code === KODA_GLOBAL_CODE ? 1 : 0
+  );
+
   return (
     <div style={{ position: "relative" }}>
       {/* ambient orb */}
@@ -165,10 +170,10 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             <button onClick={() => setCirclesView("create")} style={{ padding: "6px 14px", borderRadius: "999px", background: "transparent", color: C.text2, border: `1px solid ${C.border2}`, fontFamily: BODY, fontSize: "11px", fontWeight: 500, cursor: "pointer", flexShrink: 0 }}>+ New</button>
           </div>
 
-          {myCircles.length > 0 ? (
+          {sortedCircles.length > 0 ? (
             <>
             {/* Featured / first circle — glass card */}
-            {myCircles.slice(0, 1).map(circle => (
+            {sortedCircles.slice(0, 1).map(circle => (
               <div key={circle.id} onClick={() => openCircle(circle)} style={{ position: "relative", zIndex: 2, cursor: "pointer", borderRadius: "22px", padding: "22px", overflow: "hidden", isolation: "isolate", background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border2}` }}>
                 {/* corner glow */}
                 <div style={{ position: "absolute", top: -60, left: -60, width: 200, height: 200, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.green}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.green})`, filter: "blur(40px)", opacity: 0.4, pointerEvents: "none", zIndex: 0 }} />
@@ -195,9 +200,9 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             ))}
 
             {/* Other circles list */}
-            {myCircles.length > 1 && (
+            {sortedCircles.length > 1 && (
             <div style={{ marginTop: "12px", borderRadius: "22px", overflow: "hidden", isolation: "isolate", background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
-              {myCircles.slice(1).map((circle, i, arr) => (
+              {sortedCircles.slice(1).map((circle, i, arr) => (
                 <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
                   style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 14px", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                   <div style={{ width: 40, height: 40, borderRadius: "14px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -7,7 +7,7 @@ import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { useFollows } from "./hooks/useFollows";
 import { useFeed } from "./hooks/useFeed";
-import { useCircles } from "./hooks/useCircles";
+import { useCircles, KODA_GLOBAL_CODE } from "./hooks/useCircles";
 import type { CircleStats } from "./hooks/useCircles";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
@@ -38,9 +38,6 @@ import { ProGate } from "./components/ProGate";
 import { DARK, LIGHT, makeStyles } from "./theme";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-
-/** The TRADR Global circle — every new user auto-joins on onboarding completion. */
-const TRADR_GLOBAL_CODE = "TRADRG-HB1U";
 
 // STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap → src/data/strategies.ts
 
@@ -1405,10 +1402,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             socialLinks: twitter.trim() ? { twitter: twitter.trim() } : profile.socialLinks,
           };
           await saveProfile(updated);
-          // Auto-join TRADR Global circle for every new user (silent — no error on failure).
+          // Auto-join Kōda Global circle for every new user (silent — no error on failure).
           // joinCircleByCode reads from myCirclesRef so it never sees stale closure state.
-          if (TRADR_GLOBAL_CODE) {
-            try { await joinCircleByCode(TRADR_GLOBAL_CODE); }
+          if (KODA_GLOBAL_CODE) {
+            try { await joinCircleByCode(KODA_GLOBAL_CODE); }
             catch { /* silently ignore — circle may not exist yet */ }
           }
           // Show paywall before the main app — tour fires after paywall resolves.
