@@ -37,6 +37,8 @@ import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
 import { ProGate } from "./components/ProGate";
+import { WeeklyReport } from "./components/WeeklyReport";
+import { computeWeeklySummary } from "./lib/weeklyReport";
 import { DARK, LIGHT, makeStyles } from "./theme";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -1262,6 +1264,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     [trades]
   );
   const setupRows = useMemo(() => groupBySetup(trades), [trades]);
+  const weeklySummary = useMemo(
+    () => computeWeeklySummary(trades, new Date().toISOString().split("T")[0]),
+    [trades]
+  );
   const _allStratMap = getAllStrategiesMap();
   const allSetups = allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
 
@@ -2357,6 +2363,15 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                             </span>
                           </div>
                         ))}
+                      </div>
+                    </section>
+                  )}
+                  {/* ── Weekly report ── */}
+                  {weeklySummary && (
+                    <section>
+                      <SectionKicker label="THIS WEEK" C={C} />
+                      <div style={{ marginTop: "16px" }}>
+                        <WeeklyReport summary={weeklySummary} C={C as Record<string, string>} />
                       </div>
                     </section>
                   )}
