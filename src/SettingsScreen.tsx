@@ -201,19 +201,6 @@ export function SettingsScreen({
             </button>
           </div>
         )}
-        {/* Plan & Billing */}
-        <div onClick={() => { if (profile.plan !== "pro" && profile.plan !== "elite") setShowUpgrade(true); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-          <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `color-mix(in oklch, ${(C as any).live ?? C.green} 14%, transparent)`, border: `1px solid ${C.border2}`, color: (C as any).live ?? C.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 5h14v10H3zM3 8h14M6 12h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Plan & Billing</div>
-            <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>
-              {profile.plan === "pro" || profile.plan === "elite" ? "Pro · $24.99/mo" : "Free plan · Upgrade to unlock all"}
-            </div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
-        </div>
         {/* Appearance / Dark mode */}
         <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
