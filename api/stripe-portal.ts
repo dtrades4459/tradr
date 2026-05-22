@@ -77,7 +77,7 @@ export default async function handler(req: any, res: any) {
       return res.status(e.status ?? 401).json({ error: e.message });
     }
 
-    const { stripeCustomerId } = req.body as { stripeCustomerId: string };
+    const { stripeCustomerId, returnPath } = req.body as { stripeCustomerId: string; returnPath?: string };
     if (!stripeCustomerId) return res.status(400).json({ error: "stripeCustomerId required" });
 
     // Guard: confirm the authenticated user owns this Stripe customer ID
@@ -100,9 +100,13 @@ export default async function handler(req: any, res: any) {
 
     if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: "STRIPE_SECRET_KEY not configured" });
     const s = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-11-20.acacia" as any });
+    // Validate returnPath is a relative path (no protocol, starts with /) to prevent open redirect
+    const safeReturn = returnPath && /^\/[^/]/.test(returnPath) && !returnPath.includes("://")
+      ? returnPath
+      : "/";
     const session = await s.billingPortal.sessions.create({
       customer: stripeCustomerId,
-      return_url: APP_URL,
+      return_url: APP_URL + safeReturn,
     });
 
     res.json({ url: session.url });

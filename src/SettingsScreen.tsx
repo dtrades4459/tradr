@@ -89,13 +89,17 @@ export function SettingsScreen({
   };
 
   async function openBillingPortal() {
+    if (!profile.stripeCustomerId) {
+      showToast("No billing info found — contact support.");
+      return;
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
       const res = await fetch("/api/stripe-portal", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
-        body: JSON.stringify({ stripeCustomerId: profile.stripeCustomerId }),
+        body: JSON.stringify({ stripeCustomerId: profile.stripeCustomerId, returnPath: "/?return=settings" }),
       });
       if (!res.ok) { showToast("Couldn't open billing portal. Try again."); return; }
       const { url } = await res.json();

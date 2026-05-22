@@ -393,6 +393,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       showToast("No worries — you're still on the free plan.");
       window.history.replaceState({}, "", window.location.pathname);
     }
+    if (params.get("return") === "settings") {
+      setView("home");
+      setHomeSection("settings");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }); // No deps — ref guard inside the block ensures single execution
 
   // ── ?join= deep-link handler ────────────────────────────────────────────────
@@ -1278,6 +1283,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   ];
 
   const openExportPdf = () => {
+    if (userPlan !== "pro" && userPlan !== "elite") { handleShowUpgrade(); return; }
     const norm = (profile.handle || "").replace(/^@/, "").toLowerCase();
     const today = new Date().toISOString().split("T")[0];
     const wr = total > 0 ? Math.round((wins / total) * 100) : 0;
