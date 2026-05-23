@@ -83,6 +83,7 @@ export interface CircleMember {
 
 export interface Circle {
   metric?: "dollar" | "r" | "winrate" | "trades" | "avgr";
+  emoji?: string;
   id: number;
   code: string;
   name: string;

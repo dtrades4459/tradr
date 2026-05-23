@@ -11,6 +11,8 @@ import { useCircles } from "./hooks/useCircles";
 import type { CircleStats } from "./hooks/useCircles";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
+import { shareTrade } from "./data/circlesSharedTrades";
+import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
 import { STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap, addExtraStrategies } from "./data/strategies";
 import { useTradovate } from "./hooks/useTradovate";
 
@@ -276,6 +278,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [tradeToShare, setTradeToShare] = useState<Trade | null>(null);
+  const [sharingToCircle, setSharingToCircle] = useState<string | null>(null);
   // jwtPlan comes from the Supabase JWT app_metadata claim — server-verified,
   // not forgeable from the client. Use it as the authoritative starting plan so
   // the paywall check is correct before loadAll() finishes.
@@ -2819,6 +2823,13 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                             {/* ── Actions ── */}
                             <div style={{ display: "flex", gap: 8, margin: "0 2px" }}>
                               <button onClick={() => editTrade(t)} style={{ ...pillGhost, padding: "8px 14px" }}>EDIT</button>
+                              <button
+                                title="Share to circle"
+                                onClick={() => { setTradeToShare(t); setSharingToCircle(null); }}
+                                style={{ ...pillGhost, padding: "8px 14px" }}
+                              >
+                                SHARE ↗
+                              </button>
                               {confirmDelete === t.id ? (
                                 <>
                                   <button onClick={() => deleteTrade(t.id)} style={{ ...pillGhost, padding: "8px 14px", color: C.red, borderColor: C.red }}>CONFIRM</button>
@@ -4103,6 +4114,76 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Circle Share Picker ── */}
+      {tradeToShare && (
+        <div
+          onClick={() => { setTradeToShare(null); setSharingToCircle(null); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 420, background: C.panel, borderRadius: "16px 16px 0 0", padding: "20px 16px 32px", border: `1px solid ${C.border2}`, borderBottom: "none" }}
+          >
+            <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Share Trade</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: "0.04em" }}>
+              {tradeToShare.pair} · {(tradeToShare.direction || "").toUpperCase()} · {tradeToShare.date}
+            </div>
+
+            <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Select Circle</div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+              {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).map((circle: Circle) => {
+                const selected = sharingToCircle === circle.code;
+                return (
+                  <div
+                    key={circle.code}
+                    onClick={() => setSharingToCircle(selected ? null : circle.code)}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", background: selected ? `${C.text}08` : C.panel, border: `1px solid ${selected ? C.border2 : C.border}`, borderRadius: 9, cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 15 }}>{circle.emoji || "◆"}</span>
+                      <div>
+                        <div style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.text }}>{circle.name}</div>
+                        <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>{circle.members?.length ?? 0} members</div>
+                      </div>
+                    </div>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: selected ? C.text : "transparent", border: `1px solid ${selected ? C.text : C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {selected && <span style={{ fontSize: 9, color: C.bg }}>✓</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).length === 0 && (
+                <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted, textAlign: "center", padding: "16px 0" }}>You haven't joined any circles yet.</div>
+              )}
+            </div>
+
+            <button
+              disabled={!sharingToCircle}
+              onClick={async () => {
+                if (!sharingToCircle || !tradeToShare) return;
+                const circleCode = sharingToCircle;
+                setTradeToShare(null);
+                setSharingToCircle(null);
+                const result = await shareTrade(
+                  circleCode,
+                  { name: profile.name, handle: profile.handle, avatar: profile.avatar, code: getMyCode() },
+                  tradeToShare
+                );
+                if (result === "ok") showToast("Shared to circle!");
+                else if (result === "duplicate") showToast("Already shared to this circle");
+                else showToast("Failed to share");
+              }}
+              style={{ width: "100%", padding: "13px", background: C.text, border: "none", borderRadius: 10, color: C.bg, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: MONO, opacity: sharingToCircle ? 1 : 0.4 }}
+            >
+              {sharingToCircle
+                ? `Share to ${myCircles.find((c: Circle) => c.code === sharingToCircle)?.name ?? "circle"}`
+                : "Select a circle"}
+            </button>
           </div>
         </div>
       )}
