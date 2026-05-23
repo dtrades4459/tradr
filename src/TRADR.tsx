@@ -3105,45 +3105,50 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
 
               {statsTab === "performance" && (
-                isPro ? (
-                  <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
-                    <div style={{ display:"flex", gap:"8px" }}>
-                      {(["r","$"] as const).map(m=>(
-                        <button key={m} onClick={()=>setPerfPnlMode(m)} style={{ background:perfPnlMode===m?C.text:"transparent", color:perfPnlMode===m?C.bg:C.muted, border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.1em", textTransform:"uppercase" }}>
-                          {m==="r"?"R-Multiple":"Dollar"}
-                        </button>
-                      ))}
-                    </div>
-                    {total===0
-                      ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted, fontSize:"13px", fontFamily:MONO }}>LOG TRADES TO SEE PERFORMANCE</div>
-                      : <>
-                          <section>
-                            <SectionKicker label="TRADE STATISTICS" C={C}/>
-                            <div style={{ marginTop:"14px" }}><TradeStatCards trades={trades} C={C}/></div>
-                          </section>
-                          <section><AvgStatsCards trades={trades} C={C}/></section>
-                          <section><DailyInsights trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/></section>
-                          <section>
-                            <SectionKicker label="DAILY P&L" C={C}/>
-                            <div style={{ marginTop:"14px", display:"grid", gridTemplateColumns:isDesktop?"1fr 1fr":"1fr", gap:"14px" }}>
-                              <DailyCumulativePnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
-                              <NetDailyPnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
+                  {total===0
+                    ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted, fontSize:"13px", fontFamily:MONO }}>LOG TRADES TO SEE PERFORMANCE</div>
+                    : <>
+                        {/* Free: core statistics cards */}
+                        <section>
+                          <SectionKicker label="TRADE STATISTICS" C={C}/>
+                          <div style={{ marginTop:"14px" }}><TradeStatCards trades={trades} C={C}/></div>
+                        </section>
+                        <section><AvgStatsCards trades={trades} C={C}/></section>
+
+                        {/* Pro: charts & advanced analysis */}
+                        {isPro ? (
+                          <>
+                            <div style={{ display:"flex", gap:"8px" }}>
+                              {(["r","$"] as const).map(m=>(
+                                <button key={m} onClick={()=>setPerfPnlMode(m)} style={{ background:perfPnlMode===m?C.text:"transparent", color:perfPnlMode===m?C.bg:C.muted, border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                                  {m==="r"?"R-Multiple":"Dollar"}
+                                </button>
+                              ))}
                             </div>
-                          </section>
-                          <section>
-                            <SectionKicker label="TRADE DURATION ANALYSIS" C={C}/>
-                            <div style={{ marginTop:"14px" }}><TradeDurationChart trades={trades} C={C}/></div>
-                          </section>
-                          <section>
-                            <SectionKicker label="DRAWDOWN CURVE" C={C}/>
-                            <div style={{ marginTop:"14px" }}><DrawdownCurve trades={trades} C={C}/></div>
-                          </section>
-                        </>
-                    }
-                  </div>
-                ) : (
-                  <ProLock C={C} label="Performance Analytics" description="Detailed trade statistics, daily P&L charts, duration analysis, and drawdown curve." onUpgrade={() => setShowUpgrade(true)} />
-                )
+                            <section><DailyInsights trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/></section>
+                            <section>
+                              <SectionKicker label="DAILY P&L" C={C}/>
+                              <div style={{ marginTop:"14px", display:"grid", gridTemplateColumns:isDesktop?"1fr 1fr":"1fr", gap:"14px" }}>
+                                <DailyCumulativePnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                                <NetDailyPnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                              </div>
+                            </section>
+                            <section>
+                              <SectionKicker label="TRADE DURATION ANALYSIS" C={C}/>
+                              <div style={{ marginTop:"14px" }}><TradeDurationChart trades={trades} C={C}/></div>
+                            </section>
+                            <section>
+                              <SectionKicker label="DRAWDOWN CURVE" C={C}/>
+                              <div style={{ marginTop:"14px" }}><DrawdownCurve trades={trades} C={C}/></div>
+                            </section>
+                          </>
+                        ) : (
+                          <ProLock C={C} label="Charts & Advanced Analysis" description="Daily P&L curves, insights, duration analysis, and drawdown — upgrade to unlock." onUpgrade={() => setShowUpgrade(true)} />
+                        )}
+                      </>
+                  }
+                </div>
               )}
 
               {statsTab === "strategies" && (
