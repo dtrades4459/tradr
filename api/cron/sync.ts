@@ -30,6 +30,13 @@ import { checkRateLimit, getClientIp } from "../lib/rateLimit";
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE = "https://live.tradovateapi.com/v1";
 
+const CRON_ALLOWED_ORIGINS = new Set([
+  "https://tradrjournal.xyz",
+  "https://www.tradrjournal.xyz",
+  "http://localhost:5173",
+  "http://localhost:4173",
+]);
+
 function tvBase(env: string) {
   return env === "live" ? LIVE_BASE : DEMO_BASE;
 }
@@ -357,8 +364,12 @@ async function runWithConcurrency<T>(
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export default async function handler(req: any, res: any) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers["origin"] ?? "";
+  const allowed = CRON_ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
+  res.setHeader("Access-Control-Allow-Origin", allowed);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-cron-secret");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const admin = getAdminClient();

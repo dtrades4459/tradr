@@ -11,16 +11,12 @@
 //   if (!allowed) return res.status(429).json({ error: "Too many requests" });
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { createHash } from "crypto";
 import { getAdminClient } from "./supabaseAdmin";
 
-/** Stable 8-char hex derived from the IP — avoids storing raw IPs in the DB. */
+/** Stable 16-char hex derived from the IP via SHA-256 — avoids storing raw IPs in the DB. */
 export function hashIp(ip: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < ip.length; i++) {
-    h ^= ip.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
+  return createHash("sha256").update(ip).digest("hex").slice(0, 16);
 }
 
 export interface RateLimitOptions {
@@ -30,13 +26,6 @@ export interface RateLimitOptions {
   windowMs?: number;
 }
 
-/**
- * Check (and increment) a rate limit counter for a given action + IP.
- * Returns true if the request is allowed, false if it should be blocked.
- *
- * The counter is stored in shared_kv as `tradr_rl_{action}_{hashedIp}`.
- * The upsert is fire-and-forget so it doesn't block the response path.
- */
 export async function checkRateLimit(
   action: string,
   ip: string,
@@ -45,37 +34,19 @@ export async function checkRateLimit(
   const { limit = 5, windowMs = 60_000 } = options;
   const admin = getAdminClient();
   const key = `tradr_rl_${action}_${hashIp(ip)}`;
-  const now = Date.now();
 
-  const { data } = await admin
-    .from("shared_kv")
-    .select("value")
-    .eq("key", key)
-    .maybeSingle();
+  const { data, error } = await admin.rpc("check_and_increment_rate_limit", {
+    p_key: key,
+    p_limit: limit,
+    p_window_ms: windowMs,
+  });
 
-  let count = 1;
-  let resetAt = now + windowMs;
-
-  if (data?.value) {
-    try {
-      const parsed = JSON.parse(data.value);
-      if (now < parsed.resetAt) {
-        // Still inside the current window
-        if (parsed.count >= limit) return false;
-        count = parsed.count + 1;
-        resetAt = parsed.resetAt;
-      }
-      // Window expired → start fresh (count=1, new resetAt)
-    } catch { /* malformed value — start fresh */ }
+  if (error) {
+    console.error("[rateLimit] RPC error — failing open:", error.message);
+    return true; // fail-open: never block legitimate traffic on DB errors
   }
 
-  // Upsert fire-and-forget; don't let a DB write block the happy path.
-  void admin
-    .from("shared_kv")
-    .upsert({ key, value: JSON.stringify({ count, resetAt }) })
-    .then(() => {}, () => {});
-
-  return true;
+  return data === true;
 }
 
 /** Extract the client IP from a Vercel request, falling back to "unknown". */

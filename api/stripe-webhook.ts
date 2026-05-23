@@ -141,7 +141,9 @@ export default async function handler(req: any, res: any) {
     if (event.type === "checkout.session.completed") {
       const s = event.data.object as Stripe.Checkout.Session;
       const uid = s.client_reference_id ?? (s.metadata?.userId ?? "");
-      if (uid) {
+      if (!uid) {
+        console.error("[webhook] checkout.session.completed: missing userId — session:", s.id, "customer:", s.customer);
+      } else {
         await setUserPlan(uid, "pro", {
           subscriptionId: typeof s.subscription === "string" ? s.subscription : s.subscription?.id,
           customerId: typeof s.customer === "string" ? s.customer : s.customer?.id,
@@ -151,8 +153,9 @@ export default async function handler(req: any, res: any) {
     } else if (event.type === "customer.subscription.updated") {
       const sub = event.data.object as Stripe.Subscription;
       const uid = sub.metadata?.userId ?? "";
-      if (uid) {
-        // past_due = Stripe is retrying payment — keep access, don't punish mid-retry
+      if (!uid) {
+        console.error("[webhook] customer.subscription.updated: missing userId — sub:", sub.id, "status:", sub.status);
+      } else {
         const plan = ["active", "trialing", "past_due"].includes(sub.status) ? "pro" : "free";
         await setUserPlan(uid, plan, { subscriptionId: sub.id });
       }
@@ -160,7 +163,11 @@ export default async function handler(req: any, res: any) {
     } else if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object as Stripe.Subscription;
       const uid = sub.metadata?.userId ?? "";
-      if (uid) await setUserPlan(uid, "free", { subscriptionId: sub.id });
+      if (!uid) {
+        console.error("[webhook] customer.subscription.deleted: missing userId — sub:", sub.id);
+      } else {
+        await setUserPlan(uid, "free", { subscriptionId: sub.id });
+      }
 
     } else if (event.type === "invoice.payment_failed") {
       const inv = event.data.object as Stripe.Invoice;

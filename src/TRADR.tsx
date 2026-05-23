@@ -862,11 +862,29 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   async function submitTrade() {
     if (!form.pair || !form.date || !form.outcome || savingTrade) return;
-    // Gate: free users limited to 20 trades (disabled during beta — re-enable with window.tradrFlags.enableFlag("paywall"))
-    if (isFlagOn("paywall") && (profile.plan ?? "free") === "free" && !editId && trades.length >= 20) {
-      setMandatoryUpgrade(true);
-      setShowUpgrade(true);
-      return;
+    // Gate: free users limited to 20 trades.
+    // Client-side check is fast; server-side check is tamper-proof.
+    if (isFlagOn("paywall") && !editId && !isPro) {
+      if (trades.length >= 20) {
+        setMandatoryUpgrade(true);
+        setShowUpgrade(true);
+        return;
+      }
+      // Server-side enforcement — survives localStorage manipulation
+      try {
+        const gateRes = await fetch("/api/trade-gate", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${accessToken}` },
+        });
+        if (gateRes.ok) {
+          const { allowed } = await gateRes.json() as { allowed: boolean };
+          if (!allowed) {
+            setMandatoryUpgrade(true);
+            setShowUpgrade(true);
+            return;
+          }
+        }
+      } catch { /* network error — fall through to client-side count as backup */ }
     }
     setSavingTrade(true);
     const now = new Date().toISOString();

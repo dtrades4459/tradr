@@ -79,8 +79,12 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: "Internal error" });
   }
 
-  // Always return the same success response to prevent username enumeration
-  if (!authUser) return res.status(200).json({ ok: true, hasRecoveryEmail: false });
+  // Constant-time response: delay the fast path to match the slow path duration,
+  // preventing a timing oracle on username existence.
+  if (!authUser) {
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 200));
+    return res.status(200).json({ ok: true, hasRecoveryEmail: false });
+  }
 
   const recoveryEmail: string = authUser.raw_user_meta_data?.recovery_email ?? "";
 

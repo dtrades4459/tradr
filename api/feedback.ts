@@ -34,6 +34,11 @@ function cors(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
+function escapeMd(s: string): string {
+  // Escape Telegram Markdown v1 special chars: _ * ` [
+  return String(s).replace(/[_*`[]/g, "\\$&");
+}
+
 export default async function handler(req: any, res: any) {
   cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -53,13 +58,13 @@ export default async function handler(req: any, res: any) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return res.status(500).json({ error: "Telegram not configured" });
 
-  const who = [name, handle ? `@${handle.replace(/^@/, "")}` : null]
+  const who = [name ? escapeMd(name) : null, handle ? `@${escapeMd(handle.replace(/^@/, ""))}` : null]
     .filter(Boolean).join(" · ") || "Anonymous";
 
   const text = [
     "📬 *New Kōda OS Feedback*", "",
     `👤 ${who}`, "",
-    `💬 ${feedback.trim()}`, "",
+    `💬 ${escapeMd(feedback.trim())}`, "",
     `🕐 ${new Date().toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "short", timeStyle: "short" })}`,
   ].join("\n");
 
