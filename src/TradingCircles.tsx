@@ -238,6 +238,11 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     setActiveChallenge(challenge);
     setLoadingLB(false);
     loadFeed(circle);
+    // Client-side fallback: trigger cron if challenge already expired
+    if (challenge && new Date(challenge.endsAt) < new Date()) {
+      fetch("/api/cron/complete-challenges", { method: "POST" }).catch(() => {});
+      setTimeout(() => fetchActiveChallenge(circle.code).then(c => setActiveChallenge(c)), 2000);
+    }
   }
 
   async function createChallengeFromForm() {
@@ -289,12 +294,52 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       }, (payload: any) => {
         setChatMessages(prev => prev.some((m: any) => m.id === payload.new.id) ? prev : [...prev, payload.new]);
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+        // Also prepend to feed
+        const msg = rowToCircleMessage(payload.new as Record<string, unknown>);
+        const isJoin = msg.text.includes("joined the circle");
+        const newFeedItem: FeedItem = isJoin
+          ? { type: "member_joined", ts: msg.createdAt, data: { id: msg.id, text: msg.text } }
+          : { type: "message", ts: msg.createdAt, data: msg };
+        setFeedItems(prev => [newFeedItem, ...prev]);
+      })
+      .subscribe();
+    const sharedTradesChannel = supabase
+      .channel(`circle_trades_${activeCircle.code}`)
+      .on("postgres_changes" as any, {
+        event: "INSERT",
+        schema: "public",
+        table: "circle_shared_trades",
+        filter: `circle_code=eq.${activeCircle.code}`,
+      }, (payload: unknown) => {
+        const row = (payload as { new: Record<string, unknown> }).new;
+        const newItem: FeedItem = {
+          type: "trade",
+          ts: row.shared_at as string,
+          data: rowToSharedTrade(row),
+        };
+        setFeedItems(prev => [newItem, ...prev]);
+      })
+      .subscribe();
+    const challengesChannel = supabase
+      .channel(`circle_challenges_${activeCircle.code}`)
+      .on("postgres_changes" as any, {
+        event: "INSERT",
+        schema: "public",
+        table: "circle_challenges",
+        filter: `circle_code=eq.${activeCircle.code}`,
+      }, (payload: unknown) => {
+        const ch = rowToChallenge((payload as { new: Record<string, unknown> }).new);
+        setActiveChallenge(ch);
+        const newItem: FeedItem = { type: "challenge_started", ts: ch.startedAt, data: ch };
+        setFeedItems(prev => [newItem, ...prev]);
       })
       .subscribe();
     return () => {
       alive = false; clearInterval(id);
       try { unsub(); } catch {}
       supabase.removeChannel(chatChannel);
+      supabase.removeChannel(sharedTradesChannel);
+      supabase.removeChannel(challengesChannel);
     };
   }, [circlesView, activeCircle, fetchCircleLeaderboard]);
 
