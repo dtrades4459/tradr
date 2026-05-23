@@ -95,6 +95,56 @@ export interface Circle {
   isOwner: boolean;
 }
 
+export interface CircleChallenge {
+  id: string;
+  circleCode: string;
+  title: string;
+  metric: "dollar" | "r" | "winrate" | "trades" | "avgr";
+  startedAt: string;
+  endsAt: string;
+  createdBy: string;
+  status: "active" | "completed";
+}
+
+export interface ChallengeResult {
+  id: string;
+  challengeId: string;
+  circleCode: string;
+  winnerCode: string;
+  winnerName: string;
+  winnerHandle: string;
+  winningValue: number;
+  snapshotAt: string;
+  challenge?: Pick<CircleChallenge, "title" | "metric" | "endsAt">;
+}
+
+export interface SharedTrade {
+  id: string;
+  circleCode: string;
+  authorCode: string;
+  authorName: string;
+  authorHandle: string;
+  authorAvatar: string;
+  tradeId: string;
+  pair: string;
+  side: "long" | "short";
+  outcome: "win" | "loss" | "be";
+  pnl: number;
+  rr: number | null;
+  strategy: string | null;
+  notes: string | null;
+  screenshot: string | null;
+  date: string;
+  sharedAt: string;
+  reactions: Record<string, string[]>;
+}
+
+export type FeedItem =
+  | { type: "trade";             ts: string; data: SharedTrade }
+  | { type: "message";           ts: string; data: { id: string; sender_name: string; sender_handle: string; sender_avatar: string | null; text: string; created_at: string } }
+  | { type: "challenge_started"; ts: string; data: CircleChallenge }
+  | { type: "member_joined";     ts: string; data: { text: string; id: string } };
+
 export interface Insight {
   kicker: string;
   text: string;
