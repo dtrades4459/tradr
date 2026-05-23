@@ -2,18 +2,23 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
+import { fetchActiveChallenge, fetchTrophies } from "./data/circlesChallenges";
+import type { CircleChallenge, ChallengeResult } from "./types";
 
 export function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [lbSort, setLbSort] = useState<"all" | "week">("all");
   const [loadingLB, setLoadingLB] = useState(false);
-  const [circleTab, setCircleTab] = useState<"leaderboard" | "chat" | "members">("leaderboard");
+  const [circleTab, setCircleTab] = useState<"feed" | "leaderboard" | "chat" | "members" | "trophies">("feed");
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [activeChallenge, setActiveChallenge] = useState<CircleChallenge | null>(null);
+  const [trophies, setTrophies] = useState<ChallengeResult[]>([]);
+  const [trophiesLoading, setTrophiesLoading] = useState(false);
 
   const CIRCLE_EMOJIS = ["◆","▲","●","■","⬡","◈","△","○","□","✦"];
   const MEDALS = ["🥇","🥈","🥉"];
@@ -31,6 +36,25 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
 
   // Label for the circle's competition metric
   const METRIC_LABELS: Record<string, string> = { dollar: "$ DOLLAR P&L", r: "R-MULTIPLE", winrate: "WIN RATE", trades: "MOST TRADES", avgr: "AVG R" };
+
+  function formatCountdown(endsAt: string): string {
+    const ms = new Date(endsAt).getTime() - Date.now();
+    if (ms <= 0) return "ended";
+    const d = Math.floor(ms / 86400000);
+    const h = Math.floor((ms % 86400000) / 3600000);
+    if (d > 0) return `${d}d ${h}h left`;
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+  }
+
+  function formatTrophyValue(r: ChallengeResult): string {
+    const metric = r.challenge?.metric ?? "dollar";
+    const v = r.winningValue;
+    if (metric === "dollar")  return `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)}`;
+    if (metric === "winrate") return `${v.toFixed(1)}%`;
+    if (metric === "trades")  return `${Math.round(v)} trades`;
+    return `${v >= 0 ? "+" : ""}${v.toFixed(2)}R`;
+  }
 
   async function loadChatMessages(circleCode: string) {
     setChatLoading(true);
@@ -81,12 +105,18 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     setActiveCircle(circle);
     setCirclesView("detail");
     setExpandedMember(null);
-    setCircleTab("leaderboard");
+    setCircleTab("feed");
     setChatMessages([]);
     setChatInput("");
+    setActiveChallenge(null);
+    setTrophies([]);
     setLoadingLB(true);
-    const entries = await fetchCircleLeaderboard(circle);
+    const [entries, challenge] = await Promise.all([
+      fetchCircleLeaderboard(circle),
+      fetchActiveChallenge(circle.code),
+    ]);
     setLeaderboard(entries);
+    setActiveChallenge(challenge);
     setLoadingLB(false);
   }
 
@@ -121,6 +151,16 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       supabase.removeChannel(chatChannel);
     };
   }, [circlesView, activeCircle, fetchCircleLeaderboard]);
+
+  useEffect(() => {
+    if (circleTab !== "trophies" || !activeCircle) return;
+    let alive = true;
+    setTrophiesLoading(true);
+    fetchTrophies(activeCircle.code).then(results => {
+      if (alive) { setTrophies(results); setTrophiesLoading(false); }
+    });
+    return () => { alive = false; };
+  }, [circleTab, activeCircle]);
 
   // ── Derived circle stats ──────────────────────────────────────────────
   const myRank = leaderboard.findIndex((e: any) => e.memberCode === getMyCode()) + 1;
@@ -456,20 +496,42 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             <button onClick={() => publishToCircle(activeCircle.code)} style={{ ...pillPrimary(true), width: "100%", padding: "14px 20px" }}>PUBLISH MY STATS →</button>
           </section>
 
-          {/* Tabs: Leaderboard / Chat / Members */}
+          {/* Tabs: Feed / Leaderboard / Chat / Members / Trophies */}
           <section>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {(["leaderboard", "chat", "members"] as const).map(tab => (
-                  <button key={tab}
-                    onClick={() => { setCircleTab(tab); if (tab === "chat" && chatMessages.length === 0) loadChatMessages(activeCircle.code); }}
-                    style={{ background: circleTab === tab ? C.text : "transparent", color: circleTab === tab ? C.bg : C.muted, border: `1px solid ${circleTab === tab ? C.text : C.border2}`, borderRadius: "999px", padding: "5px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    {tab === "leaderboard" ? "Board" : tab === "chat" ? "Chat" : "Members"}
+            <div style={{ marginBottom: "20px" }}>
+              {/* Tab underline bar */}
+              <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, overflowX: "auto", gap: 0, marginBottom: circleTab === "leaderboard" ? "10px" : 0 }}>
+                {(["feed", "leaderboard", "chat", "members", "trophies"] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setCircleTab(t);
+                      if (t === "chat" && chatMessages.length === 0) loadChatMessages(activeCircle.code);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      borderBottom: `2px solid ${circleTab === t ? C.text : "transparent"}`,
+                      marginBottom: -1,
+                      padding: "9px 12px",
+                      cursor: "pointer",
+                      fontFamily: MONO,
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: circleTab === t ? C.text : C.muted,
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {t === "leaderboard" ? "Board" : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
+              {/* Leaderboard sort controls */}
               {circleTab === "leaderboard" && (
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", justifyContent: "flex-end", paddingTop: "10px" }}>
                   {(["all", "week"] as const).map(s => (
                     <button key={s} onClick={() => setLbSort(s)}
                       style={{ background: lbSort === s ? C.text2 + "22" : "transparent", border: `1px solid ${lbSort === s ? C.text2 : C.border2}`, borderRadius: "999px", padding: "4px 10px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", color: lbSort === s ? C.text : C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -660,6 +722,59 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* \u2500\u2500 TROPHIES \u2500\u2500 */}
+            {circleTab === "trophies" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
+                {trophiesLoading && (
+                  <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, textAlign: "center", padding: 24 }}>Loading\u2026</div>
+                )}
+
+                {activeChallenge && (
+                  <>
+                    <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: C.muted, textTransform: "uppercase", padding: "4px 0 6px" }}>Active</div>
+                    <div style={{ background: C.panel, border: `1px solid ${C.border2}`, borderTop: `1.5px solid ${C.text2}`, borderRadius: 10, padding: "13px 15px", display: "flex", alignItems: "center", gap: 14 }}>
+                      <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: C.text2, writingMode: "vertical-lr", transform: "rotate(180deg)", flexShrink: 0, textTransform: "uppercase" }}>Live</div>
+                      <div style={{ width: 1, height: 36, background: C.border2, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 700, color: C.text2 }}>{activeChallenge.title}</div>
+                        <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginTop: 1 }}>In progress</div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+                          <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>{activeChallenge.metric.toUpperCase()}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, flexShrink: 0 }}>{formatCountdown(activeChallenge.endsAt)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {trophies.length > 0 && (
+                  <>
+                    <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: C.muted, textTransform: "uppercase", padding: "8px 0 6px" }}>Past Challenges</div>
+                    {trophies.map(r => (
+                      <div key={r.id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: "1.5px solid #A88C50", borderRadius: 10, padding: "13px 15px", display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#A88C50", writingMode: "vertical-lr", transform: "rotate(180deg)", flexShrink: 0, textTransform: "uppercase" }}>1st</div>
+                        <div style={{ width: 1, height: 36, background: C.border2, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {r.winnerHandle ? `@${r.winnerHandle}` : r.winnerName}
+                          </div>
+                          <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.text2, marginTop: 1 }}>{formatTrophyValue(r)}</div>
+                          <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+                            <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.challenge?.title ?? ""}</div>
+                            <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, flexShrink: 0 }}>{new Date(r.snapshotAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {!trophiesLoading && trophies.length === 0 && !activeChallenge && (
+                  <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted, textAlign: "center", padding: "32px 0" }}>No challenges yet</div>
+                )}
               </div>
             )}
           </section>
