@@ -132,24 +132,27 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
   async function createChallengeFromForm() {
     if (!activeCircle || !challengeForm.title.trim() || challengeCreating) return;
     setChallengeCreating(true);
-    const days = parseInt(challengeForm.duration);
-    const endsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    const result = await createChallenge(
-      activeCircle.code,
-      challengeForm.title.trim(),
-      challengeForm.metric,
-      endsAt,
-      getMyCode()
-    );
-    if (result) {
-      setActiveChallenge(result);
-      setShowChallengeSheet(false);
-      setChallengeForm({ title: "", metric: "r", duration: "7" });
-      showToast("Challenge started!");
-    } else {
-      showToast("Failed to start challenge");
+    try {
+      const days = parseInt(challengeForm.duration);
+      const endsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      const result = await createChallenge(
+        activeCircle.code,
+        challengeForm.title.trim(),
+        challengeForm.metric,
+        endsAt,
+        getMyCode()
+      );
+      if (result) {
+        setActiveChallenge(result);
+        setShowChallengeSheet(false);
+        setChallengeForm({ title: "", metric: "r", duration: "7" });
+        showToast("Challenge started!");
+      } else {
+        showToast("Failed to start challenge");
+      }
+    } finally {
+      setChallengeCreating(false);
     }
-    setChallengeCreating(false);
   }
 
   useEffect(() => {
@@ -870,7 +873,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       {/* Challenge creation bottom sheet */}
       {showChallengeSheet && (
         <div
-          onClick={() => setShowChallengeSheet(false)}
+          onClick={() => { setShowChallengeSheet(false); setChallengeForm({ title: "", metric: "r", duration: "7" }); }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
         >
           <div
