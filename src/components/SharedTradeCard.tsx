@@ -1,13 +1,14 @@
 // src/components/SharedTradeCard.tsx
 import type { SharedTrade } from "../types";
 import { MONO } from "../shared";
+import type { Theme } from "../theme";
 
 const REACTIONS = ["🔥","💎","🎯","👍","💀","🤯"];
 
 interface Props {
   trade: SharedTrade;
   myCode: string;
-  C: Record<string, string>;
+  C: Theme;
   onReact: (tradeId: string, emoji: string) => void;
 }
 
