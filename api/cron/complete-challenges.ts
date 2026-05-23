@@ -4,7 +4,7 @@
 
 export const config = { runtime: "nodejs" };
 
-import { getAdminClient } from "../lib/supabaseAdmin";
+import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin";
 
 type Req = { method?: string; headers: Record<string, string | string[] | undefined> };
 type Res = { status(n: number): Res; json(d: unknown): Res; end(): void; setHeader(k: string, v: string): void };
@@ -40,8 +40,9 @@ export default async function handler(req: Req, res: Res) {
       return res.status(401).json({ error: "Unauthorized" });
     }
   } else if (req.method === "POST") {
-    // POST is allowed for manual triggering in dev (no secret required locally)
-    // In production, the CORS header above limits who can call this
+    // POST requires a valid Supabase JWT (manual trigger from authenticated UI)
+    const userId = await getUserIdFromJwt(req.headers["authorization"]);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
   } else {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -81,9 +82,16 @@ export default async function handler(req: Req, res: Res) {
       }
 
       // 3. Parse entries and find winner by metric
+      // shared_kv.value is JSONB — Supabase returns it already parsed as an object.
+      // Handle both cases: JSONB object (already parsed) and text string (fallback).
       const parsed = entries
-        .map((e: { key: string; value: string }) => {
-          try { return JSON.parse(e.value); } catch { return null; }
+        .map((e: { key: string; value: unknown }) => {
+          if (e.value === null || e.value === undefined) return null;
+          if (typeof e.value === "object") return e.value;
+          if (typeof e.value === "string") {
+            try { return JSON.parse(e.value); } catch { return null; }
+          }
+          return null;
         })
         .filter(Boolean) as Record<string, number>[];
 
