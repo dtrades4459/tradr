@@ -1,5 +1,6 @@
 // src/data/circlesChallenges.ts
 import { supabase } from "../lib/supabase";
+import { log } from "../lib/log";
 import type { CircleChallenge, ChallengeResult } from "../types";
 
 export async function createChallenge(
@@ -14,7 +15,7 @@ export async function createChallenge(
     .insert({ circle_code: circleCode, title, metric, ends_at: endsAt.toISOString(), created_by: createdBy, status: "active" })
     .select()
     .single();
-  if (error) { console.error("[createChallenge]", error); return null; }
+  if (error) { log.error("circlesChallenges.createChallenge", error, { circleCode }); return null; }
   return rowToChallenge(data);
 }
 
@@ -27,7 +28,7 @@ export async function fetchActiveChallenge(circleCode: string): Promise<CircleCh
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) { console.error("[fetchActiveChallenge]", error); return null; }
+  if (error) { log.error("circlesChallenges.fetchActiveChallenge", error, { circleCode }); return null; }
   return data ? rowToChallenge(data) : null;
 }
 
@@ -37,7 +38,7 @@ export async function fetchTrophies(circleCode: string): Promise<ChallengeResult
     .select("*, challenge:challenge_id(title, metric, ends_at)")
     .eq("circle_code", circleCode)
     .order("snapshot_at", { ascending: false });
-  if (error) { console.error("[fetchTrophies]", error); return []; }
+  if (error) { log.error("circlesChallenges.fetchTrophies", error, { circleCode }); return []; }
   return (data ?? []).map(rowToResult);
 }
 
@@ -47,7 +48,7 @@ export async function fetchActiveChallengesToComplete(): Promise<CircleChallenge
     .select("*")
     .eq("status", "active")
     .lt("ends_at", new Date().toISOString());
-  if (error) { console.error("[fetchActiveChallengesToComplete]", error); return []; }
+  if (error) { log.error("circlesChallenges.fetchActiveChallengesToComplete", error); return []; }
   return (data ?? []).map(rowToChallenge);
 }
 
