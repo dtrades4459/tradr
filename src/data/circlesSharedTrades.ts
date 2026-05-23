@@ -11,6 +11,10 @@ export async function shareTrade(
   const side = trade.direction === "short" ? "short" : "long";
   const rawOutcome = (trade.outcome || "").toLowerCase();
   const outcome = (["win", "loss", "be"].includes(rawOutcome) ? rawOutcome : "loss") as "win" | "loss" | "be";
+  if (!author.code) {
+    log.error("circlesSharedTrades.shareTrade", new Error("author.code is required"), { circleCode });
+    return "error";
+  }
   const { error } = await supabase.from("circle_shared_trades").insert({
     circle_code: circleCode,
     author_code: author.code ?? "",
@@ -56,18 +60,12 @@ export async function reactToSharedTrade(
   emoji: string,
   memberCode: string
 ): Promise<void> {
-  const { data } = await supabase
-    .from("circle_shared_trades")
-    .select("reactions")
-    .eq("id", tradeId)
-    .single();
-  if (!data) return;
-  const reactions: Record<string, string[]> = { ...(data.reactions ?? {}) };
-  const existing = reactions[emoji] ?? [];
-  reactions[emoji] = existing.includes(memberCode)
-    ? existing.filter(c => c !== memberCode)
-    : [...existing, memberCode];
-  await supabase.from("circle_shared_trades").update({ reactions }).eq("id", tradeId);
+  const { error } = await supabase.rpc("toggle_trade_reaction", {
+    p_trade_id: tradeId,
+    p_emoji: emoji,
+    p_member_code: memberCode,
+  });
+  if (error) log.error("circlesSharedTrades.reactToSharedTrade", error, { tradeId, emoji });
 }
 
 export function rowToSharedTrade(row: Record<string, unknown>): SharedTrade {
