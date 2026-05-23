@@ -7,7 +7,7 @@ import { log } from "./lib/log";
 import { isFlagOn } from "./lib/flags";
 import { useFollows } from "./hooks/useFollows";
 import { useFeed } from "./hooks/useFeed";
-import { useCircles, KODA_GLOBAL_CODE } from "./hooks/useCircles";
+import { useCircles } from "./hooks/useCircles";
 import type { CircleStats } from "./hooks/useCircles";
 import { getProfile, upsertProfile } from "./data/profile";
 import { upsertTrade as upsertTradeV2, deleteTradeByClientId as deleteTradeV2ByClientId } from "./data/trades";
@@ -30,14 +30,15 @@ import { SESSIONS, BIAS, EMOTION_TAGS, getEmotionTags, EMPTY_TRADE } from "./tra
 import { TourOverlay, OnboardingFlow } from "./OnboardingFlow";
 import type { OnboardingData } from "./OnboardingFlow";
 import { UpgradeModal } from "./UpgradeModal";
-import { PaywallScreen } from "./PaywallScreen";
 import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
-import { ProGate } from "./components/ProGate";
 import { DARK, LIGHT, makeStyles } from "./theme";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
+
+/** The TRADR Global circle — every new user auto-joins on onboarding completion. */
+const TRADR_GLOBAL_CODE = "TRADRG-HB1U";
 
 // STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap → src/data/strategies.ts
 
@@ -219,6 +220,26 @@ function useViewport(): ViewportTier {
   return tier;
 }
 
+function ProLock({ C, label, description, onUpgrade }: { C: Record<string, string>; label: string; description: string; onUpgrade: () => void }) {
+  const live = C.live ?? "oklch(0.84 0.14 175)";
+  return (
+    <div style={{
+      marginTop: "24px", border: `1px solid ${C.border2}`, borderRadius: "12px",
+      padding: "40px 20px", textAlign: "center",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+    }}>
+      <div style={{ fontSize: "22px", opacity: 0.5 }}>🔒</div>
+      <div style={{ fontFamily: BODY, fontSize: "14px", fontWeight: 600, color: C.text }}>{label}</div>
+      <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, maxWidth: "240px", lineHeight: 1.6 }}>{description}</div>
+      <button onClick={onUpgrade} style={{
+        background: live, color: "#0A0A0A", border: "none", borderRadius: "999px",
+        padding: "10px 22px", fontFamily: MONO, fontSize: "11px", fontWeight: 700,
+        letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer",
+      }}>Upgrade to Pro →</button>
+    </div>
+  );
+}
+
 export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [draftCount, setDraftCount] = useState(0);
@@ -244,16 +265,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setViewHistory([]);
     setView(v);
   }
-  // handleGearTap — toggle: tap to open settings, tap again to go back
-  function handleGearTap() {
-    if (view === "home" && homeSection === "settings") {
-      goBack();
-    } else {
-      if (view !== "home") setViewHistory(h => [...h, view]);
-      setView("home");
-      setHomeSection("settings");
-    }
-  }
   // ── Circles state + actions managed by useCircles (wired below after stats) ─
   const [darkMode, setDarkMode] = useState(true);
   const isDesktop = useIsDesktop(900);
@@ -269,6 +280,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   // not forgeable from the client. Use it as the authoritative starting plan so
   // the paywall check is correct before loadAll() finishes.
   const [profile, setProfile] = useState<Profile>({ ...DEF_PROFILE, plan: jwtPlan ?? "free" });
+  const isPro = profile.plan === "pro" || profile.plan === "elite";
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState<Profile>(DEF_PROFILE);
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
@@ -334,12 +346,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
-  const handleShowUpgrade = () => setShowUpgrade(true);
-  const userPlan = profile.plan ?? "free";
-  // showPaywall: true after onboarding completes, OR when user returns from Stripe cancel (?paywall=1)
-  const [showPaywall, setShowPaywall] = useState(
-    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paywall") === "1"
-  );
+  const [mandatoryUpgrade, setMandatoryUpgrade] = useState(false);
   const [showCalc,    setShowCalc]    = useState(false);
 
   const [showLiveModal, setShowLiveModal] = useState(false);
@@ -398,11 +405,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     }
     if (params.get("cancelled") === "1") {
       showToast("No worries — you're still on the free plan.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    if (params.get("return") === "settings") {
-      setView("home");
-      setHomeSection("settings");
       window.history.replaceState({}, "", window.location.pathname);
     }
   }); // No deps — ref guard inside the block ensures single execution
@@ -469,49 +471,50 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         : Promise.resolve(null),
     ]);
 
-    // Trades — narrow the try to just the parse so migration code can't wipe
-    // already-set state via the catch.
-    let loadedTrades: Trade[] = [];
+    // Trades
     try {
       const parsed = t ? JSON.parse(t.value) : null;
-      loadedTrades = Array.isArray(parsed) ? parsed : [];
+      const loadedTrades: Trade[] = Array.isArray(parsed) ? parsed : [];
       setTrades(loadedTrades);
-    } catch (e) { log.error("loadAll.trades", e); setTrades([]); }
-
-    // Lazy migration: migrate any base64 screenshots to Supabase Storage
-    // Fire-and-forget — does not block the rest of loadAll.
-    const uid = user?.id;
-    if (uid && loadedTrades.length > 0) {
-      const toMigrate = loadedTrades.filter(tr =>
-        typeof tr.screenshot === "string" && tr.screenshot.startsWith("data:")
-      );
-      if (toMigrate.length > 0) {
-        (async () => {
-          let updated = [...loadedTrades];
-          let changed = false;
-          for (const tr of toMigrate) {
-            try {
-              const res = await fetch(tr.screenshot!);
-              const blob = await res.blob();
-              const storagePath = `${uid}/${Date.now()}_migrate_${tr.id}.jpg`;
-              const { error } = await supabase.storage
-                .from("trade-screenshots")
-                .upload(storagePath, blob, { contentType: "image/jpeg", upsert: false });
-              if (error) continue;
-              const { data: urlData } = supabase.storage
-                .from("trade-screenshots")
-                .getPublicUrl(storagePath);
-              updated = updated.map(x => x.id === tr.id ? { ...x, screenshot: urlData.publicUrl } : x);
-              changed = true;
-            } catch { /* skip — will retry next session */ }
-          }
-          if (changed) {
-            setTrades(updated);
-            await storage.set("tradr_trades", JSON.stringify(updated));
-          }
-        })();
+      // Lazy migration: migrate any base64 screenshots to Supabase Storage
+      // Fire-and-forget — does not block the rest of loadAll.
+      const uid = user?.id;
+      if (uid) {
+        const toMigrate = loadedTrades.filter(tr =>
+          typeof tr.screenshot === "string" && tr.screenshot.startsWith("data:")
+        );
+        if (toMigrate.length > 0) {
+          let migrationAlive = true;
+          (async () => {
+            let updated = [...loadedTrades];
+            let changed = false;
+            for (const tr of toMigrate) {
+              if (!migrationAlive) break;
+              try {
+                const res = await fetch(tr.screenshot!);
+                const blob = await res.blob();
+                const storagePath = `${uid}/${Date.now()}_migrate_${tr.id}.jpg`;
+                const { error } = await supabase.storage
+                  .from("trade-screenshots")
+                  .upload(storagePath, blob, { contentType: "image/jpeg", upsert: false });
+                if (error) continue;
+                const { data: urlData } = supabase.storage
+                  .from("trade-screenshots")
+                  .getPublicUrl(storagePath);
+                updated = updated.map(x => x.id === tr.id ? { ...x, screenshot: urlData.publicUrl } : x);
+                changed = true;
+              } catch { /* skip — will retry next session */ }
+            }
+            if (changed && migrationAlive) {
+              setTrades(updated);
+              await storage.set("tradr_trades", JSON.stringify(updated));
+            }
+          })();
+          // Signal the IIFE to stop if the component unmounts before it finishes
+          if (_loadedRef.current) { migrationAlive = true; }
+        }
       }
-    }
+    } catch (e) { log.error("loadAll.trades", e); setTrades([]); }
 
     // Profile (v2 → KV fallback)
     try {
@@ -533,8 +536,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         };
       }
       if (!p) {
-        try { p = pr ? JSON.parse(pr.value) : null; } catch { /* corrupt profile blob */ }
-        p = p ?? { ...DEF_PROFILE };
+        p = pr ? JSON.parse(pr.value) : { ...DEF_PROFILE };
       }
       if (user?.id && p.uid !== user.id) {
         p = { ...p, uid: user.id };
@@ -551,11 +553,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       setProfile(p); setProfileDraft(p);
       // Identify user in PostHog so all events link to their account
       if (p.uid) phIdentify(p.uid, { handle: p.handle, plan: p.plan ?? "free" });
-    } catch (e) {
-      log.error("loadAll.profile", e);
-      // Stamp uid so downstream features that gate on profile.uid still work
-      if (user?.id) setProfile(prev => ({ ...prev, uid: user.id! }));
-    }
+    } catch (e) { log.error("loadAll.profile", e); }
 
     try { if (sc) setStratChecklists(JSON.parse(sc.value)); }
     catch (e) { log.error("loadAll.checklists", e); }
@@ -748,7 +746,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     circleLatestMsgs,
     isCreatingCircle, isJoiningCircle,
     saveMyCircles, myMemberRecord, readCircleMembers,
-    createCircle, joinCircle, joinCircleByCode, kickMember, leaveCircle,
+    createCircle, joinCircle, kickMember, leaveCircle,
     publishToCircle, fetchCircleLeaderboard,
   } = useCircles({
     loading,
@@ -866,6 +864,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (!form.pair || !form.date || !form.outcome || savingTrade) return;
     // Gate: free users limited to 20 trades (disabled during beta — re-enable with window.tradrFlags.enableFlag("paywall"))
     if (isFlagOn("paywall") && (profile.plan ?? "free") === "free" && !editId && trades.length >= 20) {
+      setMandatoryUpgrade(true);
       setShowUpgrade(true);
       return;
     }
@@ -1290,7 +1289,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   ];
 
   const openExportPdf = () => {
-    if (userPlan !== "pro" && userPlan !== "elite") { handleShowUpgrade(); return; }
     const norm = (profile.handle || "").replace(/^@/, "").toLowerCase();
     const today = new Date().toISOString().split("T")[0];
     const wr = total > 0 ? Math.round((wins / total) * 100) : 0;
@@ -1398,41 +1396,21 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             socialLinks: twitter.trim() ? { twitter: twitter.trim() } : profile.socialLinks,
           };
           await saveProfile(updated);
-          // Auto-join Kōda Global circle for every new user (silent — no error on failure).
-          // joinCircleByCode reads from myCirclesRef so it never sees stale closure state.
-          if (KODA_GLOBAL_CODE) {
-            try { await joinCircleByCode(KODA_GLOBAL_CODE); }
-            catch { /* silently ignore — circle may not exist yet */ }
+          // Auto-join TRADR Global circle for every new user (silent — no error on failure).
+          if (TRADR_GLOBAL_CODE && !myCircles.find((c: Circle) => c.code === TRADR_GLOBAL_CODE)) {
+            try {
+              const res = await storage.get("tradr_circle_" + TRADR_GLOBAL_CODE, true);
+              if (res) {
+                const circle = JSON.parse(res.value);
+                const me = myMemberRecord();
+                await storage.set(`tradr_circle_member_${TRADR_GLOBAL_CODE}_${me.code}`, JSON.stringify(me), true);
+                const members = await readCircleMembers(TRADR_GLOBAL_CODE, [me]);
+                await saveMyCircles([...myCircles, { ...circle, members, isOwner: false }]);
+              }
+            } catch { /* silently ignore — circle may not exist yet */ }
           }
-          // Show paywall before the main app — tour fires after paywall resolves.
-          setShowPaywall(true);
-        }}
-      />
-    );
-  }
-
-  // Paywall: shown after onboarding completes, or when returning from Stripe cancel (?paywall=1).
-  // Only gate when profile is fully onboarded (guards against stale URL param for existing users).
-  const _cancelledFromStripe = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paywall") === "1";
-  if (showPaywall && profile.onboarded) {
-    return (
-      <PaywallScreen
-        C={C}
-        userId={profile.uid ?? ""}
-        userEmail={profile.email ?? user?.email ?? ""}
-        stripeCustomerId={profile.stripeCustomerId}
-        cancelledFromStripe={_cancelledFromStripe}
-        isOnboarding={!_cancelledFromStripe}
-        onSuccess={() => {
-          window.history.replaceState({}, "", window.location.pathname);
-          setShowPaywall(false);
           setView("log");
-          if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
-        }}
-        onSkip={() => {
-          window.history.replaceState({}, "", window.location.pathname);
-          setShowPaywall(false);
-          setView("log");
+          // Show the first-run tour unless they've already seen it
           if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
         }}
       />
@@ -1569,7 +1547,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {!isDesktop && (
                 <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `0.5px solid ${C.border}` }}>
                   <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={s => { if (s === "checklist") navigateTo("checklist"); else setHomeSection(s); }} C={C} />
-                  <GearButton onClick={handleGearTap} active={homeSection === "settings"} C={C} />
+                  <GearButton onClick={() => setHomeSection("settings")} active={homeSection === "settings"} C={C} />
                 </div>
               )}
 
@@ -2158,7 +2136,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   )}
                   {/* Plan row */}
                   <section style={{ paddingTop: "28px", borderTop: `1px solid ${C.border}` }}>
-                    {isFlagOn("paywall") && profile.plan !== "pro" && profile.plan !== "elite" ? (
+                    {!isPro ? (
                       <button
                         onClick={() => setShowUpgrade(true)}
                         style={{
@@ -2215,7 +2193,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     <SectionKicker label="YOUR DATA" C={C} />
                     <div style={{ marginTop: "14px", display: "flex", gap: "10px" }}>
                       <button onClick={() => {
-                          if (isFlagOn("paywall") && profile.plan !== "pro" && profile.plan !== "elite") { setShowUpgrade(true); return; }
+                          if (!isPro) { setShowUpgrade(true); return; }
                           exportCSV();
                         }}
                         style={{ flex: 1, padding: "11px", border: `1px solid ${C.border2}`, borderRadius: "8px", background: "transparent", color: C.text, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -2304,7 +2282,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
               {/* AI INSIGHTS */}
               {homeSection === "ai" && (
-                (!isFlagOn("paywall") || profile.plan === "pro" || profile.plan === "elite") ? (
+                isPro ? (
                   <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
                     <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "24px" }}>
                       EXECUTION PATTERNS — RULE-BASED ANALYSIS.
@@ -2322,26 +2300,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     </div>
                   </div>
                 ) : (
-                  <div style={{
-                    marginTop: "clamp(24px, 5vw, 40px)",
-                    border: `1px solid ${C.border2}`, borderRadius: "12px", padding: "32px 20px",
-                    textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
-                    background: "linear-gradient(135deg, #f59e0b08, #d9770608)",
-                  }}>
-                    <div style={{ fontSize: "28px" }}>🔒</div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: C.text }}>Insights — Pro Feature</div>
-                    <div style={{ fontSize: "12px", color: C.muted, maxWidth: "240px", lineHeight: 1.6 }}>
-                      Pattern detection, edge analysis, and discipline scoring. Upgrade to Pro to unlock.
-                    </div>
-                    <button
-                      onClick={() => setShowUpgrade(true)}
-                      style={{
-                        background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#000",
-                        border: "none", borderRadius: "8px", padding: "10px 20px",
-                        fontSize: "13px", fontWeight: 700, cursor: "pointer",
-                      }}
-                    >⚡ Upgrade to Pro</button>
-                  </div>
+                  <ProLock C={C} label="AI Insights — Pro Feature" description="Pattern detection, edge analysis, and discipline scoring." onUpgrade={() => setShowUpgrade(true)} />
                 )
               )}
 
@@ -2457,14 +2416,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
               {/* SETTINGS */}
               {homeSection === "eval" && profile.propFirmMode && (
-                <ProGate plan={userPlan} C={C} onUpgrade={handleShowUpgrade} label="Prop firm mode — Pro feature">
-                  <EvalAccountScreen
-                    profile={profile}
-                    trades={trades}
-                    C={C}
-                    onEditTargets={() => setHomeSection("settings")}
-                  />
-                </ProGate>
+                <EvalAccountScreen
+                  profile={profile}
+                  trades={trades}
+                  C={C}
+                  onEditTargets={() => setHomeSection("settings")}
+                />
               )}
 
               {homeSection === "settings" && (
@@ -2909,13 +2866,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {!isDesktop && (<>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 6px", position: "relative", zIndex: 2, flexWrap: "wrap" }}>
                   <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} />
-                  <ProGate plan={userPlan} C={C} onUpgrade={handleShowUpgrade} label="PDF export — Pro feature">
-                    <button onClick={openExportPdf} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" as const, color: C.muted, whiteSpace: "nowrap" as const }}>
-                      Export PDF ↗
-                    </button>
-                  </ProGate>
+                  <button onClick={openExportPdf} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" as const, color: C.muted, whiteSpace: "nowrap" as const }}>
+                    Export PDF ↗
+                  </button>
                   </div>
-                  <GearButton onClick={handleGearTap} active={false} C={C} />
+                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
               </>)}
 
               {statsTab === "overview" && total === 0 && <EmptyState C={C} icon="&#128202;" headline="Your stats live here." body="Log your first trade and watch your edge emerge — win rate, R-multiples, streaks, and more." cta="Log a trade →" onCta={() => navigateTo("log")} />}
@@ -3042,32 +2997,28 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   </div>
 
                   {/* ── Discipline score card ── */}
-                  <ProGate plan={userPlan} C={C} onUpgrade={handleShowUpgrade} label="Discipline score — Pro feature">
-                    <div style={{ minHeight: "80px" }}>
-                      {(() => {
-                        const month = new Date().toISOString().slice(0, 7);
-                        const monthTrades = trades.filter(t => t.date?.startsWith(month));
-                        const tagged = monthTrades.filter(t => t.ruleAdherence !== null && t.ruleAdherence !== undefined);
-                        if (tagged.length < 3) return null;
-                        const followedPct = Math.round(tagged.filter(t => t.ruleAdherence === true).length / tagged.length * 100);
-                        const grade = followedPct >= 80 ? "Excellent" : followedPct >= 60 ? "Good" : followedPct >= 40 ? "Needs work" : "Struggling";
-                        const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? (C as any).warn ?? "#f59e0b" : C.red;
-                        return (
-                          <div style={{ borderRadius: "22px", padding: "18px 20px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "16px" }}>
-                            <div style={{ width: "48px", height: "48px", borderRadius: "50%", border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, color: gradeColor }}>{followedPct}%</span>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Discipline · This month</div>
-                              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, lineHeight: 1.5 }}>
-                                You followed your rules on <strong style={{ color: gradeColor }}>{followedPct}%</strong> of trades — <span style={{ color: C.muted }}>{grade}.</span>
-                              </div>
-                            </div>
+                  {(() => {
+                    const month = new Date().toISOString().slice(0, 7);
+                    const monthTrades = trades.filter(t => t.date?.startsWith(month));
+                    const tagged = monthTrades.filter(t => t.ruleAdherence !== null && t.ruleAdherence !== undefined);
+                    if (tagged.length < 3) return null;
+                    const followedPct = Math.round(tagged.filter(t => t.ruleAdherence === true).length / tagged.length * 100);
+                    const grade = followedPct >= 80 ? "Excellent" : followedPct >= 60 ? "Good" : followedPct >= 40 ? "Needs work" : "Struggling";
+                    const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? (C as any).warn ?? "#f59e0b" : C.red;
+                    return (
+                      <div style={{ borderRadius: "22px", padding: "18px 20px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "16px" }}>
+                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, color: gradeColor }}>{followedPct}%</span>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "4px" }}>Discipline · This month</div>
+                          <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, lineHeight: 1.5 }}>
+                            You followed your rules on <strong style={{ color: gradeColor }}>{followedPct}%</strong> of trades — <span style={{ color: C.muted }}>{grade}.</span>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  </ProGate>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* ── Prop firm progress ── */}
                   {profile.propFirmMode && profile.propFirmBalance && (
@@ -3160,41 +3111,45 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
 
               {statsTab === "performance" && (
-                <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
-                  <div style={{ display:"flex", gap:"8px" }}>
-                    {(["r","$"] as const).map(m=>(
-                      <button key={m} onClick={()=>setPerfPnlMode(m)} style={{ background:perfPnlMode===m?C.text:"transparent", color:perfPnlMode===m?C.bg:C.muted, border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.1em", textTransform:"uppercase" }}>
-                        {m==="r"?"R-Multiple":"Dollar"}
-                      </button>
-                    ))}
+                isPro ? (
+                  <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
+                    <div style={{ display:"flex", gap:"8px" }}>
+                      {(["r","$"] as const).map(m=>(
+                        <button key={m} onClick={()=>setPerfPnlMode(m)} style={{ background:perfPnlMode===m?C.text:"transparent", color:perfPnlMode===m?C.bg:C.muted, border:`1px solid ${C.border2}`, borderRadius:"999px", padding:"6px 14px", cursor:"pointer", fontFamily:MONO, fontSize:"10px", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                          {m==="r"?"R-Multiple":"Dollar"}
+                        </button>
+                      ))}
+                    </div>
+                    {total===0
+                      ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted, fontSize:"13px", fontFamily:MONO }}>LOG TRADES TO SEE PERFORMANCE</div>
+                      : <>
+                          <section>
+                            <SectionKicker label="TRADE STATISTICS" C={C}/>
+                            <div style={{ marginTop:"14px" }}><TradeStatCards trades={trades} C={C}/></div>
+                          </section>
+                          <section><AvgStatsCards trades={trades} C={C}/></section>
+                          <section><DailyInsights trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/></section>
+                          <section>
+                            <SectionKicker label="DAILY P&L" C={C}/>
+                            <div style={{ marginTop:"14px", display:"grid", gridTemplateColumns:isDesktop?"1fr 1fr":"1fr", gap:"14px" }}>
+                              <DailyCumulativePnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                              <NetDailyPnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
+                            </div>
+                          </section>
+                          <section>
+                            <SectionKicker label="TRADE DURATION ANALYSIS" C={C}/>
+                            <div style={{ marginTop:"14px" }}><TradeDurationChart trades={trades} C={C}/></div>
+                          </section>
+                          <section>
+                            <SectionKicker label="DRAWDOWN CURVE" C={C}/>
+                            <div style={{ marginTop:"14px" }}><DrawdownCurve trades={trades} C={C}/></div>
+                          </section>
+                        </>
+                    }
                   </div>
-                  {total===0
-                    ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted, fontSize:"13px", fontFamily:MONO }}>LOG TRADES TO SEE PERFORMANCE</div>
-                    : <>
-                        <section>
-                          <SectionKicker label="TRADE STATISTICS" C={C}/>
-                          <div style={{ marginTop:"14px" }}><TradeStatCards trades={trades} C={C}/></div>
-                        </section>
-                        <section><AvgStatsCards trades={trades} C={C}/></section>
-                        <section><DailyInsights trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/></section>
-                        <section>
-                          <SectionKicker label="DAILY P&L" C={C}/>
-                          <div style={{ marginTop:"14px", display:"grid", gridTemplateColumns:isDesktop?"1fr 1fr":"1fr", gap:"14px" }}>
-                            <DailyCumulativePnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
-                            <NetDailyPnLChart trades={trades} C={C} useDollar={perfPnlMode==="$"&&hasDollarData}/>
-                          </div>
-                        </section>
-                        <section>
-                          <SectionKicker label="TRADE DURATION ANALYSIS" C={C}/>
-                          <div style={{ marginTop:"14px" }}><TradeDurationChart trades={trades} C={C}/></div>
-                        </section>
-                        <section>
-                          <SectionKicker label="DRAWDOWN CURVE" C={C}/>
-                          <div style={{ marginTop:"14px" }}><DrawdownCurve trades={trades} C={C}/></div>
-                        </section>
-                      </>
-                  }
-                </div>
+                ) : (
+                  <ProLock C={C} label="Performance Analytics" description="Detailed trade statistics, daily P&L charts, duration analysis, and drawdown curve." onUpgrade={() => setShowUpgrade(true)} />
+                )
               )}
 
               {statsTab === "strategies" && (
@@ -3262,7 +3217,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               )}
 
               {statsTab === "psychology" && (
-                <section>
+                isPro ? <section>
                   {/* ── Discipline / Rule adherence stats ── */}
                   {(() => {
                     const tagged = trades.filter(t => t.ruleAdherence !== null && t.ruleAdherence !== undefined);
@@ -3400,13 +3355,13 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       </div>
                     );
                   })()}
-                </section>
+                </section> : <ProLock C={C} label="Psychology Stats" description="Rule adherence tracking, emotional tagging, and discipline scoring." onUpgrade={() => setShowUpgrade(true)} />
               )}
             </div>
           )}
 
               {statsTab === "heatmap" && (
-                <ProGate plan={userPlan} C={C} onUpgrade={handleShowUpgrade} label="Session charts — Pro feature">
+                isPro ? (
                   <section style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
                     <div>
                       <SectionKicker label="P&L BY SESSION × DAY" C={C} />
@@ -3426,11 +3381,13 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                       <div style={{ marginTop: "14px" }}><DrawdownCurve trades={trades} C={C} /></div>
                     </div>
                   </section>
-                </ProGate>
+                ) : (
+                  <ProLock C={C} label="Session Heatmaps" description="P&L by session, day of week, time of day, and drawdown curve." onUpgrade={() => setShowUpgrade(true)} />
+                )
               )}
 
               {statsTab === "maemfe" && (
-                <ProGate plan={userPlan} C={C} onUpgrade={handleShowUpgrade} label="MAE / MFE — Pro feature">
+                isPro ? (
                   <section>
                     <SectionKicker label="MAE vs MFE — TRADE EFFICIENCY" C={C} />
                     <div style={{ marginTop: "8px", fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.6, marginBottom: "16px" }}>
@@ -3438,7 +3395,9 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                     </div>
                     <MAEMFEChart trades={trades} C={C} />
                   </section>
-                </ProGate>
+                ) : (
+                  <ProLock C={C} label="MAE / MFE Analysis" description="Max adverse excursion, max favorable excursion, and capture efficiency per trade." onUpgrade={() => setShowUpgrade(true)} />
+                )
               )}
 
           {/* ══════════════════════════ CHECKLIST ══════════════════════════ */}
@@ -3490,7 +3449,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {!isDesktop && (
                 <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `1px solid ${C.border}`, marginTop: "4px" }}>
                   <SubNavDropdown sections={CHECKLIST_SECTIONS} value={checklistTab} onChange={setChecklistTab} C={C} />
-                  <GearButton onClick={handleGearTap} active={false} C={C} />
+                  <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
                 </div>
               )}
 
@@ -3625,7 +3584,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               <div style={{ marginTop: "clamp(16px, 4vw, 28px)", display: "flex", flexDirection: "column", gap: "clamp(32px, 5vw, 48px)" }}>
                 {!isDesktop && (
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <GearButton onClick={handleGearTap} active={false} C={C} />
+                    <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
                   </div>
                 )}
 
@@ -3976,7 +3935,8 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             userEmail={profile.email ?? user?.email ?? ""}
             stripeCustomerId={profile.stripeCustomerId}
             onCustomerId={(cid) => setProfile(p => ({ ...p, stripeCustomerId: cid }))}
-            onClose={() => setShowUpgrade(false)}
+            mandatory={mandatoryUpgrade}
+            onClose={() => { setShowUpgrade(false); setMandatoryUpgrade(false); }}
           />
         )}
 

@@ -5,17 +5,17 @@ const MONO = "'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace";
 const BODY = "'Geist', 'Inter', system-ui, sans-serif";
 const DISPLAY = "'Geist', 'Inter', system-ui, sans-serif";
 
-export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustomerId, onClose }: {
+export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustomerId, onClose, mandatory = false }: {
   C: Record<string, string>;
   userId: string;
   userEmail: string;
   stripeCustomerId?: string;
   onCustomerId: (id: string) => void;
   onClose: () => void;
+  mandatory?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [billing, setBilling] = useState<"monthly" | "annual">("annual");
 
   async function handleUpgrade() {
     setLoading(true);
@@ -29,7 +29,7 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
           "Content-Type": "application/json",
           "Authorization": `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ userId, email: userEmail, stripeCustomerId, billing }),
+        body: JSON.stringify({ userId, email: userEmail, stripeCustomerId }),
       });
       if (!res.ok) {
         const { error: msg } = await res.json().catch(() => ({}));
@@ -52,11 +52,11 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
   const orb3 = (C as any).orb3 ?? "oklch(0.68 0.18 175)";
 
   const FEATURES = [
-    { icon: "📊", text: "Full stats dashboard — equity curve, drawdown, heatmaps" },
-    { icon: "↗", text: "MAE/MFE scatter · session & day-of-week charts", mono: true },
-    { icon: "⚡", text: "Tradovate live sync — auto-import every 5 min", mono: true },
-    { icon: "◈", text: "Discipline score, rule adherence & prop firm mode", mono: true },
-    { icon: "⇣", text: "PDF export · unlimited Trading Circles", mono: true },
+    { icon: "📊", text: "Unlimited trade history" },
+    { icon: "📥", text: "CSV & broker auto-import" },
+    { icon: "↗", text: "Advanced analytics — heatmaps, MAE/MFE, edge stats", mono: true },
+    { icon: "◈", text: "Full insights — pattern detection & discipline scoring", mono: true },
+    { icon: "⇣", text: "Export reports (CSV + PDF)", mono: true },
   ];
 
   return (
@@ -114,32 +114,9 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
         </div>
 
         {/* Price */}
-        <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* Billing toggle */}
-          <div style={{ display: "flex", gap: "4px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "3px", border: `1px solid rgba(255,255,255,0.08)`, marginBottom: "4px" }}>
-            {(["annual", "monthly"] as const).map(b => (
-              <button key={b} onClick={() => setBilling(b)} style={{
-                flex: 1, padding: "7px 0",
-                background: billing === b ? live : "transparent",
-                color: billing === b ? "#0A0A0A" : C.muted ?? "#65655F",
-                border: "none", borderRadius: "8px",
-                fontFamily: MONO, fontSize: "10px", fontWeight: 600,
-                letterSpacing: "0.08em", textTransform: "uppercase" as const,
-                cursor: "pointer", transition: "all 0.15s",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "5px",
-              }}>
-                {b === "annual" ? (
-                  <>Annual <span style={{ background: "rgba(0,0,0,0.15)", borderRadius: "3px", padding: "1px 4px", fontSize: "8px" }}>–33%</span></>
-                ) : "Monthly"}
-              </button>
-            ))}
-          </div>
-          <span style={{ fontFamily: DISPLAY, fontSize: "42px", fontWeight: 700, color: C.text ?? "#F2F2EE", lineHeight: 1, letterSpacing: "-0.03em" }}>
-            {billing === "annual" ? "£16.58" : "£24.99"}
-          </span>
-          <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted ?? "#65655F" }}>
-            {billing === "annual" ? "/mo · £199/yr · save £100" : "/mo · cancel any time"}
-          </span>
+        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "baseline", gap: "6px" }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: "42px", fontWeight: 700, color: C.text ?? "#F2F2EE", lineHeight: 1, letterSpacing: "-0.03em" }}>$24.99</span>
+          <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted ?? "#65655F" }}>/mo · cancel any time</span>
         </div>
 
         {/* Features */}
@@ -175,7 +152,7 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
               fontFamily: BODY, opacity: loading ? 0.7 : 1, transition: "opacity 0.2s",
             }}
           >
-            <span>{loading ? "Redirecting…" : billing === "annual" ? "Upgrade Now — £199/yr" : "Upgrade Now — £24.99/mo"}</span>
+            <span>{loading ? "Redirecting…" : "Upgrade Now — $24.99/mo"}</span>
             {!loading && (
               <span style={{ width: "36px", height: "36px", borderRadius: "999px", background: "#0A0A0A", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -184,12 +161,14 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
               </span>
             )}
           </button>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", color: C.muted ?? "#65655F", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", textAlign: "center", padding: "6px" }}
-          >
-            Maybe later
-          </button>
+          {!mandatory && (
+            <button
+              onClick={onClose}
+              style={{ background: "none", border: "none", color: C.muted ?? "#65655F", cursor: "pointer", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", textAlign: "center", padding: "6px" }}
+            >
+              Maybe later
+            </button>
+          )}
         </div>
       </div>
     </div>
