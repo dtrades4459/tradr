@@ -3,7 +3,9 @@ import { supabase } from "./lib/supabase";
 import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
 import { createChallenge, fetchActiveChallenge, fetchTrophies } from "./data/circlesChallenges";
-import type { CircleChallenge, ChallengeResult } from "./types";
+import { fetchSharedTrades, reactToSharedTrade, rowToSharedTrade } from "./data/circlesSharedTrades";
+import { SharedTradeCard } from "./components/SharedTradeCard";
+import type { CircleChallenge, ChallengeResult, FeedItem, CircleMessage } from "./types";
 
 export function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -26,6 +28,11 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     duration: "7" as "3" | "7" | "14" | "30",
   });
   const [challengeCreating, setChallengeCreating] = useState(false);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const feedBottomRef = useRef<HTMLDivElement>(null);
+  const [composeText, setComposeText] = useState("");
+  const [composeSending, setComposeSending] = useState(false);
 
   const isPro = profile?.plan === "pro" || profile?.plan === "elite";
 
@@ -63,6 +70,98 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     if (metric === "winrate") return `${v.toFixed(1)}%`;
     if (metric === "trades")  return `${Math.round(v)} trades`;
     return `${v >= 0 ? "+" : ""}${v.toFixed(2)}R`;
+  }
+
+  function rowToCircleMessage(row: Record<string, unknown>): CircleMessage {
+    return {
+      id: row.id as string,
+      circleCode: row.circle_code as string,
+      senderId: (row.sender_id as string | null) ?? null,
+      senderName: row.sender_name as string,
+      senderHandle: row.sender_handle as string,
+      senderAvatar: (row.sender_avatar as string | null) ?? null,
+      text: row.text as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
+  function rowToChallenge(row: Record<string, unknown>): CircleChallenge {
+    return {
+      id: row.id as string,
+      circleCode: row.circle_code as string,
+      title: row.title as string,
+      metric: row.metric as CircleChallenge["metric"],
+      startedAt: row.started_at as string,
+      endsAt: row.ends_at as string,
+      createdBy: row.created_by as string,
+      status: row.status as "active" | "completed",
+    };
+  }
+
+  async function loadFeed(circle: { code: string }) {
+    setFeedLoading(true);
+    const [rawMessages, sharedTrades, rawChallenges] = await Promise.all([
+      supabase
+        .from("circle_messages")
+        .select("*")
+        .eq("circle_code", circle.code)
+        .order("created_at", { ascending: false })
+        .limit(50)
+        .then(r => r.data ?? []),
+      fetchSharedTrades(circle.code, 50),
+      supabase
+        .from("circle_challenges")
+        .select("*")
+        .eq("circle_code", circle.code)
+        .order("started_at", { ascending: false })
+        .limit(20)
+        .then(r => r.data ?? []),
+    ]);
+
+    const items: FeedItem[] = [];
+
+    for (const m of rawMessages) {
+      const msg = rowToCircleMessage(m as Record<string, unknown>);
+      const isJoin = msg.text.includes("joined the circle");
+      if (isJoin) {
+        items.push({ type: "member_joined", ts: msg.createdAt, data: { id: msg.id, text: msg.text } });
+      } else {
+        items.push({ type: "message", ts: msg.createdAt, data: msg });
+      }
+    }
+
+    for (const t of sharedTrades) {
+      items.push({ type: "trade", ts: t.sharedAt, data: t });
+    }
+
+    for (const c of rawChallenges) {
+      const ch = rowToChallenge(c as Record<string, unknown>);
+      items.push({ type: "challenge_started", ts: ch.startedAt, data: ch });
+    }
+
+    items.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    setFeedItems(items);
+    setFeedLoading(false);
+  }
+
+  async function sendFeedMessage() {
+    const text = composeText.trim();
+    if (!text || composeSending || !activeCircle || !profile?.uid) return;
+    setComposeSending(true);
+    setComposeText("");
+    try {
+      await supabase.from("circle_messages").insert({
+        circle_code: activeCircle.code,
+        sender_id: profile.uid,
+        sender_name: profile.name || "Trader",
+        sender_handle: profile.handle || "",
+        text,
+      });
+      loadFeed(activeCircle);
+    } catch {
+      setComposeText(text);
+    }
+    setComposeSending(false);
   }
 
   async function loadChatMessages(circleCode: string) {
@@ -117,6 +216,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     setCircleTab("feed");
     setChatMessages([]);
     setChatInput("");
+    setFeedItems([]);
     setActiveChallenge(null);
     setTrophies([]);
     setLoadingLB(true);
@@ -127,6 +227,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     setLeaderboard(entries);
     setActiveChallenge(challenge);
     setLoadingLB(false);
+    loadFeed(circle);
   }
 
   async function createChallengeFromForm() {
@@ -603,6 +704,77 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
               )}
             </div>
 
+            {/* ── FEED TAB ── */}
+            {circleTab === "feed" && (
+              <div style={{ paddingBottom: 90, display: "flex", flexDirection: "column", gap: 8 }}>
+                {feedLoading && (
+                  <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, textAlign: "center", padding: 24 }}>Loading…</div>
+                )}
+
+                {feedItems.map(item => {
+                  if (item.type === "trade") {
+                    return (
+                      <SharedTradeCard
+                        key={`trade-${item.data.id}`}
+                        trade={item.data}
+                        myCode={getMyCode()}
+                        C={C}
+                        onReact={async (id, emoji) => {
+                          await reactToSharedTrade(id, emoji, getMyCode());
+                          setFeedItems(prev => prev.map(fi => {
+                            if (fi.type !== "trade" || fi.data.id !== id) return fi;
+                            const reactions = { ...(fi.data.reactions ?? {}) };
+                            const existing = reactions[emoji] ?? [];
+                            const myCode = getMyCode();
+                            reactions[emoji] = existing.includes(myCode)
+                              ? existing.filter(c => c !== myCode)
+                              : [...existing, myCode];
+                            return { ...fi, data: { ...fi.data, reactions } };
+                          }));
+                        }}
+                      />
+                    );
+                  }
+                  if (item.type === "message") {
+                    return (
+                      <div key={`msg-${item.data.id}`} style={{ display: "flex", gap: 9, padding: "5px 0" }}>
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: C.text2, flexShrink: 0, marginTop: 2 }}>
+                          {(item.data.senderHandle || item.data.senderName || "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginBottom: 2 }}>
+                            <span style={{ fontFamily: BODY, fontSize: 11, fontWeight: 600, color: C.text }}>@{item.data.senderHandle || item.data.senderName}</span>
+                            <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>{fmtMsgTime(item.data.createdAt)}</span>
+                          </div>
+                          <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, lineHeight: 1.5 }}>{item.data.text}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item.type === "challenge_started") {
+                    return (
+                      <div key={`ch-${item.data.id}`} style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.04em", textAlign: "center", padding: "4px 0" }}>
+                        challenge started · {item.data.title}
+                      </div>
+                    );
+                  }
+                  if (item.type === "member_joined") {
+                    return (
+                      <div key={`join-${item.data.id}`} style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.04em", textAlign: "center", padding: "4px 0" }}>
+                        {item.data.text}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+
+                {!feedLoading && feedItems.length === 0 && (
+                  <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted, textAlign: "center", padding: "32px 0" }}>No activity yet. Say something!</div>
+                )}
+                <div ref={feedBottomRef} />
+              </div>
+            )}
+
             {/* ── LEADERBOARD ── */}
             {circleTab === "leaderboard" && (
               <div>
@@ -868,6 +1040,26 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
               LINK copies a join URL \u00b7 SHARE sends a ready-made invite.
             </div>
           </section>
+
+          {/* Compose bar \u2014 fixed bottom, feed tab only */}
+          {circleTab === "feed" && (
+            <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, padding: "10px 16px 22px", background: `linear-gradient(to top, ${C.bg} 70%, transparent)`, display: "flex", alignItems: "center", gap: 7, zIndex: 10 }}>
+              <input
+                value={composeText}
+                onChange={e => setComposeText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFeedMessage(); } }}
+                placeholder="Message the circle\u2026"
+                style={{ flex: 1, background: C.panel, border: `1px solid ${C.border2}`, borderRadius: 999, padding: "9px 15px", fontSize: 13, color: C.text, outline: "none", fontFamily: BODY }}
+              />
+              <button
+                onClick={sendFeedMessage}
+                disabled={!composeText.trim() || composeSending}
+                style={{ width: 36, height: 36, borderRadius: "50%", background: C.text, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, opacity: (!composeText.trim() || composeSending) ? 0.4 : 1 }}
+              >
+                <span style={{ fontSize: 14, color: C.bg }}>\u2192</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
       {/* Challenge creation bottom sheet */}
