@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · window.storage shim
+// Kōda · window.storage shim
 //
 // The monolithic TRADR.tsx component uses a `window.storage` API shaped like:
 //   await window.storage.get(key, shared?)      -> { value: string } | null
@@ -32,12 +32,12 @@ export function onStorageError(cb: StorageErrorCallback): void {
 }
 
 function emitError(key: string, error: unknown): void {
-  console.error("[TRADR][storage]", key, error);
+  console.error("[KODA][storage]", key, error);
   storageErrorCallback?.(key, error);
 }
 
 function cacheKey(key: string, shared: boolean): string {
-  return shared ? `tradr__shared__${key}` : `tradr__user__${currentUserId ?? "anon"}__${key}`;
+  return shared ? `koda__shared__${key}` : `koda__user__${currentUserId ?? "anon"}__${key}`;
 }
 
 function readCache(key: string, shared: boolean): StorageRow {
@@ -225,7 +225,7 @@ export function clearStorageCache(): void {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && (k.startsWith("tradr__user__") || k.startsWith("tradr__shared__"))) {
+      if (k && (k.startsWith("koda__user__") || k.startsWith("koda__shared__"))) {
         keys.push(k);
       }
     }

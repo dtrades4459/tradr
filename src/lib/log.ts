@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · centralized logger
+// Kōda · centralized logger
 //
 // Tiny wrapper that:
 //   • always console.* (so dev experience stays the same)
@@ -21,11 +21,11 @@ function getSentry(): any | null {
 
 export const log = {
   info(scope: string, msg: string, ctx?: Ctx) {
-    console.log(`[TRADR][${scope}]`, msg, ctx ?? "");
+    console.log(`[KODA][${scope}]`, msg, ctx ?? "");
   },
 
   warn(scope: string, msg: string, ctx?: Ctx) {
-    console.warn(`[TRADR][${scope}]`, msg, ctx ?? "");
+    console.warn(`[KODA][${scope}]`, msg, ctx ?? "");
     getSentry()?.captureMessage?.(msg, {
       level: "warning",
       tags: { scope },
@@ -34,7 +34,7 @@ export const log = {
   },
 
   error(scope: string, err: unknown, ctx?: Ctx) {
-    console.error(`[TRADR][${scope}]`, err, ctx ?? "");
+    console.error(`[KODA][${scope}]`, err, ctx ?? "");
     const sentry = getSentry();
     if (!sentry) return;
     if (err instanceof Error) {

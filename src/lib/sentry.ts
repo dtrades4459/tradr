@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Sentry init
+// Kōda · Sentry init
 //
 // @sentry/react is an optional peer — imported dynamically so the build
 // succeeds even when the package is not installed locally.
