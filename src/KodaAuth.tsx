@@ -6,7 +6,7 @@ import Koda from "./Koda";
 import { BetaGate, betaEnabled, isBetaUnlocked } from "./BetaGate";
 import { DARK } from "./theme";
 import type { Theme } from "./theme";
-import { TradrMark, FloatingInput, TealArrowBtn, MONO, BODY } from "./shared";
+import { KodaMark, FloatingInput, TealArrowBtn, MONO, BODY } from "./shared";
 
 // ─── THEME (dark-only for auth surfaces) ─────────────────────────────────────
 const C = DARK;
@@ -354,7 +354,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         {/* ── MASTHEAD ── */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <TradrMark size={26} color={C.text} />
+            <KodaMark size={26} color={C.text} />
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1.5px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
@@ -474,7 +474,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               position: "relative", zIndex: 1, display: "flex", alignItems: "baseline",
               gap: 10, justifyContent: "center", marginBottom: 26,
             }}>
-              <TradrMark size={24} color={C.text} />
+              <KodaMark size={24} color={C.text} />
               <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>Kōda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
@@ -554,7 +554,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           fontFamily: MONO, fontSize: 10, color: C.dim, letterSpacing: "0.08em",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <TradrMark size={18} color={C.dim} />
+            <KodaMark size={18} color={C.dim} />
             <span>KŌDA · KEEP THE EDGE YOU EARNED</span>
           </div>
           <span>©2026 Kōda · v1.0 · <span style={{ color: C.live }}>● LIVE</span></span>
@@ -576,7 +576,7 @@ function LoadingScreen() {
     }}>
       <style dangerouslySetInnerHTML={{ __html: PULSE_CSS }} />
       <div style={{ animation: "tradr-pulse 1.8s ease-in-out infinite" }}>
-        <TradrMark size={80} color={C.text} />
+        <KodaMark size={80} color={C.text} />
       </div>
     </div>
   );

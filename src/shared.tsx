@@ -52,7 +52,7 @@ export function outcomeLetter(outcome: string) {
 }
 
 // ─── TR MARK ─────────────────────────────────────────────────────────────────
-export function TradrMark({ size = 28, color = "currentColor", strokeWidth = 1.6 }: {
+export function KodaMark({ size = 28, color = "currentColor", strokeWidth = 1.6 }: {
   size?: number; color?: string; strokeWidth?: number;
 }) {
   const w = size;
@@ -67,8 +67,8 @@ export function TradrMark({ size = 28, color = "currentColor", strokeWidth = 1.6
   );
 }
 
-/** @deprecated Use TradrMark instead — kept for backward compat */
-export function TrMark({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
+/** @deprecated Use KodaMark instead — kept for backward compat */
+export function KodaMarkFilled({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
       <rect width="100" height="100" rx="18" fill={bg}/>
@@ -649,7 +649,7 @@ export function ScreenHeader({ C, right }: {
       padding: "8px 22px 6px", position: "relative", zIndex: 2,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <TradrMark size={22} color={C.text} />
+        <KodaMark size={22} color={C.text} />
         <span style={{
           fontFamily: DISPLAY, fontWeight: 600, fontSize: 14,
           letterSpacing: "0.22em", color: C.text,

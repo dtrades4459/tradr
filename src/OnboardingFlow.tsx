@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MONO, BODY, DISPLAY, TrMark } from "./shared";
+import { MONO, BODY, DISPLAY, KodaMarkFilled } from "./shared";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 export const ONBOARDING_STEPS = ["welcome", "instruments", "strategy", "ready"] as const;
@@ -203,7 +203,7 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
       <div style={{ width: "100%", maxWidth: "420px" }}>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "48px" }}>
-          <TrMark size={28} bg={C.panel} />
+          <KodaMarkFilled size={28} bg={C.panel} />
           <span style={{ fontFamily: DISPLAY, fontSize: "17px", fontWeight: 700, letterSpacing: "-0.02em", color: C.text, lineHeight: 1 }}>Kōda</span>
         </div>
 

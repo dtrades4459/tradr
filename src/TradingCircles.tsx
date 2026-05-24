@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
-import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
+import { SectionKicker, StrategyPill, Toast, stratCode, KodaMark, MONO, BODY, DISPLAY } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
 import { createChallenge, fetchActiveChallenge, fetchTrophies } from "./data/circlesChallenges";
 import { fetchSharedTrades, reactToSharedTrade, rowToSharedTrade } from "./data/circlesSharedTrades";
@@ -437,7 +437,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                 <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
                   style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 14px", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                   <div style={{ width: 40, height: 40, borderRadius: "14px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <TradrMark size={16} color={C.accent} strokeWidth={2} />
+                    <KodaMark size={16} color={C.accent} strokeWidth={2} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{circle.name}</div>
