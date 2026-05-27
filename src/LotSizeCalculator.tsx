@@ -99,7 +99,7 @@ export function LotSizeCalculator({ C, onClose }: LotSizeCalculatorProps) {
 
   const lbl: React.CSSProperties = {
     fontSize: 11, fontFamily: MONO, fontWeight: 600,
-    letterSpacing: "0.06em", textTransform: "uppercase" as const,
+    letterSpacing: "0.08em", textTransform: "uppercase" as const,
     color: C.muted ?? "#888", marginBottom: 5, display: "block",
   };
 
@@ -290,7 +290,7 @@ export function LotSizeCalculator({ C, onClose }: LotSizeCalculatorProps) {
                 ].map(({ label, value }) => (
                   <div key={label} style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.07em", color: C.muted ?? "#888", marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 600, color: C.text ?? "#e2e8f0" }}>{value}</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.text ?? "#e2e8f0" }}>{value}</div>
                   </div>
                 ))}
               </div>
