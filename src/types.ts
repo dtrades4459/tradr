@@ -164,6 +164,7 @@ export interface Insight {
 }
 
 export interface StrategyDef {
+  name?: string;
   code: string;
   setups: string[];
   checklist: string[];

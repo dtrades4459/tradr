@@ -125,7 +125,7 @@ export function useCircles({
   /** Build the calling user's member record from the current profile snapshot. */
   function myMemberRecord() {
     const storageCode = getMyCodeRef.current();
-    const alias = (profileRef.current as any).alias?.trim() || storageCode;
+    const alias = profileRef.current.alias?.trim() || storageCode;
     return {
       name: profileRef.current.name || "Trader",
       handle: profileRef.current.handle || "@trader",
@@ -454,7 +454,7 @@ export function useCircles({
       name: p.name || "Trader",
       handle: p.handle || "@trader",
       avatar: p.avatar || "",
-      alias: (p as any).alias?.trim() || myCode,
+      alias: p.alias?.trim() || myCode,
       wins: s.wins,
       losses: s.losses,
       total: s.total,

@@ -36,6 +36,8 @@ export const DARK = {
   orb1: "oklch(0.55 0.22 252)",
   orb2: "oklch(0.45 0.20 268)",
   orb3: "oklch(0.68 0.18 175)",
+  // Semantic
+  warn: "oklch(0.79 0.16 75)",
   // Legacy compat
   blue: "oklch(0.74 0.16 250)",
   yellow: "#65655F",
@@ -68,6 +70,8 @@ export const LIGHT = {
   orb1: "oklch(0.78 0.14 252)",
   orb2: "oklch(0.72 0.12 268)",
   orb3: "oklch(0.78 0.10 175)",
+  // Semantic
+  warn: "oklch(0.70 0.16 75)",
   // Legacy compat
   blue: "oklch(0.55 0.18 252)",
   yellow: "#9A9890",

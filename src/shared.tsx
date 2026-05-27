@@ -828,8 +828,8 @@ interface CelebrationProps {
 
 export function CelebrationOverlay({ C, kind, streakCount, tradeStats, onDismiss, onViewTrade }: CelebrationProps) {
   const live = C.live;
-  const orb1 = (C as any).orb1 ?? C.accent;
-  const orb3 = (C as any).orb3 ?? C.green;
+  const orb1 = C.orb1;
+  const orb3 = C.orb3;
   const confettiColors = [live, C.accent, C.green, orb1, orb3];
 
   useEffect(() => {

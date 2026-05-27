@@ -36,6 +36,9 @@ import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
 import { DARK, LIGHT, makeStyles } from "./theme";
+import { useIsDesktop, useViewport } from "./hooks/useViewport";
+import { EditInline } from "./components/EditInline";
+import { ProLock } from "./components/ProLock";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -71,46 +74,6 @@ const TABS = ["home","log","stats","history","circles"];
 
 // calcRR, calcWinRate, calcStreak, calcWeeklyPnL, calcTotalPnL imported from ./lib/stats
 
-// ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
-// Breakpoint at 900px matches the login page. Returns true on desktop/tablet-landscape.
-function useIsDesktop(breakpoint = 900) {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia(`(min-width: ${breakpoint}px)`).matches : false
-  );
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`);
-    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    // Support both modern and legacy APIs (Safari < 14).
-    if (mq.addEventListener) mq.addEventListener("change", onChange);
-    else mq.addListener(onChange);
-    setIsDesktop(mq.matches);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
-      else mq.removeListener(onChange);
-    };
-  }, [breakpoint]);
-  return isDesktop;
-}
-
-// ─── Inline text editor ──────────────────────────────────────────────────────
-// Used in checklist and rules lists to edit items in-place.
-function EditInline({ val, onSave, onCancel, C }: { val: string; onSave: (t: string) => void; onCancel: () => void; C: typeof DARK }) {
-  const [text, setText] = useState(val);
-  return (
-    <div style={{ display: "flex", gap: "8px", flex: 1, alignItems: "center" }}>
-      <input
-        autoFocus
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") onSave(text); if (e.key === "Escape") onCancel(); }}
-        style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${C.border2}`, color: C.text, fontFamily: BODY, fontSize: "14px", padding: "6px 0", outline: "none" }}
-      />
-      <button onClick={() => onSave(text)} style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", color: C.text, fontSize: "10px", cursor: "pointer", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 10px", minHeight: "44px" }}>save</button>
-      <button onClick={onCancel} style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", color: C.muted, fontSize: "10px", cursor: "pointer", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 10px", minHeight: "44px" }}>×</button>
-    </div>
-  );
-}
 
 // ─── Strategy Editor ─────────────────────────────────────────────────────────
 // Modal-style card rendered inside the Checklist view when the user clicks
@@ -219,47 +182,6 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
   );
 }
 
-// ─── Position Size Calculator ────────────────────────────────────────────────
-
-// ─── Viewport tier hook (4 breakpoints) ─────────────────────────────────────
-type ViewportTier = "phone" | "tablet" | "desktop" | "wide";
-function getViewportTier(): ViewportTier {
-  if (typeof window === "undefined") return "phone";
-  const w = window.innerWidth;
-  if (w >= 1600) return "wide";
-  if (w >= 1024) return "desktop";
-  if (w >= 640) return "tablet";
-  return "phone";
-}
-function useViewport(): ViewportTier {
-  const [tier, setTier] = useState<ViewportTier>(getViewportTier);
-  useEffect(() => {
-    const onResize = () => setTier(getViewportTier());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return tier;
-}
-
-function ProLock({ C, label, description, onUpgrade }: { C: Record<string, string>; label: string; description: string; onUpgrade: () => void }) {
-  const live = C.live ?? "oklch(0.84 0.14 175)";
-  return (
-    <div style={{
-      marginTop: "24px", border: `1px solid ${C.border2}`, borderRadius: "12px",
-      padding: "40px 20px", textAlign: "center",
-      display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
-    }}>
-      <div style={{ fontSize: "22px", opacity: 0.5 }}>🔒</div>
-      <div style={{ fontFamily: BODY, fontSize: "14px", fontWeight: 600, color: C.text }}>{label}</div>
-      <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, maxWidth: "240px", lineHeight: 1.6 }}>{description}</div>
-      <button onClick={onUpgrade} style={{
-        background: live, color: "#0A0A0A", border: "none", borderRadius: "999px",
-        padding: "10px 22px", fontFamily: MONO, fontSize: "11px", fontWeight: 700,
-        letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer",
-      }}>Upgrade to Pro →</button>
-    </div>
-  );
-}
 
 export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -326,7 +248,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
-  const [toast, setToast] = useState<any>(null);
+  const [toast, setToast] = useState<string | null>(null);
   // ── Toast v2 (stacked, 4 kinds) ──
   const [toastsV2, setToastsV2] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
@@ -350,29 +272,30 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     return () => _atSub.unsubscribe();
   }, []);
   const [activeStrategy, setActiveStrategy] = useState(STRATEGY_NAMES[0]);
-  const [stratChecklists, setStratChecklists] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].checklist.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
-  const [stratRules, setStratRules] = useState<any>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].rules.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
-  const [checked, setChecked] = useState<any>({});
+  type CheckItem = { id: number; text: string };
+  const [stratChecklists, setStratChecklists] = useState<Record<string, CheckItem[]>>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].checklist.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
+  const [stratRules, setStratRules] = useState<Record<string, CheckItem[]>>(() => Object.fromEntries(STRATEGY_NAMES.map(s => [s, STRATEGIES[s].rules.map((t: string, i: number) => ({ id: i + 1, text: t }))])));
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [checklistTab, setChecklistTab] = useState("pretrade");
-  const [editingCheckItem, setEditingCheckItem] = useState<any>(null);
-  const [editingRule, setEditingRule] = useState<any>(null);
+  const [editingCheckItem, setEditingCheckItem] = useState<CheckItem | null>(null);
+  const [editingRule, setEditingRule] = useState<CheckItem | null>(null);
   const [newCheckText, setNewCheckText] = useState("");
   const [newRuleText, setNewRuleText] = useState("");
   const [addingCheck, setAddingCheck] = useState(false);
   const [addingRule, setAddingRule] = useState(false);
-  const [calDayTrades, setCalDayTrades] = useState<any>(null);
+  const [calDayTrades, setCalDayTrades] = useState<Trade[] | null>(null);
   const [statsTab, setStatsTab] = useState("overview");
   const [perfPnlMode, setPerfPnlMode] = useState<"r" | "$">("$");
   const [savingTrade, setSavingTrade] = useState(false);
 
   // Custom strategies: user-defined, same shape as built-ins (name, code, setups, checklist, rules).
   // Merged into STRATEGIES global on load so stratCode/stratShort keep working unchanged.
-  const [customStrategies, setCustomStrategies] = useState<any[]>([]);
+  const [customStrategies, setCustomStrategies] = useState<StrategyDef[]>([]);
   const allStrategyNames = [...STRATEGY_NAMES, ...customStrategies.map((s: StrategyDef & { name: string }) => s.name)];
   // Custom-strategy editor state
   const [showStrategyEditor, setShowStrategyEditor] = useState(false);
-  const [editingStrategy, setEditingStrategy] = useState<any>(null);
-  const [strategyDraft, setStrategyDraft] = useState<any>({ name: "", code: "", setups: [], checklist: [], rules: [] });
+  const [editingStrategy, setEditingStrategy] = useState<string | null>(null);
+  const [strategyDraft, setStrategyDraft] = useState<Required<StrategyDef>>({ name: "", code: "", setups: [], checklist: [], rules: [] });
 
   // CSV import panel state
   const [showCsvImport, setShowCsvImport] = useState(false);
@@ -404,7 +327,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     });
   }, [showToast]);
 
-  const [stratThresholds, setStratThresholds] = useState<any>(() =>
+  const [stratThresholds, setStratThresholds] = useState<Record<string, { minCount: number; required: string[] }>>(() =>
     Object.fromEntries(STRATEGY_NAMES.map(s => [s, { minCount: Math.ceil(STRATEGIES[s].checklist.length * 0.75), required: [] }]))
   );
 
@@ -1243,32 +1166,63 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     return { wins, losses, bes, total, winRate, totalPnL };
   }, [trades]);
 
-  // ── This-week trades (Mon 00:00 local → now) ──────────────────────────────
-  const weekTrades = (() => {
+  const pnlPos = parseFloat(totalPnL) >= 0;
+
+  // ── Trade-derived stats — all memoised on [trades] ───────────────────────
+  const {
+    weekTrades, weekPnL, weekPnLStr, weekPnLPos,
+    hasDollarData, totalPnlDollar, weekPnlDollar,
+    rrTrades, avgRR, streak, stratStats, sessionStats, pairStats,
+  } = useMemo(() => {
     const now = new Date();
-    const day = now.getDay(); // 0=Sun … 6=Sat
+    const day = now.getDay();
     const msSinceMonday = ((day === 0 ? 6 : day - 1)) * 86400000
       + now.getHours() * 3600000 + now.getMinutes() * 60000 + now.getSeconds() * 1000;
     const weekStart = new Date(now.getTime() - msSinceMonday);
     weekStart.setHours(0, 0, 0, 0);
     const weekStartStr = weekStart.toISOString().split("T")[0];
-    return trades.filter(t => t.date >= weekStartStr);
-  })();
-  const weekPnL = weekTrades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
-  const weekPnLStr = weekPnL.toFixed(2);
-  const weekPnLPos = weekPnL >= 0;
-  // Dollar P&L — only from trades that have pnlDollar set
-  const hasDollarData = trades.some(t => t.pnlDollar && t.pnlDollar !== "");
-  const totalPnlDollar = trades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
-  const weekPnlDollar = weekTrades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
-  const rrTrades = trades.filter(t => t.rr);
-  const avgRR = rrTrades.length ? (rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length).toFixed(2) : "—";
-  const pnlPos = parseFloat(totalPnL) >= 0;
-  const streak = calcStreak(trades);
-  const stratStats = trades.reduce((acc: Record<string, { w: number; l: number; be: number; pnl: number; count: number }>, t: Trade) => { if (t.strategy) { if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 }; acc[t.strategy].count++; if (t.outcome === "Win") acc[t.strategy].w++; if (t.outcome === "Loss") acc[t.strategy].l++; if (t.outcome === "Breakeven") acc[t.strategy].be++; acc[t.strategy].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
-
-  const sessionStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.session) { if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.session].w++; if (t.outcome === "Loss") acc[t.session].l++; acc[t.session].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
-  const pairStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => { if (t.pair) { if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 }; if (t.outcome === "Win") acc[t.pair].w++; if (t.outcome === "Loss") acc[t.pair].l++; acc[t.pair].pnl += parseFloat(t.pnl) || 0; } return acc; }, {});
+    const weekTrades = trades.filter(t => t.date >= weekStartStr);
+    const weekPnL = weekTrades.reduce((a, t) => a + (parseFloat(t.pnl) || 0), 0);
+    const hasDollarData = trades.some(t => t.pnlDollar && t.pnlDollar !== "");
+    const totalPnlDollar = trades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
+    const weekPnlDollar = weekTrades.reduce((a, t) => a + (parseFloat(t.pnlDollar) || 0), 0);
+    const rrTrades = trades.filter(t => t.rr);
+    const avgRR = rrTrades.length ? (rrTrades.reduce((a, t) => a + parseFloat(t.rr), 0) / rrTrades.length).toFixed(2) : "—";
+    const stratStats = trades.reduce((acc: Record<string, { w: number; l: number; be: number; pnl: number; count: number }>, t: Trade) => {
+      if (t.strategy) {
+        if (!acc[t.strategy]) acc[t.strategy] = { w: 0, l: 0, be: 0, pnl: 0, count: 0 };
+        acc[t.strategy].count++;
+        if (t.outcome === "Win") acc[t.strategy].w++;
+        if (t.outcome === "Loss") acc[t.strategy].l++;
+        if (t.outcome === "Breakeven") acc[t.strategy].be++;
+        acc[t.strategy].pnl += parseFloat(t.pnl) || 0;
+      }
+      return acc;
+    }, {});
+    const sessionStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => {
+      if (t.session) {
+        if (!acc[t.session]) acc[t.session] = { w: 0, l: 0, pnl: 0 };
+        if (t.outcome === "Win") acc[t.session].w++;
+        if (t.outcome === "Loss") acc[t.session].l++;
+        acc[t.session].pnl += parseFloat(t.pnl) || 0;
+      }
+      return acc;
+    }, {});
+    const pairStats = trades.reduce((acc: Record<string, { w: number; l: number; pnl: number }>, t: Trade) => {
+      if (t.pair) {
+        if (!acc[t.pair]) acc[t.pair] = { w: 0, l: 0, pnl: 0 };
+        if (t.outcome === "Win") acc[t.pair].w++;
+        if (t.outcome === "Loss") acc[t.pair].l++;
+        acc[t.pair].pnl += parseFloat(t.pnl) || 0;
+      }
+      return acc;
+    }, {});
+    return {
+      weekTrades, weekPnL, weekPnLStr: weekPnL.toFixed(2), weekPnLPos: weekPnL >= 0,
+      hasDollarData, totalPnlDollar, weekPnlDollar,
+      rrTrades, avgRR, streak: calcStreak(trades), stratStats, sessionStats, pairStats,
+    };
+  }, [trades]);
   const filteredTrades = useMemo(() => trades.filter(t => {
     if (filter.outcome && t.outcome !== filter.outcome) return false;
     if (filter.setup && t.setup !== filter.setup) return false;
@@ -1283,8 +1237,11 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const totalItems = checkItems.length;
   const scorePct = totalItems ? Math.round((checkedCount / totalItems) * 100) : 0;
   const insights = useMemo(() => generateInsights(trades), [trades]);
-  const _allStratMap = getAllStrategiesMap();
-  const allSetups = allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+  const _allStratMap = useMemo(() => getAllStrategiesMap(), [customStrategies]);
+  const allSetups = useMemo(
+    () => allStrategyNames.flatMap((s: string) => _allStratMap[s]?.setups || []).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i),
+    [allStrategyNames, _allStratMap]
+  );
 
   // ─── SHARED STYLES — generated from theme.ts ─────────────────────────────
   const { inp, sel, lbl, pillPrimary, pillGhost } = makeStyles(C);
@@ -1588,10 +1545,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                       ? `${valPos ? "+" : "−"}$${Math.abs(val).toFixed(2)}`
                       : `${valPos ? "+" : ""}${val.toFixed(2)}`;
                     const tradeCount = isWeek ? weekTrades.length : total;
-                    const live = (C as any).live ?? "oklch(0.84 0.14 175)";
-                    const orb1 = (C as any).orb1 ?? "oklch(0.55 0.22 252)";
-                    const orb2 = (C as any).orb2 ?? "oklch(0.45 0.20 268)";
-                    const orb3 = (C as any).orb3 ?? "oklch(0.68 0.18 175)";
+                    const { live, orb1, orb2, orb3 } = C;
                     return (
                       <section style={{ marginTop: "clamp(16px, 4vw, 28px)", position: "relative" }}>
                         {/* Page-level ambient orbs — behind everything */}
@@ -1612,7 +1566,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                         {/* Hero card */}
                         <div style={{
                           position: "relative", borderRadius: "24px", padding: "22px 22px 20px",
-                          background: (C as any).surfaceGlass ?? C.panel,
+                          background: C.surfaceGlass,
                           backdropFilter: "blur(20px) saturate(160%)",
                           WebkitBackdropFilter: "blur(20px) saturate(160%)",
                           border: `1px solid ${C.border2}`, overflow: "hidden", zIndex: 1,
@@ -2161,19 +2115,19 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                       <button
                         onClick={() => setShowUpgrade(true)}
                         style={{
-                          width: "100%", padding: "13px 18px", background: (C as any).liveSoft ?? "rgba(100,220,180,0.08)",
-                          border: `1px solid ${(C as any).live ?? "oklch(0.84 0.14 175)"}`, borderRadius: "14px", cursor: "pointer",
+                          width: "100%", padding: "13px 18px", background: C.liveSoft,
+                          border: `1px solid ${C.live}`, borderRadius: "14px", cursor: "pointer",
                           display: "flex", alignItems: "center", justifyContent: "space-between",
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: (C as any).live ?? "oklch(0.84 0.14 175)", boxShadow: `0 0 8px ${(C as any).live ?? "oklch(0.84 0.14 175)"}`, flexShrink: 0 }}/>
+                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: C.live, boxShadow: `0 0 8px ${C.live}`, flexShrink: 0 }}/>
                           <div style={{ textAlign: "left" }}>
-                            <div style={{ fontSize: "13px", fontWeight: 600, color: (C as any).live ?? "oklch(0.84 0.14 175)", fontFamily: DISPLAY }}>Upgrade to Pro</div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: C.live, fontFamily: DISPLAY }}>Upgrade to Pro</div>
                             <div style={{ fontSize: "11px", color: C.muted, marginTop: "1px", fontFamily: MONO }}>Unlimited imports · Advanced analytics</div>
                           </div>
                         </div>
-                        <span style={{ fontFamily: MONO, fontSize: "11px", color: (C as any).live ?? "oklch(0.84 0.14 175)" }}>$24.99/mo →</span>
+                        <span style={{ fontFamily: MONO, fontSize: "11px", color: C.live }}>$24.99/mo →</span>
                       </button>
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0" }}>
@@ -2526,7 +2480,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
           {view === "history" && (
             <div style={{ position: "relative" }}>
               {/* ambient orb */}
-              <div style={{ position: "absolute", top: 100, right: -100, width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb2 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.4 : 0.25, pointerEvents: "none", zIndex: 0 }} />
+              <div style={{ position: "absolute", top: 100, right: -100, width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${C.orb2} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.4 : 0.25, pointerEvents: "none", zIndex: 0 }} />
               {/* Title + summary */}
               <div style={{ padding: "12px 6px", position: "relative", zIndex: 2 }}>
                 <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Trade history</div>
@@ -2664,7 +2618,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                             {/* ── Glass hero card ── */}
                             <div style={{ margin: "0 2px", borderRadius: 24, padding: 22, position: "relative", overflow: "hidden", background: darkMode ? "rgba(20,20,26,0.6)" : "rgba(255,255,255,0.7)", backdropFilter: "blur(20px) saturate(160%)", border: `1px solid ${C.border2}` }}>
                               {/* corner glow */}
-                              <div style={{ position: "absolute", top: -80, left: -80, width: 240, height: 240, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.accent}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.accent})`, filter: "blur(50px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none" }} />
+                              <div style={{ position: "absolute", top: -80, left: -80, width: 240, height: 240, borderRadius: "50%", background: `conic-gradient(from 200deg at 50% 50%, ${C.orb3}, ${C.accent}, ${C.orb2}, ${C.orb3})`, filter: "blur(50px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none" }} />
                               {/* ghost P&L watermark */}
                               {t.pnl && <div style={{ position: "absolute", bottom: -20, right: -10, fontFamily: DISPLAY, fontWeight: 700, fontSize: 130, color: parseFloat(t.pnl) >= 0 ? C.green : C.red, opacity: 0.07, letterSpacing: "-0.04em", lineHeight: 1, pointerEvents: "none" }}>{parseFloat(t.pnl) >= 0 ? "+" : ""}{t.pnl}R</div>}
 
@@ -2872,7 +2826,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
           {view === "stats" && (
             <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "12px" }}>
               {/* ambient orb */}
-              <div style={{ position: "absolute", top: -60, right: -100, width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb1 ?? C.accent} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none", zIndex: 0 }} />
+              <div style={{ position: "absolute", top: -60, right: -100, width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${C.orb1} 0%, transparent 65%)`, filter: "blur(60px)", opacity: darkMode ? 0.5 : 0.3, pointerEvents: "none", zIndex: 0 }} />
               {/* title + subtitle */}
               <div style={{ padding: "12px 6px 0", position: "relative", zIndex: 2 }}>
                 <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>Edge analysis</div>
@@ -2896,8 +2850,8 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {statsTab === "overview" && total > 0 && (
                 <>
                   {/* ── Win Rate Ring card ── */}
-                  <div style={{ borderRadius: "22px", padding: "22px", background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", pointerEvents: "none", background: `conic-gradient(from 200deg at 50% 50%, ${(C as any).orb3 ?? C.green}, ${C.accent}, ${(C as any).orb2 ?? C.accent}, ${(C as any).orb3 ?? C.green})`, filter: "blur(40px)", opacity: 0.45, zIndex: 0 }} />
+                  <div style={{ borderRadius: "22px", padding: "22px", background: C.surfaceGlass, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220, borderRadius: "50%", pointerEvents: "none", background: `conic-gradient(from 200deg at 50% 50%, ${C.orb3}, ${C.accent}, ${C.orb2}, ${C.orb3})`, filter: "blur(40px)", opacity: 0.45, zIndex: 0 }} />
                     <div style={{ display: "flex", alignItems: "center", gap: "22px", position: "relative", zIndex: 1 }}>
                       {(() => {
                         const wr = parseFloat(winRate as any) || 0;
@@ -2961,7 +2915,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                           })}
                         </div>
                         {best.v > 0 && (
-                          <div style={{ marginTop: "14px", padding: "10px 12px", borderRadius: "12px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, fontSize: "11px", color: C.text, fontFamily: BODY, lineHeight: 1.5 }}>
+                          <div style={{ marginTop: "14px", padding: "10px 12px", borderRadius: "12px", background: C.accentSoft, border: `1px solid ${C.border2}`, fontSize: "11px", color: C.text, fontFamily: BODY, lineHeight: 1.5 }}>
                             <span style={{ color: C.accent, fontWeight: 600 }}>Insight · </span>
                             {dayNames[dow.indexOf(best)]}s are your strongest day — <span style={{ fontFamily: MONO, fontWeight: 600 }}>{best.v >= 0 ? "+" : ""}{best.v.toFixed(1)}R</span> total.
                           </div>
@@ -3022,7 +2976,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                     if (tagged.length < 3) return null;
                     const followedPct = Math.round(tagged.filter(t => t.ruleAdherence === true).length / tagged.length * 100);
                     const grade = followedPct >= 80 ? "Excellent" : followedPct >= 60 ? "Good" : followedPct >= 40 ? "Needs work" : "Struggling";
-                    const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? (C as any).warn ?? "#f59e0b" : C.red;
+                    const gradeColor = followedPct >= 80 ? C.green : followedPct >= 60 ? C.accent : followedPct >= 40 ? C.warn : C.red;
                     return (
                       <div style={{ borderRadius: "22px", padding: "18px 20px", background: C.panel, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: "16px" }}>
                         <div style={{ width: "48px", height: "48px", borderRadius: "50%", border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -3073,7 +3027,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                                   <span style={{ fontFamily: MONO, fontSize: "10px", color: dailyPct > 75 ? C.red : C.muted }}>${Math.abs(Math.min(0, todayPnl)).toFixed(0)} / ${dailyLimit.toLocaleString()}</span>
                                 </div>
                                 <div style={{ height: "6px", borderRadius: "3px", background: C.border2, overflow: "hidden" }}>
-                                  <div style={{ width: `${dailyPct}%`, height: "100%", borderRadius: "3px", background: dailyPct > 75 ? C.red : (C as any).warn ?? "#f59e0b", transition: "width 0.4s ease" }} />
+                                  <div style={{ width: `${dailyPct}%`, height: "100%", borderRadius: "3px", background: dailyPct > 75 ? C.red : C.warn, transition: "width 0.4s ease" }} />
                                 </div>
                               </div>
                             )}
@@ -3084,7 +3038,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                                   <span style={{ fontFamily: MONO, fontSize: "10px", color: ddPct > 75 ? C.red : C.muted }}>${Math.abs(Math.min(0, totalPnlDollarNum)).toFixed(0)} / ${maxDD.toLocaleString()}</span>
                                 </div>
                                 <div style={{ height: "6px", borderRadius: "3px", background: C.border2, overflow: "hidden" }}>
-                                  <div style={{ width: `${ddPct}%`, height: "100%", borderRadius: "3px", background: ddPct > 75 ? C.red : (C as any).warn ?? "#f59e0b", transition: "width 0.4s ease" }} />
+                                  <div style={{ width: `${ddPct}%`, height: "100%", borderRadius: "3px", background: ddPct > 75 ? C.red : C.warn, transition: "width 0.4s ease" }} />
                                 </div>
                               </div>
                             )}
@@ -3525,7 +3479,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   {/* Calculator shortcut — opens the full modal */}
                   <button
                     onClick={() => { setShowCalc(true); phCapture("calculator_opened"); }}
-                    style={{ display: "flex", alignItems: "center", gap: "8px", background: `color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 12%, transparent)`, border: `1px solid color-mix(in oklch, ${(C as any).live ?? "oklch(0.84 0.14 175)"} 25%, transparent)`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", color: (C as any).live ?? "oklch(0.84 0.14 175)", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", width: "100%", marginTop: "8px" }}>
+                    style={{ display: "flex", alignItems: "center", gap: "8px", background: `color-mix(in oklch, ${C.live} 12%, transparent)`, border: `1px solid color-mix(in oklch, ${C.live} 25%, transparent)`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", color: C.live, fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", width: "100%", marginTop: "8px" }}>
                     <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="10" y1="3" x2="10" y2="17"/><line x1="2" y1="17" x2="18" y2="17"/>
                       <path d="M2 9l4 5 4-5"/><path d="M18 9l-4 5-4-5"/><line x1="6" y1="9" x2="14" y2="9"/>
@@ -3707,7 +3661,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         {/* ── BOTTOM NAV — floating glass pill (mobile only) ── */}
         {!isDesktop && (
           <div style={{ position: "fixed", bottom: "calc(16px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", width: "calc(100% - 32px)", maxWidth: "460px", zIndex: 30 }}>
-            <div style={{ display: "flex", alignItems: "center", padding: "5px", background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", borderRadius: "999px", border: `1px solid ${C.border2}`, boxShadow: `0 16px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.04)` }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "5px", background: C.surfaceGlass, backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", borderRadius: "999px", border: `1px solid ${C.border2}`, boxShadow: `0 16px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.04)` }}>
               {NAV_TABS.map(tab => {
                 const active = view === tab.id;
                 return (

@@ -37,7 +37,7 @@ export function ProGate({
           onClick={onUpgrade}
           style={{
             padding: "8px 16px",
-            background: (C as any).live ?? "#4ade80",
+            background: C.live,
             border: "none", borderRadius: "10px",
             fontFamily: MONO, fontSize: "11px", fontWeight: 700,
             color: "#0A0A0A", cursor: "pointer",

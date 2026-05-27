@@ -165,7 +165,7 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
 
       {/* ── Header card ── */}
       <div style={{ position: "relative" }}>
-        <GlassOrb C={C} top={-60} left={-80} size={360} color={(C as any).orb1 ?? C.accent} opacity={0.4} />
+        <GlassOrb C={C} top={-60} left={-80} size={360} color={C.orb1} opacity={0.4} />
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "22px", padding: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
           <div>
