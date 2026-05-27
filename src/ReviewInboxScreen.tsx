@@ -83,6 +83,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
 
   const orb1 = C.orb1 ?? "oklch(0.55 0.22 252)";
   const cardBg = `color-mix(in srgb, ${C.text} 3%, transparent)`;
+  const mintColor = C.live ?? "oklch(0.84 0.14 175)";
 
   // ── Load drafts ────────────────────────────────────────────────────────────
 
@@ -287,7 +288,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
                 {/* Trade row */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   {/* Mint dot — draft indicator */}
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.live ?? "oklch(0.82 0.15 152)", flexShrink: 0 }} />
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: mintColor, flexShrink: 0 }} />
 
                   {/* Symbol badge */}
                   <div style={{
@@ -312,10 +313,10 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
                       {/* DRAFT pill */}
                       <div style={{
                         padding: "2px 8px", borderRadius: 999,
-                        background: `color-mix(in oklch, ${C.live ?? "oklch(0.82 0.15 152)"} 12%, transparent)`,
-                        border: `1px solid color-mix(in oklch, ${C.live ?? "oklch(0.82 0.15 152)"} 25%, transparent)`,
+                        background: `color-mix(in oklch, ${mintColor} 12%, transparent)`,
+                        border: `1px solid color-mix(in oklch, ${mintColor} 25%, transparent)`,
                         fontFamily: MONO, fontSize: 9, letterSpacing: "0.10em",
-                        color: C.live ?? "oklch(0.82 0.15 152)", textTransform: "uppercase" as const,
+                        color: mintColor, textTransform: "uppercase" as const,
                         flexShrink: 0,
                       }}>DRAFT</div>
                       {side && (
