@@ -28,6 +28,18 @@ export interface LogTradeScreenProps {
   _allStratMap: Record<string, { setups: string[] }>;
   allSetups: string[];
   setView: (v: string) => void;
+  /** Number of trades logged today (for max-trades warning). */
+  todayTradeCount?: number;
+  /** Sum of today's R P&L (for daily loss warning). */
+  todayPnl?: number;
+  /** Profile's maxTradesPerDay limit (0 = not set). */
+  maxTradesPerDay?: number;
+  /** Profile's maxDailyLoss limit in R (0 = not set). */
+  maxDailyLoss?: number;
+  /** How many consecutive losses the user has had recently. */
+  lossStreak?: number;
+  /** Default account type (derived from profile.propFirmMode). */
+  defaultAccountType?: "personal" | "funded" | "demo";
 }
 
 /* ── Segmented outcome button (matches koda-screens.jsx SegBtn) ── */
@@ -51,10 +63,17 @@ export function LogTradeScreen({
   handleChange, handleScreenshotUpload, removeScreenshot,
   submitTrade, savingTrade,
   allStrategyNames, _allStratMap, allSetups, setView,
+  todayTradeCount = 0, todayPnl = 0, maxTradesPerDay = 0,
+  maxDailyLoss = 0, lossStreak = 0, defaultAccountType = "personal",
 }: LogTradeScreenProps) {
   const T = C as any as Theme;
   const live = T.live ?? "oklch(0.84 0.14 175)";
   const enabled = !!(form.pair && form.date && form.outcome && !savingTrade);
+
+  const activeAccountType = form.accountType ?? defaultAccountType;
+  const atTradeLimit  = !editId && maxTradesPerDay > 0 && todayTradeCount >= maxTradesPerDay;
+  const nearTradeLimit = !editId && maxTradesPerDay > 0 && todayTradeCount === maxTradesPerDay - 1;
+  const nearDailyLoss = !editId && maxDailyLoss > 0 && todayPnl <= -(maxDailyLoss * 0.6);
 
   /* Shared input base for FloatingInput-style fields */
   const inp: React.CSSProperties = {
@@ -79,6 +98,40 @@ export function LogTradeScreen({
 
   return (
     <div style={{ padding: "18px 16px 0", display: "flex", flexDirection: "column", gap: 12, marginTop: "clamp(4px, 2vw, 12px)" }}>
+
+      {/* ── Pre-trade friction banners ── */}
+      {atTradeLimit && (
+        <div role="alert" style={{ borderRadius: 14, padding: "12px 16px", background: `color-mix(in oklch, ${C.red} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 40%, transparent)` }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.red, textTransform: "uppercase" as const, marginBottom: 2 }}>Trade limit reached</div>
+          <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, lineHeight: 1.5 }}>
+            You've hit your daily limit of {maxTradesPerDay} trade{maxTradesPerDay !== 1 ? "s" : ""}. Adding another is a plan deviation.
+          </div>
+        </div>
+      )}
+      {!atTradeLimit && nearTradeLimit && (
+        <div role="alert" style={{ borderRadius: 14, padding: "12px 16px", background: `color-mix(in oklch, ${C.warn} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.warn} 35%, transparent)` }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.warn, textTransform: "uppercase" as const, marginBottom: 2 }}>Last trade of the day</div>
+          <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, lineHeight: 1.5 }}>
+            This will be trade {todayTradeCount + 1} of {maxTradesPerDay}. Make it count.
+          </div>
+        </div>
+      )}
+      {lossStreak >= 2 && (
+        <div role="alert" style={{ borderRadius: 14, padding: "12px 16px", background: `color-mix(in oklch, ${C.warn} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.warn} 35%, transparent)` }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.warn, textTransform: "uppercase" as const, marginBottom: 2 }}>{lossStreak} consecutive losses</div>
+          <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, lineHeight: 1.5 }}>
+            Are you in the right headspace? Make sure you're trading your plan, not your emotions.
+          </div>
+        </div>
+      )}
+      {nearDailyLoss && (
+        <div role="alert" style={{ borderRadius: 14, padding: "12px 16px", background: `color-mix(in oklch, ${C.red} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 40%, transparent)` }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.red, textTransform: "uppercase" as const, marginBottom: 2 }}>Approaching daily loss limit</div>
+          <div style={{ fontFamily: BODY, fontSize: 13, color: C.text2, lineHeight: 1.5 }}>
+            Today: {todayPnl.toFixed(2)}R of -{maxDailyLoss}R limit. One bad trade could hit your stop.
+          </div>
+        </div>
+      )}
 
       {/* ── Instrument + Direction ── */}
       <Card C={T} glass pad={20}>
@@ -108,6 +161,28 @@ export function LogTradeScreen({
             </select>
           </div>
         </div>
+        <div style={{ marginTop: 14 }}>
+          <label style={lbl}>Account</label>
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            {([
+              { val: "personal", label: "Personal" },
+              { val: "funded",   label: "Funded"   },
+              { val: "demo",     label: "Demo"      },
+            ] as const).map(opt => {
+              const active = activeAccountType === opt.val;
+              const color = opt.val === "funded" ? T.accent ?? C.accent : opt.val === "demo" ? C.muted : C.text2;
+              return (
+                <SegBtn key={opt.val}
+                  active={active}
+                  label={opt.label}
+                  color={active ? color : C.text2}
+                  border2={C.border2}
+                  onClick={() => setForm(f => ({ ...f, accountType: opt.val }))}
+                />
+              );
+            })}
+          </div>
+        </div>
       </Card>
 
       {/* ── Outcome (segmented buttons) ── */}
@@ -129,12 +204,12 @@ export function LogTradeScreen({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Card C={T} pad={16}>
           <Kicker C={T}>P&L (R)</Kicker>
-          <input type="number" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5"
+          <input type="number" inputMode="decimal" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", borderBottom: "none", padding: "8px 0 0" }} />
         </Card>
         <Card C={T} pad={16}>
           <Kicker C={T}>Net P&L</Kicker>
-          <input type="number" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="$485"
+          <input type="number" inputMode="decimal" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="$485"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", borderBottom: "none", padding: "8px 0 0" }} />
         </Card>
       </div>
@@ -174,9 +249,9 @@ export function LogTradeScreen({
       <Card C={T} pad={18}>
         <Kicker C={T}>Price levels</Kicker>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
-          <div><label style={lbl}>Entry</label><input type="number" name="entryPrice" value={form.entryPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
-          <div><label style={lbl}>Stop Loss</label><input type="number" name="slPrice" value={form.slPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
-          <div><label style={lbl}>Take Profit</label><input type="number" name="tpPrice" value={form.tpPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+          <div><label style={lbl}>Entry</label><input type="number" inputMode="decimal" name="entryPrice" value={form.entryPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+          <div><label style={lbl}>Stop Loss</label><input type="number" inputMode="decimal" name="slPrice" value={form.slPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
+          <div><label style={lbl}>Take Profit</label><input type="number" inputMode="decimal" name="tpPrice" value={form.tpPrice} onChange={handleChange} placeholder="0.00" style={inp} /></div>
         </div>
         {form.rr && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
@@ -272,12 +347,12 @@ export function LogTradeScreen({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Card C={T} pad={16}>
           <Kicker C={T}>MAE (R)</Kicker>
-          <input name="mae" type="number" step="0.01" value={form.mae || ""} onChange={handleChange} placeholder="0.8"
+          <input name="mae" type="number" inputMode="decimal" step="0.01" value={form.mae || ""} onChange={handleChange} placeholder="0.8"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 22, fontWeight: 500, borderBottom: "none", padding: "6px 0 0" }} />
         </Card>
         <Card C={T} pad={16}>
           <Kicker C={T}>MFE (R)</Kicker>
-          <input name="mfe" type="number" step="0.01" value={form.mfe || ""} onChange={handleChange} placeholder="3.2"
+          <input name="mfe" type="number" inputMode="decimal" step="0.01" value={form.mfe || ""} onChange={handleChange} placeholder="3.2"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 22, fontWeight: 500, borderBottom: "none", padding: "6px 0 0" }} />
         </Card>
       </div>

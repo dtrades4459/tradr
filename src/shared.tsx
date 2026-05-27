@@ -675,16 +675,19 @@ const ICON_PATHS: Record<string, string> = {
   search: "M9 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9ZM12.5 12.5L15 15",
 };
 
-export function IconButton({ C, icon, onClick }: {
-  C: Theme; icon: string; onClick?: () => void;
+export function IconButton({ C, icon, onClick, label }: {
+  C: Theme; icon: string; onClick?: () => void; label?: string;
 }) {
   return (
-    <div onClick={onClick} style={{
-      width: 36, height: 36, borderRadius: 999,
-      background: C.panel, border: `1px solid ${C.border}`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      cursor: onClick ? "pointer" : "default", flexShrink: 0,
-    }}>
+    <div onClick={onClick} role={onClick ? "button" : undefined} aria-label={label}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+      style={{
+        width: 44, height: 44, borderRadius: 999,
+        background: C.panel, border: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: onClick ? "pointer" : "default", flexShrink: 0,
+      }}>
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
         <path d={ICON_PATHS[icon] || ""} stroke={C.text} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
@@ -815,7 +818,7 @@ export function ErrorSyncFailedState({ C, broker, onRetry }: { C: Theme; broker:
 }
 
 // ── Celebration overlays ─────────────────────────────────────────────────────
-type CelebrationKind = "trade" | "streak" | "pro";
+type CelebrationKind = "trade" | "streak" | "pro" | "loss" | "streak-loss";
 
 interface CelebrationProps {
   C: Theme;
@@ -833,7 +836,7 @@ export function CelebrationOverlay({ C, kind, streakCount, tradeStats, onDismiss
   const confettiColors = [live, C.accent, C.green, orb1, orb3];
 
   useEffect(() => {
-    if (kind === "trade") {
+    if (kind === "trade" || kind === "loss") {
       const t = setTimeout(onDismiss, 2500);
       return () => clearTimeout(t);
     }
@@ -907,6 +910,50 @@ export function CelebrationOverlay({ C, kind, streakCount, tradeStats, onDismiss
           <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: C.text, letterSpacing: "-0.02em", position: "relative" }}>You're in.</div>
           <div style={{ fontSize: 13, color: C.text2, maxWidth: 270, lineHeight: 1.5, position: "relative" }}>Auto-import, unlimited circles, prop firm tracker, and Kōda AI are now active.</div>
           <button onClick={onDismiss} style={{ marginTop: 8, padding: "12px 28px", borderRadius: 999, background: C.text, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" as const, cursor: "pointer", position: "relative" }}>Start trading →</button>
+        </div>
+      )}
+
+      {kind === "loss" && (
+        <div style={{ position: "relative", width: "min(360px, 92vw)", padding: "32px 24px 24px", borderRadius: 24, background: C.panel, border: `1px solid ${C.border2}`, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 12, animation: "kRise 0.42s ease-out" }} onClick={e => e.stopPropagation()}>
+          <div style={{ width: 72, height: 72, borderRadius: "50%", background: `color-mix(in oklch, ${C.red} 10%, transparent)`, border: `1.5px solid color-mix(in oklch, ${C.red} 35%, transparent)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M12 8v5M12 16h.01" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="12" cy="12" r="9" stroke={C.red} strokeWidth="1.5" opacity="0.6"/>
+            </svg>
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text, letterSpacing: "-0.02em" }}>Trade logged.</div>
+          {tradeStats && (
+            <div style={{ width: "100%", padding: "12px 16px", borderRadius: 14, background: C.bg, border: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {[
+                { l: "Win rate", v: `${tradeStats.winRate}%` },
+                { l: "Avg R", v: tradeStats.avgR > 0 ? `+${tradeStats.avgR.toFixed(1)}` : tradeStats.avgR.toFixed(1) },
+                { l: "Streak", v: tradeStats.streak > 0 ? `${tradeStats.streak}W` : "—" },
+              ].map(s => (
+                <div key={s.l} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.14em", color: C.muted, textTransform: "uppercase" as const }}>{s.l}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.text, marginTop: 4 }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: MONO, letterSpacing: "0.04em" }}>Stay disciplined. Review what happened.</div>
+        </div>
+      )}
+
+      {kind === "streak-loss" && (
+        <div style={{ width: "min(360px, 92vw)", padding: "36px 24px 28px", borderRadius: 24, background: C.panel, border: `1px solid color-mix(in oklch, ${C.red} 35%, ${C.border2})`, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 12, animation: "kRise 0.42s ease-out" }} onClick={e => e.stopPropagation()}>
+          <div style={{ color: C.red }}>
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3L3 18h18L12 3z" stroke={C.red} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M12 9v5M12 16.5h.01" stroke={C.red} strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 52, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1, color: C.red }}>{streakCount}</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 500, color: C.text }}>losses in a row.</div>
+          <div style={{ fontSize: 13, color: C.text2, maxWidth: 260, lineHeight: 1.5 }}>Consider stepping back. Review your process before your next trade.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={onDismiss} style={{ padding: "11px 20px", borderRadius: 999, background: C.border2, color: C.text, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Understood</button>
+          </div>
         </div>
       )}
     </div>

@@ -252,7 +252,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   // ── Toast v2 (stacked, 4 kinds) ──
   const [toastsV2, setToastsV2] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
-  const [celebration, setCelebration] = useState<{ kind: "trade" | "streak" | "pro"; streakCount?: number; tradeStats?: { winRate: number; avgR: number; streak: number } } | null>(null);
+  const [celebration, setCelebration] = useState<{ kind: "trade" | "streak" | "pro" | "loss" | "streak-loss"; streakCount?: number; tradeStats?: { winRate: number; avgR: number; streak: number } } | null>(null);
   const showToastV2 = useCallback((kind: ToastKind, title: string, body?: string) => {
     const id = ++toastIdRef.current;
     setToastsV2(prev => [...prev, { id, kind, title, body, ts: Date.now() }]);
@@ -833,8 +833,13 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     const winsSaved = u.filter((t: Trade) => t.outcome === "Win").length;
     const wrSaved = Math.round(winsSaved / Math.max(totalSaved, 1) * 100);
     const avgRSaved = parseFloat((u.reduce((s: number, t: Trade) => s + (parseFloat(t.rr) || 0), 0) / Math.max(totalSaved, 1)).toFixed(1));
-    // TODO: streak celebration — fire when streakCount hits 3/7/14/30/100 milestone (needs user_kv dedup)
-    setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
+    const newLossStreak = (() => { let n = 0; for (const t of u) { if (t.outcome === "Loss") { n++; } else { break; } } return n; })();
+    if (base.outcome === "Loss") {
+      setCelebration({ kind: newLossStreak >= 3 ? "streak-loss" : "loss", streakCount: newLossStreak, tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
+    } else {
+      // TODO: streak celebration — fire when streakCount hits 3/7/14/30/100 milestone (needs user_kv dedup)
+      setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
+    }
     setTimeout(() => setSavingTrade(false), 1500);
     // Go back if we have history, otherwise land on journal
     setViewHistory(h => { if (h.length > 0) { setView(h[h.length - 1]); return h.slice(0, -1); } setView("history"); return h; });
@@ -2459,20 +2464,42 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   </button>
                 </div>
               )}
-            <LogTradeScreen
-              C={C}
-              form={form} setForm={setForm as any}
-              editId={editId as any} setEditId={setEditId as any}
-              handleChange={handleChange}
-              handleScreenshotUpload={handleScreenshotUpload as any}
-              removeScreenshot={removeScreenshot as any}
-              submitTrade={submitTrade}
-              savingTrade={savingTrade}
-              allStrategyNames={allStrategyNames}
-              _allStratMap={_allStratMap}
-              allSetups={allSetups}
-              setView={navigateTo}
-            />
+            {(() => {
+              const _today = new Date().toISOString().split("T")[0];
+              const _todayTrades = trades.filter(t => t.date === _today);
+              const _todayPnl = _todayTrades.reduce((a, t) => a + (parseFloat(t.pnl as string) || 0), 0);
+              const _maxTpd = parseInt(profile.maxTradesPerDay) || 0;
+              const _maxDl = parseFloat(profile.maxDailyLoss || "0") || 0;
+              const _lossStreak = (() => {
+                let count = 0;
+                for (const t of trades) {
+                  if (t.outcome === "Loss") { count++; } else { break; }
+                }
+                return count;
+              })();
+              return (
+                <LogTradeScreen
+                  C={C}
+                  form={form} setForm={setForm as any}
+                  editId={editId as any} setEditId={setEditId as any}
+                  handleChange={handleChange}
+                  handleScreenshotUpload={handleScreenshotUpload as any}
+                  removeScreenshot={removeScreenshot as any}
+                  submitTrade={submitTrade}
+                  savingTrade={savingTrade}
+                  allStrategyNames={allStrategyNames}
+                  _allStratMap={_allStratMap}
+                  allSetups={allSetups}
+                  setView={navigateTo}
+                  todayTradeCount={_todayTrades.length}
+                  todayPnl={_todayPnl}
+                  maxTradesPerDay={_maxTpd}
+                  maxDailyLoss={_maxDl}
+                  lossStreak={_lossStreak}
+                  defaultAccountType={profile.propFirmMode ? "funded" : "personal"}
+                />
+              );
+            })()}
             </>
           )}
 
@@ -3915,8 +3942,9 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
           />
         )}
         {!isOnline && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ErrorOfflineState C={C} onRetry={() => setIsOnline(navigator.onLine)} />
+          <div role="alert" aria-live="assertive" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, background: C.warn, color: "#0A0A0B", fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+            <span>OFFLINE — changes won't sync until you reconnect.</span>
+            <button onClick={() => setIsOnline(navigator.onLine)} style={{ background: "transparent", border: "1px solid rgba(0,0,0,0.25)", borderRadius: 999, padding: "2px 10px", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: "#0A0A0B" }}>Retry</button>
           </div>
         )}
         <ToastStack toasts={toastsV2} onDismiss={dismissToast} C={C} />

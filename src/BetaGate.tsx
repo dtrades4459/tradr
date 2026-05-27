@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState } from "react";
+import { MONO, BODY } from "./shared";
 
 const BETA_PASSWORD = import.meta.env.VITE_BETA_PASSWORD as string | undefined;
 const STORAGE_KEY   = "koda_beta_unlocked";
@@ -34,9 +35,6 @@ const MUTED   = "#65655F";
 const DIM     = "#45453F";
 const MINT    = "oklch(0.84 0.14 175)";
 const RED     = "oklch(0.70 0.21 25)";
-
-const MONO    = "'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace";
-const BODY    = "'Geist', 'Inter', system-ui, sans-serif";
 
 // ── Kōda mark (square badge) ──────────────────────────────────────────────────
 function KodaMarkFilled({ size = 28 }: { size?: number }) {

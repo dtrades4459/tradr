@@ -64,14 +64,6 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  connected:    "#22c55e",
-  syncing:      "#f59e0b",
-  error:        "#ef4444",
-  disconnected: "#6b7280",
-  paused:       "#6b7280",
-};
-
 const _STATUS_LABEL: Record<string, string> = {
   connected:    "Live",
   syncing:      "Syncing…",
@@ -82,8 +74,12 @@ const _STATUS_LABEL: Record<string, string> = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function _StatusDot({ status }: { status: string }) {
-  const col = STATUS_COLOR[status] ?? "#6b7280";
+function _StatusDot({ status, C }: { status: string; C: Theme }) {
+  const col =
+    status === "connected"    ? C.green :
+    status === "syncing"      ? C.warn  :
+    status === "error"        ? C.red   :
+    C.muted;
   return (
     <span style={{
       display: "inline-block",

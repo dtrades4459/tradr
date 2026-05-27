@@ -41,6 +41,7 @@ export interface Trade {
   ruleAdherence?: boolean | null;
   mistake?: string | null;
   source?: string;
+  accountType?: "personal" | "funded" | "demo";
 }
 
 export interface Profile {
