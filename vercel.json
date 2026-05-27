@@ -6,10 +6,6 @@
     {
       "path": "/api/cron/complete-challenges",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/weekly-recap",
-      "schedule": "0 20 * * 0"
     }
   ],
   "headers": [
