@@ -15,8 +15,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Kicker, MONO, BODY, DISPLAY } from "./shared";
 import { CsvImportPanel } from "./CsvImportPanel";
+import type { Trade } from "./types";
+import type { Theme } from "./theme";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,13 +101,13 @@ function _StatusDot({ status }: { status: string }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export interface DataSourcesScreenProps {
-  C: Record<string, string>;
-  supabase: any;
+  C: Theme;
+  supabase: SupabaseClient;
   userId: string;
   accessToken: string;
-  existingTrades: any[];
+  existingTrades: Trade[];
   allStrategyNames: string[];
-  onTradesImported: (trades: any[]) => void;
+  onTradesImported: (trades: Trade[]) => void;
   showToast: (msg: string) => void;
 }
 

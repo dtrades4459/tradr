@@ -18,16 +18,17 @@ type VercelResponse = { status(n: number): VercelResponse; json(d: unknown): Ver
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE  = "https://live.tradovateapi.com/v1";
 
+const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
 const ALLOWED_ORIGINS = new Set([
-  "https://tradrjournal.xyz",
-  "https://www.tradrjournal.xyz",
+  APP_URL,
+  APP_URL.replace("://", "://www."),
   "http://localhost:5173",
   "http://localhost:4173",
 ]);
 
 function cors(req: VercelRequest, res: VercelResponse) {
   const origin = (req.headers["origin"] as string) ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : APP_URL;
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");

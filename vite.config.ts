@@ -45,6 +45,7 @@ export default defineConfig({
     setupFiles: ["@testing-library/jest-dom/vitest"],
   },
   build: {
+    target: "es2022",
     rollupOptions: {
       output: {
         manualChunks(id) {

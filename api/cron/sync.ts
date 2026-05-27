@@ -30,9 +30,10 @@ import { checkRateLimit, getClientIp } from "../lib/rateLimit.js";
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE = "https://live.tradovateapi.com/v1";
 
+const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
 const CRON_ALLOWED_ORIGINS = new Set([
-  "https://tradrjournal.xyz",
-  "https://www.tradrjournal.xyz",
+  APP_URL,
+  APP_URL.replace("://", "://www."),
   "http://localhost:5173",
   "http://localhost:4173",
 ]);
@@ -365,7 +366,7 @@ async function runWithConcurrency<T>(
 
 export default async function handler(req: any, res: any) {
   const origin = req.headers["origin"] ?? "";
-  const allowed = CRON_ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
+  const allowed = CRON_ALLOWED_ORIGINS.has(origin) ? origin : APP_URL;
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-cron-secret");

@@ -458,7 +458,7 @@ export function useCircles({
       wins: s.wins,
       losses: s.losses,
       total: s.total,
-      winRate: parseFloat(s.winRate as any),
+      winRate: s.winRate,
       totalPnL: parseFloat(s.totalPnL),
       totalPnLDollar: s.totalPnlDollar,
       weekPnL: s.weekPnL,

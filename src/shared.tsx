@@ -44,7 +44,7 @@ export function compressImage(file: File, maxSize = 600): Promise<string> {
 }
 
 // ─── OUTCOME HELPERS ─────────────────────────────────────────────────────────
-export function outcomeColor(outcome: string, C: any) {
+export function outcomeColor(outcome: string, C: Theme) {
   return outcome === "Win" ? C.green : outcome === "Loss" ? C.red : C.muted;
 }
 export function outcomeLetter(outcome: string) {

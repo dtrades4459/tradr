@@ -183,7 +183,7 @@ export function useFeed({
       if (alreadyReacted) { next.delete(key); } else { next.add(key); }
       return next;
     });
-    setFriendFeed(p => (p as any[]).map((item: any) => {
+    setFriendFeed(p => p.map(item => {
       if (item.authorCode !== ac || item.tradeId !== tid) return item;
       const r   = { ...item.reactions };
       const cur = typeof r[reaction] === "number" ? r[reaction] : (Array.isArray(r[reaction]) ? r[reaction].length : 0);
