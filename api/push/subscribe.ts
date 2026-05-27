@@ -1,4 +1,6 @@
 // api/push/subscribe.ts
+export const config = { runtime: "nodejs" };
+
 type VercelRequest  = { method?: string; headers: Record<string, string | string[] | undefined>; body: Record<string, unknown> };
 type VercelResponse = { status(n: number): VercelResponse; json(d: unknown): VercelResponse; end(): void; setHeader(k: string, v: string): void };
 import { createClient } from "@supabase/supabase-js";

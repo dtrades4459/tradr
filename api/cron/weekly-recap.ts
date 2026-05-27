@@ -1,6 +1,8 @@
 // api/cron/weekly-recap.ts
 // Runs Sunday 20:00 UTC — sends weekly recap email to each user with trades this week.
 
+export const config = { runtime: "nodejs" };
+
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, weeklyRecapHtml } from "../lib/email.js";
 
