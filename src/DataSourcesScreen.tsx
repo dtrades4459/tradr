@@ -349,7 +349,7 @@ export function DataSourcesScreen({
           <div style={{
             fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
             textTransform: "uppercase", color: C.accent ?? "#7c3aed",
-            background: `${C.accent ?? "#7c3aed"}18`, padding: "4px 10px", borderRadius: 6,
+            background: `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 12%, transparent)`, padding: "4px 10px", borderRadius: 6,
           }}>
             Coming Soon
           </div>
