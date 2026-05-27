@@ -1,6 +1,6 @@
-import { Component, type ReactNode } from "react";
+﻿import { Component, type ReactNode } from "react";
 
-// ─── THEME (matches TradrAuth / TRADR warm editorial palette) ─────────────────
+// ─── THEME (matches KodaAuth / Kōda warm editorial palette) ─────────────────
 const C = {
   bg: "#0C0C0B",
   text: "#EDEDE8",

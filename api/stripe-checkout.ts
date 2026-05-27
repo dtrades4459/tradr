@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Stripe Checkout API
+// Kōda · Stripe Checkout API
 //
 // POST { userId, email, billing?, stripeCustomerId?, promoCode? }
 // → Verifies the caller's Supabase JWT (Authorization: Bearer <token>)
@@ -46,7 +46,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 function cors(req: Req, res: Res) {
-  const origin = req.headers["origin"] ?? "";
+  const origin = (req.headers["origin"] as string | undefined) ?? "";
   const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
@@ -65,7 +65,7 @@ function supabaseAdmin() {
 }
 
 async function verifyToken(req: Req): Promise<{ id: string; email?: string }> {
-  const auth = req.headers["authorization"] ?? "";
+  const auth = (req.headers["authorization"] as string | undefined) ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) throw Object.assign(new Error("Missing auth token"), { status: 401 });
   const anon = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -125,7 +125,7 @@ export default async function handler(req: Req, res: Res) {
         .from("user_kv")
         .select("value")
         .eq("user_id", userId)
-        .eq("key", "tradr_stripe_customer")
+        .eq("key", "koda_stripe_customer")
         .maybeSingle();
       if (kvRow?.value) {
         try { customerId = JSON.parse(kvRow.value).customerId ?? ""; } catch { /* ignore */ }
@@ -135,13 +135,13 @@ export default async function handler(req: Req, res: Res) {
       const customer = await s.customers.create({ email, metadata: { userId } });
       customerId = customer.id;
       await db.from("user_kv").upsert(
-        { user_id: userId, key: "tradr_stripe_customer", value: JSON.stringify({ customerId }) },
+        { user_id: userId, key: "koda_stripe_customer", value: JSON.stringify({ customerId }) },
         { onConflict: "user_id,key" }
       );
     }
 
     // ── Resolve promo code → Stripe promotion code object ID ────────────────
-    let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
+    let discounts: { promotion_code: string }[] | undefined;
     let allowPromoCodes = true;
     if (promoCode) {
       const normalized = promoCode.trim().toUpperCase();
@@ -154,7 +154,7 @@ export default async function handler(req: Req, res: Res) {
         db.from("user_kv").upsert(
           {
             user_id: userId,
-            key: "tradr_promo_applied",
+            key: "koda_promo_applied",
             value: JSON.stringify({
               promoCode: normalized,
               planSelected: billing,
@@ -162,7 +162,7 @@ export default async function handler(req: Req, res: Res) {
             }),
           },
           { onConflict: "user_id,key" }
-        ).then(() => {}).catch(() => {});
+        ).then(() => {}, () => {});
       }
     }
 

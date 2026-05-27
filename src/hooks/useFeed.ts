@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // useFeed — friend feed state + actions for Kōda
 //
 // Owns:  friends[]          — legacy code-based friend list (KV)
@@ -13,7 +13,7 @@
 //          followByHandle
 //
 // Effects:
-//   • Loads tradr_friends + tradr_feed from storage once on !loading
+//   • Loads koda_friends + koda_feed from storage once on !loading
 //   • Auto-publishes my feed (debounced 1 s) whenever trades change
 //   • Auto-refreshes inbound feed every 2 min
 //
@@ -25,7 +25,7 @@ import { storage } from "../lib/storage";
 import { log } from "../lib/log";
 import type { Trade, Profile } from "../types";
 
-// ── Local utility (mirrors normaliseHandle in TRADR.tsx) ─────────────────────
+// ── Local utility (mirrors normaliseHandle in Koda.tsx) ─────────────────────
 
 function normaliseHandle(h: string): string {
   return h.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -113,7 +113,7 @@ export function useFeed({
   // ── Initial load from storage (fires once when loadAll completes) ─────────
   useEffect(() => {
     if (loading) return;
-    storage.get("tradr_friends")
+    storage.get("koda_friends")
       .then(r => {
         if (r?.value) {
           try { setFriends(JSON.parse(r.value)); } catch (e) { log.error("useFeed.load.friends", e); }
@@ -121,7 +121,7 @@ export function useFeed({
       })
       .catch(e => log.error("useFeed.load.friends", e));
 
-    storage.get("tradr_feed", true)
+    storage.get("koda_feed", true)
       .then(r => {
         if (r?.value) {
           try { setFriendFeed(JSON.parse(r.value)); } catch (e) { log.error("useFeed.load.feed", e); }
@@ -155,7 +155,7 @@ export function useFeed({
       comments:     (t.comments || []).length,
       publishedAt:  new Date().toISOString(),
     }));
-    await storage.set(`tradr_feed_${mc}`, JSON.stringify(items), true);
+    await storage.set(`koda_feed_${mc}`, JSON.stringify(items), true);
   }
 
   async function refreshFeed() {
@@ -166,13 +166,13 @@ export function useFeed({
     ]);
     for (const code of allCodes) {
       try {
-        const r = await storage.get(`tradr_feed_${code}`, true);
+        const r = await storage.get(`koda_feed_${code}`, true);
         if (r) { const d = JSON.parse(r.value); items.push(...d); }
       } catch { /* network blip — skip */ }
     }
     items.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
     setFriendFeed(items);
-    await storage.set("tradr_feed", JSON.stringify(items));
+    await storage.set("koda_feed", JSON.stringify(items));
   }
 
   function reactToFeed(ac: string, tid: number, reaction: string) {
@@ -196,7 +196,7 @@ export function useFeed({
 
   async function saveFriends(u: LegacyFriend[]) {
     setFriends(u);
-    await storage.set("tradr_friends", JSON.stringify(u));
+    await storage.set("koda_friends", JSON.stringify(u));
   }
 
   async function addFriend() {

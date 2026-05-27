@@ -4,7 +4,7 @@
 
 export const config = { runtime: "nodejs" };
 
-import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin";
+import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin.js";
 
 type Req = { method?: string; headers: Record<string, string | string[] | undefined> };
 type Res = { status(n: number): Res; json(d: unknown): Res; end(): void; setHeader(k: string, v: string): void };
@@ -41,7 +41,7 @@ export default async function handler(req: Req, res: Res) {
     }
   } else if (req.method === "POST") {
     // POST requires a valid Supabase JWT (manual trigger from authenticated UI)
-    const userId = await getUserIdFromJwt(req.headers["authorization"]);
+    const userId = await getUserIdFromJwt(req.headers["authorization"] as string | undefined);
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
   } else {
     return res.status(405).json({ error: "Method not allowed" });
@@ -72,7 +72,7 @@ export default async function handler(req: Req, res: Res) {
       const { data: entries } = await admin
         .from("shared_kv")
         .select("key, value")
-        .like("key", `tradr_circle_entry_${challenge.circle_code}_%`);
+        .like("key", `koda_circle_entry_${challenge.circle_code}_%`);
 
       if (!entries || entries.length === 0) {
         // No participants — just close it

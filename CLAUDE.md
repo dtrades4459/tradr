@@ -61,8 +61,8 @@ A trading journal PWA for retail traders. Users log trades, track stats (P&L, wi
 - React 19 + TypeScript + Vite
 - Supabase (auth + KV tables + v2 relational schema)
 - Vercel (hosting + serverless functions in `api/` + Vercel Cron every 5 min)
-- Main app: `src/TRADR.tsx` (~4300 lines — many screens extracted into separate files)
-- Auth wrapper: `src/TradrAuth.tsx`
+- Main app: `src/Koda.tsx` (~4300 lines — many screens extracted into separate files)
+- Auth wrapper: `src/KodaAuth.tsx`
 - Storage shim: `src/lib/storage.ts` (window.storage — wraps Supabase KV + localStorage cache)
 
 ---
@@ -71,12 +71,12 @@ A trading journal PWA for retail traders. Users log trades, track stats (P&L, wi
 
 | File | Purpose |
 |------|---------|
-| `src/TRADR.tsx` | Main app shell — state, routing, home/feed/circles/rules/sync/settings |
-| `src/TradrAuth.tsx` | Supabase auth wrapper, installs storage shim after sign-in |
+| `src/Koda.tsx` | Main app shell — state, routing, home/feed/circles/rules/sync/settings |
+| `src/KodaAuth.tsx` | Supabase auth wrapper, installs storage shim after sign-in |
 | `src/lib/storage.ts` | `window.storage` shim: `get(key)`, `set(key, value, shared?)` |
 | `src/lib/log.ts` | Centralised logger — forwards to Sentry if loaded. Use instead of bare `console.error`. |
 | `src/lib/sentry.ts` | Optional Sentry init. No-op if `VITE_SENTRY_DSN` not set or `@sentry/react` not installed. |
-| `src/lib/flags.ts` | Feature flag util backed by localStorage. `isFlagOn("name")`. Toggle via `window.tradrFlags.enableFlag("name")`. |
+| `src/lib/flags.ts` | Feature flag util backed by localStorage. `isFlagOn("name")`. Toggle via `window.kodaFlags.enableFlag("name")`. |
 | `src/lib/tradovate.ts` | Client-side Tradovate helpers (auth, refresh, fills, FIFO matching). |
 | `src/DataSourcesScreen.tsx` | **NEW** Sync tab UI — broker cards, connect/disconnect modal, CSV import, sync audit log. |
 | `src/CsvImportPanel.tsx` | CSV import with auto-detect, analytics reveal, saved templates. Presets: Tradovate, Rithmic, TradingView, MT4/MT5, NinjaTrader 8, TopstepX, FTMO/MT5. |
@@ -314,7 +314,7 @@ Both `tradrjournal.xyz` and `www.tradrjournal.xyz` verified and live in Vercel.
 | Vercel runtime error `nodejs20.x` | Change all `api/*.ts` config to `runtime: "nodejs"` (not `"nodejs20.x"`) |
 | Fragment crash in TradingCircles | Stray `</>` inserted by Python rfind in wrong component — removed |
 | Unterminated string in CSV export | Literal newline inside join — changed to `"\\n"` |
-| TRADR.tsx truncated to 0 bytes | OneDrive write race condition. Always use Python atomic write: write to `.tmp`, then `os.replace()`. Recovered via git. |
+| Koda.tsx truncated to 0 bytes | OneDrive write race condition. Always use Python atomic write: write to `.tmp`, then `os.replace()`. Recovered via git. |
 | `Stripe.LatestApiVersion` TS error | Removed in Stripe SDK v22 — replace `as Stripe.LatestApiVersion` with `as any` in `api/stripe-checkout.ts` and `api/stripe-portal.ts`. |
 | Supabase `.catch()` TS error | Query builder returns `PromiseLike`, not `Promise` — replace `.then(() => {}).catch(() => {})` with `.then(() => {}, () => {})` (api/feedback.ts). |
 | git `index.lock` on OneDrive | Sandbox can't delete lock file via bash. User must run `Remove-Item .git\index.lock -Force` in their own PowerShell terminal. |
@@ -324,8 +324,8 @@ Both `tradrjournal.xyz` and `www.tradrjournal.xyz` verified and live in Vercel.
 
 ## Code Patterns
 
-### Writing large files (TRADR.tsx etc.)
-TRADR.tsx is ~4300 lines. OneDrive can truncate large writes. Always use Python atomic writes. After any large write, verify `wc -l src/TRADR.tsx` is reasonable and `npm run build` passes.
+### Writing large files (Koda.tsx etc.)
+Koda.tsx is ~4300 lines. OneDrive can truncate large writes. Always use Python atomic writes. After any large write, verify `wc -l src/Koda.tsx` is reasonable and `npm run build` passes.
 ```python
 import os
 tmp = path + ".tmp"
@@ -402,7 +402,7 @@ import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin";
 
 ### Architecture
 
-- [ ] Split `TRADR.tsx` further — extract remaining inline screens
+- [ ] Split `Koda.tsx` further — extract remaining inline screens
 - [ ] Move screenshots from base64-in-trade to Supabase Storage URLs
 - [ ] Replace N+1 `fetchCircleLeaderboard` with single SQL query against v2 schema
 - [ ] Set up branch protection on `main` (require CI `build` status check)

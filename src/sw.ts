@@ -104,3 +104,26 @@ registerRoute(
     networkTimeoutSeconds: 5,
   })
 );
+
+// ── Web push ─────────────────────────────────────────────────────────────────
+self.addEventListener("push", (event: PushEvent) => {
+  if (!event.data) return;
+  const data = event.data.json() as { title: string; body: string; icon?: string };
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon ?? "/icon-192.png",
+      badge: "/icon-192.png",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event: NotificationEvent) => {
+  event.notification.close();
+  event.waitUntil(
+    (self.clients as Clients).matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      if (list.length > 0) return list[0].focus();
+      return (self.clients as Clients).openWindow("/");
+    })
+  );
+});

@@ -57,7 +57,7 @@ export function parseCSV(text: string): { headers: string[]; rows: Record<string
   return { headers, rows };
 }
 
-// ── Field-name → TRADR field mapping ─────────────────────────────────────────
+// ── Field-name → Kōda field mapping ──────────────────────────────────────────
 
 export const CSV_FIELD_HINTS: { field: string; patterns: RegExp[] }[] = [
   { field: "pair",       patterns: [/^(symbol|ticker|pair|instrument|market|contract|asset|stock|coin)s?$/i, /symbol|ticker|pair|instrument/i] },

@@ -5,21 +5,15 @@
 
 import { useMemo } from "react";
 import type { Trade, Profile } from "./types";
-import { MONO, BODY, DISPLAY } from "./shared";
+import type { Theme } from "./theme";
+import { MONO, BODY, DISPLAY, Kicker, GlassOrb } from "./shared";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   profile: Profile;
   trades: Trade[];
-  C: {
-    bg: string; panel: string; panel2: string;
-    border: string; border2: string;
-    text: string; text2: string; muted: string; dim: string;
-    green: string; red: string;
-    accent: string; accentSoft: string;
-    live: string; liveSoft: string;
-  };
+  C: Theme;
   onEditTargets: () => void;
 }
 
@@ -40,12 +34,17 @@ function fmtAbs$(n: number): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+const barColor = (used: number, limit: number, C: Props["C"]): string => {
+  const p = limit > 0 ? used / limit : 0;
+  return p >= 0.75 ? C.red : p >= 0.5 ? "#f59e0b" : C.green;
+};
+
 function ProgressBar({ pct: p, color, warn, C }: { pct: number; color: string; warn?: boolean; C: Props["C"] }) {
   return (
     <div style={{ height: "6px", borderRadius: "3px", background: C.border2, overflow: "hidden" }}>
       <div style={{
         width: `${p}%`, height: "100%", borderRadius: "3px",
-        background: warn && p > 75 ? C.red : color,
+        background: warn ? barColor(p, 100, C) : color,
         transition: "width 0.4s ease",
       }} />
     </div>
@@ -60,7 +59,7 @@ function MetricRow({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
         <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</span>
         <div style={{ textAlign: "right" }}>
-          <span style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: warn && p > 75 ? C.red : C.text }}>{value}</span>
+          <span style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: warn ? barColor(p, 100, C) : C.text }}>{value}</span>
           <span style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, marginLeft: "6px" }}>{sub}</span>
         </div>
       </div>
@@ -85,15 +84,21 @@ type EvalStatus = "passing" | "at_risk" | "failed";
 
 function evalStatus(targetPct: number, ddPct: number, dailyPct: number): EvalStatus {
   if (ddPct >= 100 || dailyPct >= 100) return "failed";
-  if (ddPct > 75 || dailyPct > 75) return "at_risk";
+  if (ddPct >= 75 || dailyPct >= 75) return "at_risk";
   return "passing";
 }
 
-const STATUS_CONFIG: Record<EvalStatus, { label: string; color: string; bg: string }> = {
-  passing:  { label: "PASSING",  color: "oklch(0.78 0.18 152)", bg: "oklch(0.78 0.18 152 / 0.12)" },
-  at_risk:  { label: "AT RISK",  color: "#f59e0b",               bg: "rgba(245,158,11,0.12)" },
-  failed:   { label: "FAILED",   color: "oklch(0.70 0.21 25)",   bg: "oklch(0.70 0.21 25 / 0.12)" },
+const STATUS_LABELS: Record<EvalStatus, string> = {
+  passing: "PASSING",
+  at_risk: "AT RISK",
+  failed:  "FAILED",
 };
+
+function statusConfig(status: EvalStatus, C: Props["C"]): { label: string; color: string; bg: string } {
+  if (status === "passing") return { label: STATUS_LABELS.passing, color: C.green, bg: `color-mix(in oklch, ${C.green} 12%, transparent)` };
+  if (status === "at_risk") return { label: STATUS_LABELS.at_risk, color: "#f59e0b", bg: "rgba(245,158,11,0.12)" };
+  return { label: STATUS_LABELS.failed, color: C.red, bg: `color-mix(in oklch, ${C.red} 12%, transparent)` };
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -134,7 +139,7 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
   const dailyPct  = pct(todayLoss, dailyLim);
 
   const status = evalStatus(targetPct, ddPct, dailyPct);
-  const sc = STATUS_CONFIG[status];
+  const sc = statusConfig(status, C);
 
   // Recent trades (last 15, newest first)
   const recent = [...trades].sort((a, b) => b.id - a.id).slice(0, 15);
@@ -159,12 +164,14 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
     <div style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "0 0 80px" }}>
 
       {/* ── Header card ── */}
+      <div style={{ position: "relative" }}>
+        <GlassOrb C={C} top={-60} left={-80} size={360} color={(C as any).orb1 ?? C.accent} opacity={0.4} />
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "22px", padding: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
           <div>
-            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: "4px" }}>Eval Account</div>
+            <Kicker C={C}>Eval Account</Kicker>
             {bal > 0 && (
-              <div style={{ fontFamily: DISPLAY, fontSize: "26px", fontWeight: 700, color: C.text, lineHeight: 1 }}>
+              <div style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, letterSpacing: "-0.03em", color: C.text, lineHeight: 1 }}>
                 ${bal.toLocaleString()}
               </div>
             )}
@@ -218,6 +225,7 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
           Edit targets
         </button>
       </div>
+      </div>
 
       {/* ── Stats row ── */}
       <div style={{ display: "flex", gap: "8px" }}>
@@ -230,11 +238,11 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
       {(stats.bestDay !== 0 || stats.worstDay !== 0) && (
         <div style={{ display: "flex", gap: "8px" }}>
           <div style={{ flex: 1, background: C.panel, border: `1px solid ${C.border}`, borderRadius: "16px", padding: "14px 16px" }}>
-            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "5px" }}>Best day</div>
+            <Kicker C={C}>Best day</Kicker>
             <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 700, color: C.green }}>{fmt$(stats.bestDay)}</div>
           </div>
           <div style={{ flex: 1, background: C.panel, border: `1px solid ${C.border}`, borderRadius: "16px", padding: "14px 16px" }}>
-            <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "5px" }}>Worst day</div>
+            <Kicker C={C}>Worst day</Kicker>
             <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 700, color: C.red }}>{fmt$(stats.worstDay)}</div>
           </div>
         </div>
@@ -242,7 +250,7 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
 
       {/* ── Rules checklist ── */}
       {(ddPct > 75 || dailyPct > 75) && (
-        <div style={{ background: `${C.red}18`, border: `1px solid ${C.red}40`, borderRadius: "16px", padding: "14px 16px" }}>
+        <div style={{ background: `color-mix(in oklch, ${C.red} 12%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 25%, transparent)`, borderRadius: "16px", padding: "14px 16px" }}>
           <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 600, color: C.red, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>
             {dailyPct >= 100 ? "Daily loss limit hit — stop trading today" : ddPct >= 100 ? "Max drawdown hit — eval failed" : "Approaching a limit"}
           </div>
@@ -259,8 +267,8 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
       {/* ── Recent trades ── */}
       {recent.length > 0 && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: "22px", overflow: "hidden" }}>
-          <div style={{ padding: "16px 16px 10px", fontFamily: MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>
-            Recent trades
+          <div style={{ padding: "16px 16px 10px" }}>
+            <Kicker C={C}>Recent trades</Kicker>
           </div>
           {recent.map((t, i) => {
             const pnlNum = parseFloat(t.pnlDollar as string) || 0;

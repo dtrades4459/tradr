@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // useCircles — circle membership state + sync for Kōda
 //
 // Owns:  myCircles[], circlesView, activeCircle, circleForm,
@@ -138,13 +138,13 @@ export function useCircles({
 
   async function saveMyCircles(u: Circle[]) {
     setMyCircles(u);
-    await storage.set("tradr_circles", JSON.stringify(u));
+    await storage.set("koda_circles", JSON.stringify(u));
   }
 
   /** Read the ban list for a circle. Returns a Set of banned member codes. */
   async function readCircleBans(circleCode: string): Promise<Set<string>> {
     try {
-      const r = await storage.get(`tradr_circle_bans_${circleCode}`, true);
+      const r = await storage.get(`koda_circle_bans_${circleCode}`, true);
       if (!r) return new Set();
       const arr = JSON.parse(r.value);
       return new Set(Array.isArray(arr) ? arr : []);
@@ -154,7 +154,7 @@ export function useCircles({
   async function readCircleMembers(code: string, fallback: CircleMember[] = []) {
     try {
       const [rows, bans] = await Promise.all([
-        storage.listByPrefix(`tradr_circle_member_${code}_`),
+        storage.listByPrefix(`koda_circle_member_${code}_`),
         readCircleBans(code),
       ]);
       if (!rows.length) return fallback.filter((m: CircleMember) => !bans.has(m.code));
@@ -203,7 +203,7 @@ export function useCircles({
 
   // ── Circle membership sync + Realtime subscriptions ────────────────────────
   // Fix: local myCircles was snapshotted at create/join time. When another
-  // member joined, this side never re-read the canonical tradr_circle_<code>
+  // member joined, this side never re-read the canonical koda_circle_<code>
   // from shared storage, so the members list (and leaderboard) stayed stale.
   // Pull fresh on mount + every 2 min. Realtime subs fire an immediate re-sync.
   useEffect(() => {
@@ -214,7 +214,7 @@ export function useCircles({
 
     async function ensureMyMemberRow(circle: Circle) {
       // For circles created before the per-member-row refactor, each user
-      // needs to write their own tradr_circle_member_<CODE>_<myCode> once.
+      // needs to write their own koda_circle_member_<CODE>_<myCode> once.
       const myCode = getMyCodeRef.current();
       const me = {
         name: profileRef.current.name || "Trader",
@@ -224,7 +224,7 @@ export function useCircles({
         joinedAt: new Date().toISOString(),
       };
       try {
-        await storage.set(`tradr_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
+        await storage.set(`koda_circle_member_${circle.code}_${myCode}`, JSON.stringify(me), true);
       } catch {}
     }
 
@@ -241,7 +241,7 @@ export function useCircles({
       const refreshed = await Promise.all(current.map(async (c: Circle) => {
         try {
           const [metaRes, members] = await Promise.all([
-            storage.get("tradr_circle_" + c.code, true),
+            storage.get("koda_circle_" + c.code, true),
             readCircleMembers(c.code, c.members || []),
           ]);
           const fresh = metaRes ? JSON.parse(metaRes.value) : c;
@@ -257,7 +257,7 @@ export function useCircles({
         const refreshedCodes = new Set(refreshed.map((c: Circle) => c.code));
         const merged = [...refreshed, ...myCirclesRef.current.filter((c: Circle) => !refreshedCodes.has(c.code))];
         setMyCircles(merged);
-        try { await storage.set("tradr_circles", JSON.stringify(merged)); } catch {}
+        try { await storage.set("koda_circles", JSON.stringify(merged)); } catch {}
       }
     }
 
@@ -331,8 +331,8 @@ export function useCircles({
         createdAt: new Date().toISOString(),
       };
       // Write metadata (owned by me) + my own member row.
-      await storage.set("tradr_circle_" + code, JSON.stringify(circle), true);
-      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      await storage.set("koda_circle_" + code, JSON.stringify(circle), true);
+      await storage.set(`koda_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
       const updated = [...myCirclesRef.current, { ...circle, members: [me], isOwner: true }];
       await saveMyCircles(updated as Circle[]);
       setCircleForm({ name: "", description: "", strategy: "", privacy: "public", emoji: "◆", metric: "dollar" });
@@ -360,7 +360,7 @@ export function useCircles({
     if (isJoiningCircle) return;
     setIsJoiningCircle(true);
     try {
-      const res = await storage.get("tradr_circle_" + code, true);
+      const res = await storage.get("koda_circle_" + code, true);
       if (!res) {
         setCircleMsg("Circle not found. Check the code.");
         setTimeout(() => setCircleMsg(""), 2500);
@@ -369,7 +369,7 @@ export function useCircles({
       const circle = JSON.parse(res.value);
       const me = myMemberRecord();
       // Only write my OWN member row. Do not mutate the creator's circle row.
-      await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+      await storage.set(`koda_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
       const members = await readCircleMembers(code, [me]);
       const updated = [...myCirclesRef.current, { ...circle, members, isOwner: false }];
       await saveMyCircles(updated as Circle[]);
@@ -387,7 +387,7 @@ export function useCircles({
   /** Silent join by code — used by onboarding. Reads from ref to avoid stale closure. */
   async function joinCircleByCode(code: string): Promise<void> {
     if (myCirclesRef.current.find((c: Circle) => c.code === code)) return;
-    let res = await storage.get("tradr_circle_" + code, true);
+    let res = await storage.get("koda_circle_" + code, true);
     if (!res && code === KODA_GLOBAL_CODE) {
       const circle = {
         id: 1,
@@ -397,13 +397,13 @@ export function useCircles({
         strategy: "", privacy: "public", emoji: "◆", metric: "dollar",
         createdBy: "Kōda", createdAt: new Date().toISOString(),
       };
-      try { await storage.set("tradr_circle_" + KODA_GLOBAL_CODE, JSON.stringify(circle), true); } catch {}
-      res = await storage.get("tradr_circle_" + code, true);
+      try { await storage.set("koda_circle_" + KODA_GLOBAL_CODE, JSON.stringify(circle), true); } catch {}
+      res = await storage.get("koda_circle_" + code, true);
     }
     if (!res) return;
     const circle = JSON.parse(res.value);
     const me = myMemberRecord();
-    await storage.set(`tradr_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
+    await storage.set(`koda_circle_member_${code}_${me.code}`, JSON.stringify(me), true);
     const members = await readCircleMembers(code, [me]);
     await saveMyCircles([...myCirclesRef.current, { ...circle, members, isOwner: false }] as Circle[]);
   }
@@ -413,7 +413,7 @@ export function useCircles({
     try {
       const bans = await readCircleBans(circleCode);
       bans.add(memberCode);
-      await storage.set(`tradr_circle_bans_${circleCode}`, JSON.stringify([...bans]), true);
+      await storage.set(`koda_circle_bans_${circleCode}`, JSON.stringify([...bans]), true);
       const filterKicked = (m: CircleMember) => m.code !== memberCode;
       const updated = myCirclesRef.current.map((c: Circle) =>
         c.code !== circleCode ? c : { ...c, members: c.members.filter(filterKicked) }
@@ -434,8 +434,8 @@ export function useCircles({
     const myCode = getMyCodeRef.current();
     try {
       await Promise.all([
-        storage.del(`tradr_circle_member_${circleCode}_${myCode}`, true),
-        storage.del(`tradr_circle_entry_${circleCode}_${myCode}`, true),
+        storage.del(`koda_circle_member_${circleCode}_${myCode}`, true),
+        storage.del(`koda_circle_entry_${circleCode}_${myCode}`, true),
       ]);
     } catch { /* rows may not exist — that's fine */ }
     const updated = myCirclesRef.current.filter((c: Circle) => c.code !== circleCode);
@@ -473,7 +473,7 @@ export function useCircles({
     };
     try {
       await storage.set(
-        "tradr_circle_entry_" + circleCode + "_" + myCode,
+        "koda_circle_entry_" + circleCode + "_" + myCode,
         JSON.stringify(entry),
         true
       );
@@ -490,7 +490,7 @@ export function useCircles({
     const members = await readCircleMembers(circle.code, circle.members || []);
 
     // Batch fetch all entry rows in a single query instead of one per member.
-    const prefix = `tradr_circle_entry_${circle.code}_`;
+    const prefix = `koda_circle_entry_${circle.code}_`;
     const rowMap: Record<string, LeaderboardEntry> = {};
     try {
       const rows = await storage.listByPrefix(prefix);
@@ -540,7 +540,7 @@ export function useCircles({
     circleLatestMsgs,
     isCreatingCircle,
     isJoiningCircle,
-    // Helpers exposed for use in TRADR.tsx (onboarding + loadAll)
+    // Helpers exposed for use in Koda.tsx (onboarding + loadAll)
     saveMyCircles,
     myMemberRecord,
     readCircleMembers,

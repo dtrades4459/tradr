@@ -1,4 +1,4 @@
-// ─── strategies.ts ───────────────────────────────────────────────────────────
+﻿// ─── strategies.ts ───────────────────────────────────────────────────────────
 // Single source of truth for all built-in strategy definitions.
 // Custom user-defined strategies are merged at runtime via addExtraStrategy().
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export const STRATEGIES: Record<string, StrategyDef> = {
 export const STRATEGY_NAMES = Object.keys(STRATEGIES);
 
 // ── Runtime extras (custom user-defined strategies) ───────────────────────────
-// loadAll() and saveCustomStrategies() in TRADR.tsx write here at runtime.
+// loadAll() and saveCustomStrategies() in Koda.tsx write here at runtime.
 // STRATEGIES itself stays immutable.
 
 let _extraStrategies: Record<string, StrategyDef> = {};

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Tradovate API proxy
+// Kōda · Tradovate API proxy
 //
 // Routes all Tradovate calls server-side so:
 //   - App ID / CID / secret stay in Vercel env vars (never shipped to client)
@@ -15,7 +15,7 @@
 
 export const config = { runtime: "nodejs" };
 
-import { getUserIdFromJwt } from "./lib/supabaseAdmin";
+import { getUserIdFromJwt } from "./lib/supabaseAdmin.js";
 
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE = "https://live.tradovateapi.com/v1";

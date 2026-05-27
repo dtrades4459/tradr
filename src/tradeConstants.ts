@@ -1,4 +1,4 @@
-// ─── TRADR Trade Constants ────────────────────────────────────────────────────
+// ─── Kōda Trade Constants ─────────────────────────────────────────────────────
 // Shared constants used by the trade log form and anywhere trades are displayed.
 // Import from here rather than re-defining per-file.
 

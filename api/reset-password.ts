@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Password Reset API
+// Kōda · Password Reset API
 //
 // POST { username }
 // → Finds the user by synthetic email (O(1) via auth.users query)
@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, getClientIp } from "./lib/rateLimit";
+import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -119,12 +119,12 @@ export default async function handler(req: any, res: any) {
         },
         signal: controller.signal,
         body: JSON.stringify({
-          from: "TRADR <noreply@tradrjournal.xyz>",
+          from: "Kōda <noreply@tradrjournal.xyz>",
           to: [recoveryEmail],
-          subject: "Reset your TRADR password",
+          subject: "Reset your Kōda password",
           html: [
             `<div style="font-family:ui-monospace,monospace;max-width:480px;margin:0 auto;padding:32px 24px;background:#0C0C0B;color:#EDEDE8;">`,
-            `<p style="font-size:11px;color:#8A8A82;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:24px;">TRADR · Password Reset</p>`,
+            `<p style="font-size:11px;color:#8A8A82;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:24px;">Kōda · Password Reset</p>`,
             `<p style="font-size:15px;line-height:1.6;margin-bottom:24px;">`,
             `Hi <strong>@${u}</strong>,<br><br>`,
             `Someone (probably you) requested a password reset. Click the link below to set a new password. The link expires in 1 hour.`,

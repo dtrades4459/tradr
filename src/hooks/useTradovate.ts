@@ -57,7 +57,7 @@ export function useTradovate({ loading, trades, saveTrades, showToast }: UseTrad
     if (loading) return;
     (async () => {
       try {
-        const res = await storage.get("tradr_tradovate");
+        const res = await storage.get("koda_tradovate");
         if (!res) return;
         const sess: TradovateSession = JSON.parse(res.value);
         if (!sess?.accessToken) return;
@@ -92,7 +92,7 @@ export function useTradovate({ loading, trades, saveTrades, showToast }: UseTrad
       const fullSess: TradovateSession = { ...sess, accountId: acct?.id, accountName: acct?.name };
       setTradovateSession(fullSess);
       setTradovateForm(f => ({ ...f, password: "" })); // clear password from state
-      await storage.set("tradr_tradovate", JSON.stringify(fullSess));
+      await storage.set("koda_tradovate", JSON.stringify(fullSess));
       const positions = await tradovateGetPositions(fullSess);
       setTradovatePositions(positions);
       showToast(`Connected to ${acct?.name ?? "Tradovate"}`);
@@ -118,7 +118,7 @@ export function useTradovate({ loading, trades, saveTrades, showToast }: UseTrad
         }
         s = refreshed;
         setTradovateSession(s);
-        await storage.set("tradr_tradovate", JSON.stringify(s));
+        await storage.set("koda_tradovate", JSON.stringify(s));
       }
       const positions = await tradovateGetPositions(s);
       setTradovatePositions(positions);
@@ -160,7 +160,7 @@ export function useTradovate({ loading, trades, saveTrades, showToast }: UseTrad
       }
       const updatedSess: TradovateSession = { ...sess, lastSyncTime: new Date().toISOString() };
       setTradovateSession(updatedSess);
-      await storage.set("tradr_tradovate", JSON.stringify(updatedSess));
+      await storage.set("koda_tradovate", JSON.stringify(updatedSess));
       const positions = await tradovateGetPositions(updatedSess);
       setTradovatePositions(positions);
     } catch (e) {
@@ -178,7 +178,7 @@ export function useTradovate({ loading, trades, saveTrades, showToast }: UseTrad
     setTradovatePositions([]);
     setTradovateForm({ username: "", password: "", env: "demo" });
     setTradovateError("");
-    try { await storage.del("tradr_tradovate"); } catch { /* noop */ }
+    try { await storage.del("koda_tradovate"); } catch { /* noop */ }
     showToast("Tradovate disconnected");
   }
 

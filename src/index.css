@@ -19,7 +19,7 @@ input, textarea, select {
 /* Hide scrollbars but keep scrolling */
 ::-webkit-scrollbar { width: 0; height: 0; }
 
-/* ─── F1: Motion system (12 keyframes) ─── */
+/* ─── F1: Motion system (21 keyframes) ─── */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes kSlideIn   { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
   @keyframes kSlideOut  { from { opacity:1; transform:none } to { opacity:0; transform:translateY(-8px) } }
@@ -33,6 +33,15 @@ input, textarea, select {
   @keyframes kSpin      { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
   @keyframes kGlow      { 0%,100% { filter:drop-shadow(0 0 4px currentColor) } 50% { filter:drop-shadow(0 0 14px currentColor) } }
   @keyframes kConfetti  { 0% { opacity:1; transform:translateY(0) rotate(0) } 100% { opacity:0; transform:translateY(-80px) rotate(360deg) } }
+  @keyframes kRise        { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
+  @keyframes kCount       { from { opacity:0; transform:scale(0.8) } to { opacity:1; transform:none } }
+  @keyframes kStreakGlow  { 0%,100% { filter:drop-shadow(0 0 6px currentColor) } 50% { filter:drop-shadow(0 0 22px currentColor) } }
+  @keyframes kTick        { from { stroke-dashoffset:30 } to { stroke-dashoffset:0 } }
+  @keyframes kDrawer      { from { opacity:0; transform:translateY(100%) } to { opacity:1; transform:none } }
+  @keyframes kRipple      { from { transform:scale(0); opacity:0.6 } to { transform:scale(2.8); opacity:0 } }
+  @keyframes kShimmer     { from { background-position:-600px 0 } to { background-position:600px 0 } }
+  @keyframes kConfettiA   { 0% { opacity:1; transform:translate(-50%,-50%) translateY(0) rotate(0deg) } 100% { opacity:0; transform:translate(-50%,-50%) translateY(220px) rotate(540deg) } }
+  @keyframes kSheen       { 0% { transform:translateX(-160%) } 100% { transform:translateX(220%) } }
 }
 
 /* F13: reduced-motion override — collapse all to instant opacity transitions */

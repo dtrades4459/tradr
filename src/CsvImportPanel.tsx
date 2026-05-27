@@ -90,7 +90,7 @@ function computeImportStats(trades: any[]): ImportStats {
 }
 
 // ─── IMPORT TEMPLATES (localStorage) ─────────────────────────────────────────
-const TPL_KEY = "tradr_csv_templates";
+const TPL_KEY = "koda_csv_templates";
 interface ImportTemplate {
   label: string;
   broker: string | null;

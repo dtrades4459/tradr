@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Changelog · Kōda</title>
+  <link rel="icon" href="/favicon.svg" />
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#0A0A0B;color:#F2F2EE;font-family:'Geist',system-ui,sans-serif;min-height:100dvh;padding:48px 24px 80px;max-width:720px;margin:0 auto}
+    a{color:oklch(0.84 0.14 175);text-decoration:none}
+    .kicker{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#65655F;margin-bottom:8px}
+    h1{font-size:40px;font-weight:600;letter-spacing:-0.02em;margin-bottom:8px}
+    .sub{font-size:15px;color:#A6A6A2;margin-bottom:48px;line-height:1.6}
+    .entry{margin-bottom:48px}
+    .entry-date{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#65655F;margin-bottom:6px}
+    .entry-title{font-size:22px;font-weight:600;letter-spacing:-0.01em;margin-bottom:12px}
+    .entry ul{list-style:none;padding:0;display:flex;flex-direction:column;gap:8px}
+    .entry li{font-size:14px;color:#A6A6A2;line-height:1.6;padding-left:18px;position:relative}
+    .entry li::before{content:"→";position:absolute;left:0;color:oklch(0.84 0.14 175)}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:0.10em;text-transform:uppercase;border:1px solid;margin-right:6px;vertical-align:middle}
+    .tag.new{color:oklch(0.84 0.14 175);border-color:oklch(0.84 0.14 175 / 0.4)}
+    .tag.fix{color:#f59e0b;border-color:rgba(245,158,11,0.4)}
+    .tag.improved{color:oklch(0.74 0.16 250);border-color:oklch(0.74 0.16 250 / 0.4)}
+    .back{display:inline-flex;align-items:center;gap:6px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:#A6A6A2;margin-bottom:40px}
+    hr{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:0 0 48px}
+  </style>
+</head>
+<body>
+  <a class="back" href="/">← Back to Kōda</a>
+  <p class="kicker">Changelog</p>
+  <h1>What's new.</h1>
+  <p class="sub">Every update, shipped by one founder at 2am.</p>
+
+  <div class="entry">
+    <div class="entry-date">May 2026</div>
+    <div class="entry-title">Kōda v2 — The visual pass</div>
+    <hr/>
+    <ul>
+      <li><span class="tag new">New</span> Full Kōda visual system — OKLCH palette, Geist type, glass surfaces, orb blooms</li>
+      <li><span class="tag new">New</span> Mistake tag field — log what went wrong, get monthly rollups</li>
+      <li><span class="tag new">New</span> Prop firm mode — balance, profit target, daily loss, and drawdown tracker</li>
+      <li><span class="tag new">New</span> Circles improvements — challenges, shared trades, chat</li>
+      <li><span class="tag new">New</span> Desktop layout — 4-tier responsive scaling</li>
+      <li><span class="tag improved">Improved</span> Trade celebrations — confetti on log, streak milestones, Pro upgrade</li>
+      <li><span class="tag improved">Improved</span> Empty states — every screen has a proper empty/loading/error treatment</li>
+      <li><span class="tag fix">Fix</span> Kōda rebrand complete — all user-visible TRADR strings updated</li>
+    </ul>
+  </div>
+
+  <div class="entry">
+    <div class="entry-date">April 2026</div>
+    <div class="entry-title">Circles + live sync</div>
+    <hr/>
+    <ul>
+      <li><span class="tag new">New</span> Trading Circles — share journals, run challenges, post trades</li>
+      <li><span class="tag new">New</span> Tradovate live sync — real-time trade import</li>
+      <li><span class="tag new">New</span> Rule engine — define and track your trading rules</li>
+      <li><span class="tag new">New</span> Emotional state tags — log how you felt on each trade</li>
+      <li><span class="tag improved">Improved</span> CSV parser — supports Tradovate, Rithmic, TopstepX, FTMO</li>
+    </ul>
+  </div>
+</body>
+</html>

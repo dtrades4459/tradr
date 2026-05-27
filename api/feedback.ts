@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Feedback API
+// Kōda · Feedback API
 //
 // POST { feedback, name, handle }
 // → Supabase-backed rate limit (5 req / 60 s per IP) — survives cold starts
@@ -14,8 +14,8 @@
 
 export const config = { runtime: "nodejs" };
 
-import { checkRateLimit, getClientIp } from "./lib/rateLimit";
-import { getUserIdFromJwt } from "./lib/supabaseAdmin";
+import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
+import { getUserIdFromJwt } from "./lib/supabaseAdmin.js";
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([

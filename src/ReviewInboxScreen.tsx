@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./lib/supabase";
 import { log } from "./lib/log";
 import type { Trade } from "./types";
-import { MONO, BODY, DISPLAY } from "./shared";
+import { MONO, BODY, DISPLAY, Kicker, EmptyInboxState } from "./shared";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -83,6 +83,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
 
   const orb1 = C.orb1 ?? "oklch(0.55 0.22 252)";
   const cardBg = `color-mix(in srgb, ${C.text} 3%, transparent)`;
+  const mintColor = C.live ?? "oklch(0.84 0.14 175)";
 
   // ── Load drafts ────────────────────────────────────────────────────────────
 
@@ -259,23 +260,13 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
 
         {/* Empty state */}
         {!loading && drafts.length === 0 && (
-          <div style={{ textAlign: "center", padding: "56px 0 24px" }}>
-            <div style={{
-              width: "56px", height: "56px", borderRadius: "999px", margin: "0 auto 16px",
-              background: `color-mix(in oklch, ${C.green} 18%, transparent)`,
-              border: `1px solid ${C.green}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: C.green, fontSize: "22px",
-            }}>✓</div>
-            <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, marginBottom: "6px" }}>Inbox empty</div>
-            <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.5, marginBottom: "24px" }}>
-              New broker fills will appear here automatically.
-            </div>
-            <button
-              onClick={() => navigateTo("log")}
-              style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "8px 20px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, color: C.muted }}>
-              ← Back to Log
-            </button>
+          <EmptyInboxState C={C as any} />
+        )}
+
+        {/* Pending review section header */}
+        {!loading && drafts.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <Kicker C={C as any}>Pending review</Kicker>
           </div>
         )}
 
@@ -296,6 +287,9 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
 
                 {/* Trade row */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {/* Mint dot — draft indicator */}
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: mintColor, flexShrink: 0 }} />
+
                   {/* Symbol badge */}
                   <div style={{
                     width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
@@ -316,6 +310,15 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
                       <span style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>{row.pair}</span>
+                      {/* DRAFT pill */}
+                      <div style={{
+                        padding: "2px 8px", borderRadius: 999,
+                        background: `color-mix(in oklch, ${mintColor} 12%, transparent)`,
+                        border: `1px solid color-mix(in oklch, ${mintColor} 25%, transparent)`,
+                        fontFamily: MONO, fontSize: 9, letterSpacing: "0.10em",
+                        color: mintColor, textTransform: "uppercase" as const,
+                        flexShrink: 0,
+                      }}>DRAFT</div>
                       {side && (
                         <span style={{
                           padding: "1px 6px", borderRadius: "4px", fontSize: "9px",

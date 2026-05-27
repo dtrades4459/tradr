@@ -15,9 +15,11 @@ export async function shareTrade(
     log.error("circlesSharedTrades.shareTrade", new Error("author.code is required"), { circleCode });
     return "error";
   }
+  const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase.from("circle_shared_trades").insert({
     circle_code: circleCode,
     author_code: author.code ?? "",
+    author_uid: user?.id ?? null,
     author_name: author.name,
     author_handle: author.handle,
     author_avatar: author.avatar,

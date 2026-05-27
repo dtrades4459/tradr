@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Tradovate client
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · Tradovate client
 //
 // All network calls go through /api/tradovate (the Vercel proxy) — never
 // directly to Tradovate. This keeps app credentials server-side and avoids CORS.
@@ -73,10 +73,10 @@ async function callProxy(
   const { method = "GET", token, body, params = {}, env = "demo" } = opts;
   const qs = new URLSearchParams({ action, env, ...params }).toString();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  // Always send the TRADR session JWT — server verifies the caller is authenticated
+  // Always send the Kōda session JWT — server verifies the caller is authenticated
   const { data: { session } } = await supabase.auth.getSession();
   if (session) headers["Authorization"] = `Bearer ${session.access_token}`;
-  // Tradovate token goes in its own header, separate from the TRADR auth header
+  // Tradovate token goes in its own header, separate from the Kōda auth header
   if (token) headers["x-tradovate-token"] = token;
   const r = await fetch(`${PROXY}?${qs}`, {
     method,

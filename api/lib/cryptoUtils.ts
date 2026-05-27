@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Server-side AES-256-GCM encryption for broker token storage
+// Kōda · Server-side AES-256-GCM encryption for broker token storage
 //
 // USAGE
 //   import { encrypt, decrypt } from "./lib/cryptoUtils";

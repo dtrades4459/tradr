@@ -1,16 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import TradrAuth from "./TradrAuth";
+import KodaAuth from "./KodaAuth";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { installStorage } from "./lib/storage";
 import { initSentry } from "./lib/sentry";
 import { initPostHog } from "./lib/posthog";
-import "./lib/flags"; // side-effect: exposes window.tradrFlags
+import "./lib/flags"; // side-effect: exposes window.kodaFlags
 import "./index.css";
 
-// Install a no-op storage shim immediately so TRADR.tsx never hits an
+// Install a no-op storage shim immediately so Koda.tsx never hits an
 // undefined `window.storage` during early renders. Once the user signs in,
-// TradrAuth re-installs it with the user id so writes hit Supabase.
+// KodaAuth re-installs it with the user id so writes hit Supabase.
 installStorage(null);
 
 // Boot Sentry if a DSN is configured. No-op otherwise — safe to leave on.
@@ -22,7 +22,7 @@ initPostHog();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <TradrAuth />
+      <KodaAuth />
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -1,7 +1,7 @@
 import { storage } from "./lib/storage";
 import type React from "react";
 import { useState, useEffect, useMemo } from "react";
-import { MONO, BODY, DISPLAY, AvatarCircle } from "./shared";
+import { MONO, BODY, DISPLAY, AvatarCircle, Kicker, GlassOrb } from "./shared";
 
 export function ProfileModal({ handle, myCode, following, followUser, unfollowUser, onClose, C }: any) {
   const [pubProfile, setPubProfile] = useState<any>(null);
@@ -15,20 +15,20 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
       try {
         const norm = handle.replace(/^@/, "").toLowerCase();
         let code: string | null = null;
-        const handleRow = await storage.get(`tradr_handle_${norm}`, true);
+        const handleRow = await storage.get(`koda_handle_${norm}`, true);
         if (handleRow) {
           try { code = JSON.parse(handleRow.value)?.code || null; } catch {}
-          if (!code) code = handleRow.owner_id || null;
+          if (!code) code = (handleRow as any).owner_id || null;
           setTargetCode(code);
         }
-        const profileRow = await storage.get(`tradr_profile_pub_${norm}`, true);
+        const profileRow = await storage.get(`koda_profile_pub_${norm}`, true);
         if (profileRow) {
           try {
             const p = JSON.parse(profileRow.value);
             if (p) {
               setPubProfile(p);
               if (p.publicTrades && code) {
-                const feedRow = await storage.get(`tradr_feed_${code}`, true);
+                const feedRow = await storage.get(`koda_feed_${code}`, true);
                 if (feedRow) {
                   try { const t = JSON.parse(feedRow.value); setFeedTrades(Array.isArray(t) ? t : []); } catch {}
                 }
@@ -36,7 +36,7 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
             }
           } catch { /* malformed — leave pubProfile null */ }
         } else if (code) {
-          const feedRow = await storage.get(`tradr_feed_${code}`, true);
+          const feedRow = await storage.get(`koda_feed_${code}`, true);
           if (feedRow) {
             try {
               const t = JSON.parse(feedRow.value);
@@ -79,8 +79,9 @@ export function ProfileModal({ handle, myCode, following, followUser, unfollowUs
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}>
-      <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "520px", maxHeight: "88vh", overflowY: "auto", padding: "10px 16px 48px", position: "relative" }}
+      <div style={{ background: C.panel ?? C.bg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: "520px", maxHeight: "88vh", overflowY: "auto", padding: "10px 16px 48px", position: "relative", border: `1px solid ${C.border2}`, animation: "kRise 0.42s ease-out" }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <GlassOrb C={C as any} top={-60} left={-80} size={360} color={(C as any).orb1 ?? C.accent} opacity={0.4} />
         {/* Centered bloom */}
         <div style={{ position: "absolute", top: 40, left: "50%", transform: "translateX(-50%)", width: 420, height: 420, borderRadius: "50%", background: `radial-gradient(circle, ${(C as any).orb1 ?? C.accent} 0%, ${(C as any).orb2 ?? C.accent} 40%, transparent 65%)`, filter: "blur(80px)", opacity: isDark ? 0.45 : 0.3, pointerEvents: "none" }} />
         {/* Drag handle */}

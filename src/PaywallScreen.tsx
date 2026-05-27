@@ -1,4 +1,4 @@
-// Paywall shown after onboarding. Standalone — does not import from TRADR.tsx.
+﻿// Paywall shown after onboarding. Standalone — does not import from Koda.tsx.
 import { useState } from "react";
 import { supabase } from "./lib/supabase";
 

@@ -33,3 +33,5 @@ src/TRADR.tsx.tmp
 # Local Claude AI session files
 .claude/
 .claude/
+
+.vercel

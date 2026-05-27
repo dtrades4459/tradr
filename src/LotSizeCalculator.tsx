@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · LotSizeCalculator  (Futures only)
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · LotSizeCalculator  (Futures only)
 //
 // Floating modal — Quick Action accessible from any screen.
 // Takes: contract, balance, risk % or fixed $, entry price, stop loss price.
@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useMemo } from "react";
-import { MONO, BODY } from "./shared";
+import { MONO, BODY, DISPLAY } from "./shared";
 
 // ─── Futures contract specs ───────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ export function LotSizeCalculator({ C, onClose }: LotSizeCalculatorProps) {
 
   const lbl: React.CSSProperties = {
     fontSize: 11, fontFamily: MONO, fontWeight: 600,
-    letterSpacing: "0.06em", textTransform: "uppercase" as const,
+    letterSpacing: "0.08em", textTransform: "uppercase" as const,
     color: C.muted ?? "#888", marginBottom: 5, display: "block",
   };
 
@@ -115,183 +115,201 @@ export function LotSizeCalculator({ C, onClose }: LotSizeCalculatorProps) {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div
+    <div  // backdrop
       style={{
         position: "fixed", inset: 0, zIndex: 1100,
         background: "rgba(0,0,0,0.72)",
-        display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{
-        background: C.panel ?? "#131317",
-        width: "100%", maxWidth: 460,
-        borderRadius: "22px 22px 0 0",
-        padding: "22px 20px 40px",
-        maxHeight: "90dvh", overflowY: "auto",
+      <div style={{  // sheet — kDrawer animation
+        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        width: "min(480px, 100vw)", maxHeight: "90dvh",
+        background: C.panel ?? "#131317", borderRadius: "24px 24px 0 0",
+        border: `1px solid ${C.border2 ?? "#2a2a3e"}`, borderBottom: "none",
+        overflow: "hidden", display: "flex", flexDirection: "column",
+        animation: "kDrawer 0.32s cubic-bezier(.2,.8,.2,1)",
+        boxShadow: "0 -16px 40px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}>
 
-        {/* ── Header ── */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 19, fontWeight: 700, color: C.text ?? "#e2e8f0", lineHeight: 1.2 }}>
-              Position Size Calculator
+        {/* ── Glass header ── */}
+        <div style={{
+          position: "relative",
+          padding: "14px 20px 12px",
+          background: (C as any).surfaceGlass ?? (C.panel ?? "#131317"),
+          backdropFilter: "blur(20px) saturate(160%)",
+          WebkitBackdropFilter: "blur(20px) saturate(160%)",
+          borderBottom: `1px solid ${C.border ?? "#333"}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexShrink: 0,
+        }}>
+          {/* drag handle pill */}
+          <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 36, height: 4, borderRadius: 999, background: C.border2 ?? "#2a2a3e" }} />
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.text ?? "#e2e8f0", letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+              Position Size
             </div>
-            <div style={{ fontSize: 12, color: C.muted ?? "#888", marginTop: 3 }}>Futures</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.10em", color: C.muted ?? "#888", marginTop: 2, textTransform: "uppercase" }}>Futures Calculator</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted ?? "#888", fontSize: 20, padding: "2px 4px", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted ?? "#888", fontSize: 18, padding: "4px 8px", lineHeight: 1 }}>✕</button>
         </div>
 
-        {/* ── Contract ── */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={lbl}>Contract</label>
-          <select
-            style={{ ...inp, cursor: "pointer" }}
-            value={symbol}
-            onChange={e => setSymbol(e.target.value)}
-          >
-            {Object.entries(SPECS).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
-        </div>
+        {/* ── Scrollable content ── */}
+        <div style={{ overflowY: "auto", padding: "16px 20px 40px", flex: 1 }}>
 
-        {/* ── Spec badges ── */}
-        {spec && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            {[
-              { label: "TICK SIZE",  val: spec.tickSize  },
-              { label: "TICK VALUE", val: `$${spec.tickValue}` },
-            ].map(({ label, val }) => (
-              <div key={label} style={{
-                background: "#f59e0b18", color: "#f59e0b",
-                borderRadius: 6, padding: "3px 9px",
-                fontFamily: MONO, fontSize: 11, fontWeight: 700,
-              }}>
-                {label}: {val}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Risk mode ── */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={lbl}>Risk Type</label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={tabBtn(riskMode === "percent")} onClick={() => setRiskMode("percent")}>% of Balance</button>
-            <button style={tabBtn(riskMode === "fixed")}   onClick={() => setRiskMode("fixed")}>Fixed $</button>
-          </div>
-        </div>
-
-        {/* ── Balance / risk amount ── */}
-        {riskMode === "percent" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lbl}>Account Balance ($)</label>
-              <input style={inp} type="number" inputMode="decimal" placeholder="50000" value={balance} onChange={e => setBalance(e.target.value)} />
-            </div>
-            <div>
-              <label style={lbl}>Risk %</label>
-              <input style={inp} type="number" inputMode="decimal" placeholder="1" step="0.1" value={riskPct} onChange={e => setRiskPct(e.target.value)} />
-            </div>
-          </div>
-        ) : (
+          {/* ── Contract ── */}
           <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Risk Amount ($)</label>
-            <input style={inp} type="number" inputMode="decimal" placeholder="200" value={riskFixed} onChange={e => setRiskFixed(e.target.value)} />
-          </div>
-        )}
-
-        {/* ── Entry + Stop ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-          <div>
-            <label style={lbl}>Entry Price</label>
-            <input style={inp} type="number" inputMode="decimal" placeholder="5280.25" value={entry} onChange={e => setEntry(e.target.value)} />
-          </div>
-          <div>
-            <label style={lbl}>Stop Loss Price</label>
-            <input style={inp} type="number" inputMode="decimal" placeholder="5272.00" value={stop} onChange={e => setStop(e.target.value)} />
-          </div>
-        </div>
-
-        {/* ── Result ── */}
-        {calc && "error" in calc && calc.error ? (
-          <div style={{
-            background: "rgba(255,80,60,0.08)", border: "1px solid rgba(255,80,60,0.2)",
-            borderRadius: 12, padding: "12px 14px",
-            color: C.red ?? "oklch(0.70 0.21 25)", fontFamily: MONO, fontSize: 13,
-          }}>
-            {calc.error}
+            <label style={lbl}>Contract</label>
+            <select
+              style={{ ...inp, cursor: "pointer" }}
+              value={symbol}
+              onChange={e => setSymbol(e.target.value)}
+            >
+              {Object.entries(SPECS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
           </div>
 
-        ) : calc && "contracts" in calc ? (
-          <div style={{
-            background: (calc.contracts ?? 0) > 0
-              ? `${C.accent ?? "oklch(0.74 0.16 250)"}18`
-              : "#6b728018",
-            border: `1px solid ${(calc.contracts ?? 0) > 0 ? (C.accent ?? "oklch(0.74 0.16 250)") + "33" : "#6b728033"}`,
-            borderRadius: 16, padding: "20px 16px",
-          }}>
-            {/* Main numbers */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, marginBottom: 16 }}>
-              <div style={{ textAlign: "center", borderRight: `1px solid ${C.border ?? "#333"}`, paddingRight: 12 }}>
-                <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.muted ?? "#888", marginBottom: 6 }}>CONTRACTS</div>
-                <div style={{
-                  fontSize: 44, fontWeight: 800, fontFamily: MONO, lineHeight: 1,
-                  color: (calc.contracts ?? 0) > 0 ? (C.accent ?? "oklch(0.74 0.16 250)") : (C.muted ?? "#888"),
-                }}>
-                  {calc.contracts}
-                </div>
-                {calc.contracts === 0 && (
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: "#f59e0b", marginTop: 6, lineHeight: 1.4 }}>
-                    Risk too small for 1 contract
-                  </div>
-                )}
-              </div>
-              <div style={{ textAlign: "center", paddingLeft: 12 }}>
-                <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.muted ?? "#888", marginBottom: 6 }}>RISK</div>
-                <div style={{ fontSize: 30, fontWeight: 700, fontFamily: MONO, lineHeight: 1, color: C.text ?? "#e2e8f0" }}>
-                  ${calc.actualRisk?.toFixed(2) ?? "0.00"}
-                </div>
-                {riskMode === "percent" && balance && (
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted ?? "#888", marginTop: 6 }}>
-                    of ${parseFloat(balance).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Stop details */}
-            <div style={{
-              display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
-              borderTop: `1px solid ${C.border ?? "#2a2a3e"}`, paddingTop: 14, gap: 8,
-            }}>
+          {/* ── Spec badges ── */}
+          {spec && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {[
-                { label: "STOP TICKS",  value: calc.stopTicks?.toFixed(0) },
-                { label: "STOP POINTS", value: calc.stopPoints?.toFixed(2) },
-                { label: "RISK/CONTRACT", value: `$${calc.riskPerContract?.toFixed(2)}` },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.07em", color: C.muted ?? "#888", marginBottom: 4 }}>{label}</div>
-                  <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 600, color: C.text ?? "#e2e8f0" }}>{value}</div>
+                { label: "TICK SIZE",  val: spec.tickSize  },
+                { label: "TICK VALUE", val: `$${spec.tickValue}` },
+              ].map(({ label, val }) => (
+                <div key={label} style={{
+                  background: "#f59e0b18", color: "#f59e0b",
+                  borderRadius: 6, padding: "3px 9px",
+                  fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                }}>
+                  {label}: {val}
                 </div>
               ))}
             </div>
+          )}
+
+          {/* ── Risk mode ── */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Risk Type</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={tabBtn(riskMode === "percent")} onClick={() => setRiskMode("percent")}>% of Balance</button>
+              <button style={tabBtn(riskMode === "fixed")}   onClick={() => setRiskMode("fixed")}>Fixed $</button>
+            </div>
           </div>
 
-        ) : (
-          <div style={{
-            background: C.panel2 ?? "#1A1A20", borderRadius: 14,
-            padding: "22px 16px", textAlign: "center",
-            color: C.muted ?? "#888", fontFamily: MONO, fontSize: 12, lineHeight: 1.6,
-          }}>
-            Enter entry price and stop loss<br />to calculate position size
-          </div>
-        )}
+          {/* ── Balance / risk amount ── */}
+          {riskMode === "percent" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div>
+                <label style={lbl}>Account Balance ($)</label>
+                <input style={inp} type="number" inputMode="decimal" placeholder="50000" value={balance} onChange={e => setBalance(e.target.value)} />
+              </div>
+              <div>
+                <label style={lbl}>Risk %</label>
+                <input style={inp} type="number" inputMode="decimal" placeholder="1" step="0.1" value={riskPct} onChange={e => setRiskPct(e.target.value)} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>Risk Amount ($)</label>
+              <input style={inp} type="number" inputMode="decimal" placeholder="200" value={riskFixed} onChange={e => setRiskFixed(e.target.value)} />
+            </div>
+          )}
 
-        {/* Disclaimer */}
-        <div style={{ marginTop: 14, textAlign: "center", fontFamily: MONO, fontSize: 10, color: C.muted ?? "#888", opacity: 0.6, lineHeight: 1.5 }}>
-          For reference only · Not financial advice · Verify with your broker
+          {/* ── Entry + Stop ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+            <div>
+              <label style={lbl}>Entry Price</label>
+              <input style={inp} type="number" inputMode="decimal" placeholder="5280.25" value={entry} onChange={e => setEntry(e.target.value)} />
+            </div>
+            <div>
+              <label style={lbl}>Stop Loss Price</label>
+              <input style={inp} type="number" inputMode="decimal" placeholder="5272.00" value={stop} onChange={e => setStop(e.target.value)} />
+            </div>
+          </div>
+
+          {/* ── Result ── */}
+          {calc && "error" in calc && calc.error ? (
+            <div style={{
+              background: "rgba(255,80,60,0.08)", border: "1px solid rgba(255,80,60,0.2)",
+              borderRadius: 12, padding: "12px 14px",
+              color: C.red ?? "oklch(0.70 0.21 25)", fontFamily: MONO, fontSize: 13,
+            }}>
+              {calc.error}
+            </div>
+
+          ) : calc && "contracts" in calc ? (
+            <div style={{
+              background: (calc.contracts ?? 0) > 0
+                ? `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 10%, transparent)`
+                : "rgba(107,114,128,0.09)",
+              border: `1px solid ${(calc.contracts ?? 0) > 0
+                ? `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 22%, transparent)`
+                : "rgba(107,114,128,0.22)"}`,
+              borderRadius: 16, padding: "20px 16px",
+            }}>
+              {/* Main numbers */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, marginBottom: 16 }}>
+                <div style={{ textAlign: "center", borderRight: `1px solid ${C.border ?? "#333"}`, paddingRight: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.muted ?? "#888", marginBottom: 6 }}>CONTRACTS</div>
+                  <div style={{
+                    fontSize: 44, fontWeight: 800, fontFamily: DISPLAY, lineHeight: 1,
+                    color: (calc.contracts ?? 0) > 0 ? (C.accent ?? "oklch(0.74 0.16 250)") : (C.muted ?? "#888"),
+                  }}>
+                    {calc.contracts}
+                  </div>
+                  {calc.contracts === 0 && (
+                    <div style={{ fontFamily: MONO, fontSize: 10, color: "#f59e0b", marginTop: 6, lineHeight: 1.4 }}>
+                      Risk too small for 1 contract
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: "center", paddingLeft: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.muted ?? "#888", marginBottom: 6 }}>RISK</div>
+                  <div style={{ fontSize: 30, fontWeight: 700, fontFamily: DISPLAY, lineHeight: 1, color: C.text ?? "#e2e8f0" }}>
+                    ${calc.actualRisk?.toFixed(2) ?? "0.00"}
+                  </div>
+                  {riskMode === "percent" && balance && (
+                    <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted ?? "#888", marginTop: 6 }}>
+                      of ${parseFloat(balance).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Stop details */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+                borderTop: `1px solid ${C.border ?? "#2a2a3e"}`, paddingTop: 14, gap: 8,
+              }}>
+                {[
+                  { label: "STOP TICKS",  value: calc.stopTicks?.toFixed(0) },
+                  { label: "STOP POINTS", value: calc.stopPoints?.toFixed(2) },
+                  { label: "RISK/CONTRACT", value: `$${calc.riskPerContract?.toFixed(2)}` },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.07em", color: C.muted ?? "#888", marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.text ?? "#e2e8f0" }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          ) : (
+            <div style={{
+              background: C.panel2 ?? "#1A1A20", borderRadius: 14,
+              padding: "22px 16px", textAlign: "center",
+              color: C.muted ?? "#888", fontFamily: MONO, fontSize: 12, lineHeight: 1.6,
+            }}>
+              Enter entry price and stop loss<br />to calculate position size
+            </div>
+          )}
+
+          {/* Disclaimer */}
+          <div style={{ marginTop: 14, textAlign: "center", fontFamily: MONO, fontSize: 10, color: C.muted ?? "#888", opacity: 0.6, lineHeight: 1.5 }}>
+            For reference only · Not financial advice · Verify with your broker
+          </div>
         </div>
       </div>
     </div>

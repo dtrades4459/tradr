@@ -1,18 +1,17 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabase";
 import { installStorage, clearStorageCache } from "./lib/storage";
 import type { Session } from "@supabase/supabase-js";
-import Tradr from "./TRADR";
+import Koda from "./Koda";
 import { BetaGate, betaEnabled, isBetaUnlocked } from "./BetaGate";
 import { DARK } from "./theme";
 import type { Theme } from "./theme";
-import { TradrMark, FloatingInput, TealArrowBtn, MONO, BODY } from "./shared";
+import { KodaMark, FloatingInput, TealArrowBtn, GlassOrb, GhostWord, Kicker, MONO, BODY, DISPLAY } from "./shared";
 
-// ─── THEME (dark-only for auth surfaces) ─────────────────────────────────────
+// â”€â”€â”€ THEME (dark-only for auth surfaces) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = DARK;
-const DISPLAY = BODY;
 
-// ─── OAUTH BUTTON ────────────────────────────────────────────────────────────
+// â”€â”€â”€ OAUTH BUTTON â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function OAuthBtn({ label, provider, onClick }: {
   label: string; provider: "google" | "x" | "apple"; onClick?: () => void;
 }) {
@@ -39,7 +38,7 @@ function OAuthBtn({ label, provider, onClick }: {
   );
 }
 
-// ─── AUTH FORM ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ AUTH FORM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type AuthMode = "signin" | "signup" | "reset" | "reset-sent" | "new-password";
 
 const USERNAME_DOMAIN = "users.tradr.app";
@@ -66,7 +65,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   async function handleSubmit() {
     const u = username.toLowerCase().trim();
     if (!u || !password) return;
-    if (!USERNAME_RE.test(u)) { setError("Username must be 3–20 chars, lowercase letters, numbers, or underscores only."); return; }
+    if (!USERNAME_RE.test(u)) { setError("Username must be 3â€“20 chars, lowercase letters, numbers, or underscores only."); return; }
     if (password.length < 6)  { setError("Password must be at least 6 characters."); return; }
     setLoading(true); setError(""); setMsg("");
     try {
@@ -138,7 +137,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
     });
   }
 
-  /* ── Reset sent ── */
+  /* â”€â”€ Reset sent â”€â”€ */
   if (mode === "reset-sent") {
     return (
       <div style={{ position: "relative", zIndex: 1 }}>
@@ -157,7 +156,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
     );
   }
 
-  /* ── New password ── */
+  /* â”€â”€ New password â”€â”€ */
   if (mode === "new-password") {
     return (
       <div style={{ position: "relative", zIndex: 1 }}>
@@ -172,13 +171,13 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
             background: C.text, color: C.bg, border: "none", borderRadius: 999,
             padding: "14px 20px", fontSize: 13, fontFamily: BODY, cursor: "pointer", width: "100%",
             opacity: loading ? 0.6 : 1,
-          }}>{loading ? "…" : "Update password →"}</button>
+          }}>{loading ? "â€¦" : "Update password â†’"}</button>
         </div>
       </div>
     );
   }
 
-  /* ── Reset form ── */
+  /* â”€â”€ Reset form â”€â”€ */
   if (mode === "reset") {
     return (
       <div style={{ position: "relative", zIndex: 1 }}>
@@ -193,17 +192,17 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
             background: C.text, color: C.bg, border: "none", borderRadius: 999,
             padding: "14px 20px", fontSize: 13, fontFamily: BODY, cursor: "pointer", width: "100%",
             opacity: loading ? 0.6 : 1,
-          }}>{loading ? "…" : "Send reset link →"}</button>
+          }}>{loading ? "â€¦" : "Send reset link â†’"}</button>
           <button onClick={() => { setMode("signin"); setError(""); }} style={{
             background: "none", border: "none", color: C.muted, fontSize: 12,
             cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0,
-          }}>← Back to sign in</button>
+          }}>â† Back to sign in</button>
         </div>
       </div>
     );
   }
 
-  /* ── Main sign-in / sign-up ── */
+  /* â”€â”€ Main sign-in / sign-up â”€â”€ */
   return (
     <div style={{ position: "relative", zIndex: 1 }}>
       {/* Mode tabs */}
@@ -226,7 +225,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
         <FloatingInput C={C} label="Username" value={username} placeholder={mode === "signup" ? "pick a handle" : "yourname"}
           onChange={v => setUsername(v.toLowerCase())} />
 
-        <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
+        <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
           onChange={v => setPassword(v)} />
 
         {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
@@ -238,7 +237,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
           cursor: "pointer", width: "100%", marginTop: 8,
           opacity: loading ? 0.6 : 1, transition: "opacity 0.15s, transform 0.15s",
         }}>
-          {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
+          {loading ? "â€¦" : mode === "signin" ? "Sign in â†’" : "Create account â†’"}
         </button>
 
         {mode === "signin" && (
@@ -276,7 +275,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   );
 }
 
-// ─── PARSE OAUTH ERROR FROM URL HASH ─────────────────────────────────────────
+// â”€â”€â”€ PARSE OAUTH ERROR FROM URL HASH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function parseOAuthError(): string {
   const hash = window.location.hash.slice(1);
   if (!hash.includes("error=")) return "";
@@ -288,14 +287,14 @@ function parseOAuthError(): string {
     return "Google sign-in was cancelled. Use your username and password instead.";
   }
   if (desc) return `Sign-in failed: ${desc.replace(/\+/g, " ")}. Please use username and password.`;
-  return "Google sign-in isn’t available. Please use your username and password.";
+  return "Google sign-in isnâ€™t available. Please use your username and password.";
 }
 
-// ─── LANDING PAGE ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ LANDING PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LandingPage({ onSuccess }: { onSuccess: () => void }) {
   const [oauthError] = useState(() => parseOAuthError());
   return (
-    <div className="tradr-landing" style={{
+    <div className="koda-landing" style={{
       minHeight: "100dvh", background: C.bg, color: C.text, fontFamily: BODY,
       position: "relative", overflow: "hidden",
     }}>
@@ -305,35 +304,35 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes orbDrift{0%,100%{transform:scale(1) translate(0,0)}50%{transform:scale(1.06) translate(20px,-12px)}}
 
-        .tradr-landing input::placeholder{color:${C.dim};font-weight:400;}
-        .tradr-landing input:focus{border-bottom-color:${C.text}!important;}
-        .tradr-landing button:hover:not(:disabled){opacity:0.85;}
-        .tradr-landing button:active:not(:disabled){transform:scale(0.98);}
+        .koda-landing input::placeholder{color:${C.dim};font-weight:400;}
+        .koda-landing input:focus{border-bottom-color:${C.text}!important;}
+        .koda-landing button:hover:not(:disabled){opacity:0.85;}
+        .koda-landing button:active:not(:disabled){transform:scale(0.98);}
 
-        .tradr-shell{max-width:1440px;margin:0 auto;padding:24px 24px 80px;position:relative;z-index:1;}
-        .tradr-grid{display:grid;grid-template-columns:1fr;gap:56px;margin-top:56px;}
+        .koda-shell{max-width:1440px;margin:0 auto;padding:24px 24px 80px;position:relative;z-index:1;}
+        .koda-grid{display:grid;grid-template-columns:1fr;gap:56px;margin-top:56px;}
 
         @media(min-width:900px){
-          .tradr-shell{padding:36px 56px 96px;}
-          .tradr-grid{grid-template-columns:minmax(0,1.45fr) minmax(320px,440px);gap:80px;margin-top:96px;align-items:start;}
-          .tradr-auth-card{position:sticky;top:36px;}
+          .koda-shell{padding:36px 56px 96px;}
+          .koda-grid{grid-template-columns:minmax(0,1.45fr) minmax(320px,440px);gap:80px;margin-top:96px;align-items:start;}
+          .koda-auth-card{position:sticky;top:36px;}
         }
         @media(min-width:1280px){
-          .tradr-shell{padding:44px 88px 120px;}
-          .tradr-grid{gap:120px;}
+          .koda-shell{padding:44px 88px 120px;}
+          .koda-grid{gap:120px;}
         }
 
-        .tradr-strategies{display:grid;grid-template-columns:1fr;border-top:1px solid ${C.border};}
-        @media(min-width:900px){.tradr-strategies{grid-template-columns:1fr 1fr;}}
-        .tradr-strat-item{padding:28px 0;border-bottom:1px solid ${C.border};}
+        .koda-strategies{display:grid;grid-template-columns:1fr;border-top:1px solid ${C.border};}
+        @media(min-width:900px){.koda-strategies{grid-template-columns:1fr 1fr;}}
+        .koda-strat-item{padding:28px 0;border-bottom:1px solid ${C.border};}
         @media(min-width:900px){
-          .tradr-strat-item{padding:32px 40px 32px 0;}
-          .tradr-strat-item:nth-child(odd){border-right:1px solid ${C.border};}
-          .tradr-strat-item:nth-child(even){padding-left:40px;padding-right:0;}
+          .koda-strat-item{padding:32px 40px 32px 0;}
+          .koda-strat-item:nth-child(odd){border-right:1px solid ${C.border};}
+          .koda-strat-item:nth-child(even){padding-left:40px;padding-right:0;}
         }
       `}</style>
 
-      {/* ── Background orbs (multi-color ambient blooms) ── */}
+      {/* â”€â”€ Background orbs (multi-color ambient blooms) â”€â”€ */}
       <div style={{
         position: "absolute", top: "-8%", left: "50%", transform: "translateX(-50%)",
         width: 900, height: 500, borderRadius: "50%",
@@ -349,22 +348,22 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         animation: "orbDrift 13s ease-in-out infinite reverse",
       }} />
 
-      <div className="tradr-shell" style={{ animation: "rise 0.5s ease" }}>
+      <div className="koda-shell" style={{ animation: "rise 0.5s ease" }}>
 
-        {/* ── MASTHEAD ── */}
+        {/* â”€â”€ MASTHEAD â”€â”€ */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <TradrMark size={26} color={C.text} />
+            <KodaMark size={26} color={C.text} />
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
+              <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>KÅda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1.5px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
           </div>
           <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em" }}>BETA / 2026</div>
         </header>
 
-        {/* ── GRID ── */}
-        <div className="tradr-grid">
+        {/* â”€â”€ GRID â”€â”€ */}
+        <div className="koda-grid">
 
           {/* Hero column */}
           <div style={{ minWidth: 0 }}>
@@ -452,14 +451,16 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             </div>
           </div>
 
-          {/* Auth column — glass card with corner glow */}
-          <aside className="tradr-auth-card" style={{
+          {/* Auth column â€” glass card with corner glow */}
+          <aside className="koda-auth-card" style={{
             position: "relative", padding: 32, borderRadius: 28,
             background: "rgba(18,18,22,0.7)",
-            backdropFilter: "blur(24px) saturate(160%)",
+            backdropFilter: "blur(28px) saturate(180%)",
+            WebkitBackdropFilter: "blur(28px) saturate(180%)",
             border: `1px solid ${C.border2}`,
             boxShadow: `0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`,
             overflow: "hidden",
+            animation: "kRise 0.42s ease-out",
           }}>
             {/* Iridescent corner glow */}
             <div style={{
@@ -474,9 +475,14 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               position: "relative", zIndex: 1, display: "flex", alignItems: "baseline",
               gap: 10, justifyContent: "center", marginBottom: 26,
             }}>
-              <TradrMark size={24} color={C.text} />
-              <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>Kōda</span>
+              <KodaMark size={24} color={C.text} />
+              <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>KÅda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
+            </div>
+
+            {/* Kicker */}
+            <div style={{ position: "relative", zIndex: 1, textAlign: "center", marginBottom: 6 }}>
+              <Kicker C={C}>Sign in to Kōda</Kicker>
             </div>
 
             {/* Heading */}
@@ -503,20 +509,20 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           </aside>
         </div>
 
-        {/* ── BUILT-IN STRATEGIES ── */}
+        {/* â”€â”€ BUILT-IN STRATEGIES â”€â”€ */}
         <section style={{ marginTop: "clamp(80px, 10vw, 128px)" }}>
           <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.14em", marginBottom: 32, display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ flex: "0 0 32px", height: 1, background: C.border2 }} />
             BUILT-IN STRATEGIES
           </div>
-          <div className="tradr-strategies">
+          <div className="koda-strategies">
             {[
               { n: "01", name: "ICT / Smart Money",     desc: "Order blocks, fair value gaps, liquidity sweeps. Mark your bias before the open." },
               { n: "02", name: "Supply & Demand",        desc: "Fresh zones, base-to-base, institutional imbalances. No stale levels." },
               { n: "03", name: "Wyckoff / VSA",          desc: "Accumulation, distribution, spring and upthrust. Read the auction, not the candle." },
-              { n: "04", name: "Opening Range Breakout", desc: "First 15–30 min range. Clean breakouts with defined risk." },
+              { n: "04", name: "Opening Range Breakout", desc: "First 15â€“30 min range. Clean breakouts with defined risk." },
             ].map((s) => (
-              <div key={s.n} className="tradr-strat-item">
+              <div key={s.n} className="koda-strat-item">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 10 }}>
                   <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em" }}>{s.n}</span>
                   <span style={{ flex: 1, height: 1, background: C.border }} />
@@ -530,7 +536,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </section>
 
-        {/* ── GIANT GHOST WORDMARK ── */}
+        {/* â”€â”€ GIANT GHOST WORDMARK â”€â”€ */}
         <div style={{
           textAlign: "center", marginTop: "clamp(60px, 8vw, 100px)",
           pointerEvents: "none", overflow: "hidden",
@@ -542,10 +548,10 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             WebkitBackgroundClip: "text", backgroundClip: "text",
             WebkitTextFillColor: "transparent",
             WebkitTextStroke: "1px rgba(255,255,255,0.06)",
-          }}>KŌDA</div>
+          }}>KÅŒDA</div>
         </div>
 
-        {/* ── FOOTER ── */}
+        {/* â”€â”€ FOOTER â”€â”€ */}
         <footer style={{
           marginTop: 32, paddingTop: 24,
           borderTop: `1px solid ${C.border}`,
@@ -554,10 +560,10 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           fontFamily: MONO, fontSize: 10, color: C.dim, letterSpacing: "0.08em",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <TradrMark size={18} color={C.dim} />
-            <span>KŌDA · KEEP THE EDGE YOU EARNED</span>
+            <KodaMark size={18} color={C.dim} />
+            <span>KÅŒDA Â· KEEP THE EDGE YOU EARNED</span>
           </div>
-          <span>©2026 Kōda · v1.0 · <span style={{ color: C.live }}>● LIVE</span></span>
+          <span>Â©2026 KÅda Â· v1.0 Â· <span style={{ color: C.live }}>â— LIVE</span></span>
         </footer>
 
       </div>
@@ -565,8 +571,8 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-// ─── LOADING SCREEN ───────────────────────────────────────────────────────────────────────────────
-const PULSE_CSS = "@keyframes tradr-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.96)}}";
+// â”€â”€â”€ LOADING SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const PULSE_CSS = "@keyframes koda-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.96)}}";
 
 function LoadingScreen() {
   return (
@@ -575,15 +581,15 @@ function LoadingScreen() {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20,
     }}>
       <style dangerouslySetInnerHTML={{ __html: PULSE_CSS }} />
-      <div style={{ animation: "tradr-pulse 1.8s ease-in-out infinite" }}>
-        <TradrMark size={80} color={C.text} />
+      <div style={{ animation: "koda-pulse 1.8s ease-in-out infinite" }}>
+        <KodaMark size={80} color={C.text} />
       </div>
     </div>
   );
 }
 
-// ─── ROOT AUTH WRAPPER ──────────────────────────────────────────────────────────────────────────────
-export default function TradrAuth() {
+// â”€â”€â”€ ROOT AUTH WRAPPER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export default function KodaAuth() {
   const [session,      setSession]      = useState<Session | null | undefined>(undefined);
   const [betaUnlocked, setBetaUnlocked] = useState<boolean>(() => isBetaUnlocked());
 
@@ -605,5 +611,6 @@ export default function TradrAuth() {
   if (!session) return <LandingPage onSuccess={() => {}} />;
 
   const jwtPlan = (session.user.app_metadata?.plan ?? "free") as "free" | "pro" | "elite";
-  return <Tradr user={session.user} jwtPlan={jwtPlan} />;
+  return <Koda user={session.user} jwtPlan={jwtPlan} />;
 }
+

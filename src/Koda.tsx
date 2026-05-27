@@ -17,7 +17,7 @@ import { STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap, addExtraStrategies } f
 import { useTradovate } from "./hooks/useTradovate";
 
 import type { TradeComment, ReactionMap, Trade, Profile, CircleMember, Circle, Insight, StrategyDef } from "./types";
-import { AvatarCircle, Badge, SectionKicker, StrategyPill, StrategySelect, SubNavDropdown, GearButton, Toast, ToastStack, TrMark, TradrMark, CrownIcon, GlassOrb, CornerGlow, GhostWord, TickMotif, TealArrowBtn, Pill, Card, Kicker, Delta, ScreenHeader, IconButton, FloatingInput, EmptyState, outcomeColor, outcomeLetter, stratCode, stratShort, compressImage, MONO, BODY, DISPLAY } from "./shared";
+import { AvatarCircle, Badge, SectionKicker, StrategyPill, StrategySelect, SubNavDropdown, GearButton, Toast, ToastStack, KodaMarkFilled, KodaMark, CrownIcon, GlassOrb, CornerGlow, GhostWord, TickMotif, TealArrowBtn, Pill, Card, Kicker, Delta, ScreenHeader, IconButton, FloatingInput, EmptyState, outcomeColor, outcomeLetter, stratCode, stratShort, compressImage, MONO, BODY, DISPLAY, EmptyTradesState, ErrorOfflineState, CelebrationOverlay } from "./shared";
 import type { ToastKind, ToastItem } from "./shared";
 import { TradingCircles } from "./TradingCircles";
 import { FriendsFeed } from "./FriendsFeed";
@@ -39,8 +39,8 @@ import { DARK, LIGHT, makeStyles } from "./theme";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
-/** The TRADR Global circle — every new user auto-joins on onboarding completion. */
-const TRADR_GLOBAL_CODE = "TRADRG-HB1U";
+/** The Kōda Global circle — every new user auto-joins on onboarding completion. */
+const LEGACY_GLOBAL_CODE = "TRADRG-HB1U";
 
 // STRATEGIES, STRATEGY_NAMES, getAllStrategiesMap → src/data/strategies.ts
 
@@ -91,6 +91,25 @@ function useIsDesktop(breakpoint = 900) {
     };
   }, [breakpoint]);
   return isDesktop;
+}
+
+// ─── Inline text editor ──────────────────────────────────────────────────────
+// Used in checklist and rules lists to edit items in-place.
+function EditInline({ val, onSave, onCancel, C }: { val: string; onSave: (t: string) => void; onCancel: () => void; C: typeof DARK }) {
+  const [text, setText] = useState(val);
+  return (
+    <div style={{ display: "flex", gap: "8px", flex: 1, alignItems: "center" }}>
+      <input
+        autoFocus
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") onSave(text); if (e.key === "Escape") onCancel(); }}
+        style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${C.border2}`, color: C.text, fontFamily: BODY, fontSize: "14px", padding: "6px 0", outline: "none" }}
+      />
+      <button onClick={() => onSave(text)} style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", color: C.text, fontSize: "10px", cursor: "pointer", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 10px", minHeight: "44px" }}>save</button>
+      <button onClick={onCancel} style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: "6px", color: C.muted, fontSize: "10px", cursor: "pointer", fontFamily: MONO, letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 10px", minHeight: "44px" }}>×</button>
+    </div>
+  );
 }
 
 // ─── Strategy Editor ─────────────────────────────────────────────────────────
@@ -242,7 +261,7 @@ function ProLock({ C, label, description, onUpgrade }: { C: Record<string, strin
   );
 }
 
-export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
+export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [draftCount, setDraftCount] = useState(0);
   const [view, setView] = useState("home");
@@ -271,11 +290,19 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const [darkMode, setDarkMode] = useState(true);
   const isDesktop = useIsDesktop(900);
   const viewport = useViewport();
-  const C: typeof DARK = darkMode ? DARK : LIGHT;
+  const C = (darkMode ? DARK : LIGHT) as typeof DARK;
   const [form, setForm] = useState<Partial<Trade>>(EMPTY_TRADE);
   const [editId, setEditId] = useState<number | null>(null);
   const [filter, setFilter] = useState<{ outcome: string; setup: string; pair: string; strategy: string; dateFrom: string; dateTo: string }>({ outcome: "", setup: "", pair: "", strategy: "", dateFrom: "", dateTo: "" });
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const up = () => setIsOnline(true);
+    const dn = () => setIsOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", dn);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", dn); };
+  }, []);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [tradeToShare, setTradeToShare] = useState<Trade | null>(null);
@@ -303,6 +330,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   // ── Toast v2 (stacked, 4 kinds) ──
   const [toastsV2, setToastsV2] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
+  const [celebration, setCelebration] = useState<{ kind: "trade" | "streak" | "pro"; streakCount?: number; tradeStats?: { winRate: number; avgR: number; streak: number } } | null>(null);
   const showToastV2 = useCallback((kind: ToastKind, title: string, body?: string) => {
     const id = ++toastIdRef.current;
     setToastsV2(prev => [...prev, { id, kind, title, body, ts: Date.now() }]);
@@ -355,7 +383,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [fontScale, setFontScale] = useState<number>(() => {
-    try { return parseFloat(localStorage.getItem("tradr_font_scale") ?? "1") || 1; } catch { return 1; }
+    try { return parseFloat(localStorage.getItem("koda_font_scale") ?? "1") || 1; } catch { return 1; }
   });
 
   // Tradovate — state + handlers managed by useTradovate (wired below after saveTrades).
@@ -366,6 +394,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   const touchStartY = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); }, []);
+  const dismissCelebration = useCallback(() => setCelebration(null), []);
 
   // ── Surface Supabase write failures as user-visible toasts ───────────────────
   // storage.ts calls this callback instead of silently logging to the console.
@@ -392,7 +421,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     // Use fontSize instead of zoom — zoom is non-standard and causes the
     // browser to shift fixed-position elements (including the bottom nav).
     document.documentElement.style.fontSize = `${fontScale * 100}%`;
-    try { localStorage.setItem("tradr_font_scale", String(fontScale)); } catch {}
+    try { localStorage.setItem("koda_font_scale", String(fontScale)); } catch {}
   }, [fontScale]);
 
   // ── Stripe return URL handler ───────────────────────────────────────────────
@@ -404,7 +433,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (params.get("upgraded") === "1") {
       const cid = params.get("cid") ?? "";
       setProfile(p => ({ ...p, plan: "pro" as const, ...(cid ? { stripeCustomerId: cid } : {}) }));
-      showToast("⚡ You're on Kōda Pro — welcome!");
+      setCelebration({ kind: "pro" });
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (params.get("cancelled") === "1") {
@@ -455,21 +484,20 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.uid)
       .eq("review_status", "draft")
-      .then(({ count }) => setDraftCount(count ?? 0))
-      .catch(() => {});
+      .then(({ count }) => setDraftCount(count ?? 0), () => {});
   }, [loading, profile.uid]);
 
   async function loadAll() {
     const store = storage;
     const [t, pr, sc, sr, dm, ci, st, cs, v2ProfileRes] = await Promise.all([
-      store.get("tradr_trades").catch(() => null),
-      store.get("tradr_profile").catch(() => null),
-      store.get("tradr_checklists").catch(() => null),
-      store.get("tradr_rules").catch(() => null),
-      store.get("tradr_dark").catch(() => null),
-      store.get("tradr_circles").catch(() => null),
-      store.get("tradr_thresholds").catch(() => null),
-      store.get("tradr_custom_strategies").catch(() => null),
+      store.get("koda_trades").catch(() => null),
+      store.get("koda_profile").catch(() => null),
+      store.get("koda_checklists").catch(() => null),
+      store.get("koda_rules").catch(() => null),
+      store.get("koda_dark").catch(() => null),
+      store.get("koda_circles").catch(() => null),
+      store.get("koda_thresholds").catch(() => null),
+      store.get("koda_custom_strategies").catch(() => null),
       (isFlagOn("newProfile") && user?.id)
         ? getProfile(user.id).catch(() => null)
         : Promise.resolve(null),
@@ -511,7 +539,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             }
             if (changed && migrationAlive) {
               setTrades(updated);
-              await storage.set("tradr_trades", JSON.stringify(updated));
+              await storage.set("koda_trades", JSON.stringify(updated));
             }
           })();
           // Signal the IIFE to stop if the component unmounts before it finishes
@@ -530,21 +558,22 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           ...(v2.prefs || {}),
           uid: v2.userId,
           handle: v2.handle ? `@${v2.handle}` : "",
-          name: v2.name,
-          avatar: v2.avatar,
-          bio: v2.bio,
-          broker: v2.broker,
-          timezone: v2.timezone,
+          name: v2.name ?? DEF_PROFILE.name,
+          avatar: v2.avatar ?? DEF_PROFILE.avatar,
+          bio: v2.bio ?? DEF_PROFILE.bio,
+          broker: v2.broker ?? DEF_PROFILE.broker,
+          timezone: v2.timezone ?? DEF_PROFILE.timezone,
           onboarded: v2.onboarded,
           publicTrades: v2.publicTrades,
-        };
+        } as Profile;
       }
       if (!p) {
-        p = pr ? JSON.parse(pr.value) : { ...DEF_PROFILE };
+        p = pr ? (JSON.parse(pr.value) as Profile | null) : { ...DEF_PROFILE };
       }
+      if (!p) p = { ...DEF_PROFILE };
       if (user?.id && p.uid !== user.id) {
-        p = { ...p, uid: user.id };
-        try { await store.set("tradr_profile", JSON.stringify(p)); }
+        p = { ...p, uid: user.id } as Profile;
+        try { await store.set("koda_profile", JSON.stringify(p)); }
         catch (e) { log.error("loadAll.profile.uidStamp", e); }
       }
       // Always trust the JWT plan claim over whatever is stored in the KV blob.
@@ -552,7 +581,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       // it cannot be forged by the client. The KV value is synced on the next
       // saveProfile() call so they converge quickly.
       if (jwtPlan && jwtPlan !== "free") {
-        p = { ...p, plan: jwtPlan };
+        p = { ...p, plan: jwtPlan } as Profile;
       }
       setProfile(p); setProfileDraft(p);
       // Identify user in PostHog so all events link to their account
@@ -582,7 +611,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     // Load Stripe customer ID
     try {
       const store = storage;
-      const stripeKv = await store.get("tradr_stripe_customer").catch(() => null);
+      const stripeKv = await store.get("koda_stripe_customer").catch(() => null);
       if (stripeKv?.value) {
         const { customerId } = JSON.parse(stripeKv.value);
         if (customerId) setProfile(p => ({ ...p, stripeCustomerId: customerId }));
@@ -601,7 +630,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     // Rebuild extra strategies from the new set (replaces stale entries).
     addExtraStrategies(Object.fromEntries(u.map((s) => [s.name, s as StrategyDef])));
     setCustomStrategies(u);
-    await storage.set("tradr_custom_strategies", JSON.stringify(u));
+    await storage.set("koda_custom_strategies", JSON.stringify(u));
   }
 
   function openNewStrategy() {
@@ -675,7 +704,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setTrades(u);
     // Always write KV — safety net + fast reads during migration window
     try {
-      await storage.set("tradr_trades", JSON.stringify(u));
+      await storage.set("koda_trades", JSON.stringify(u));
     } catch (e) {
       log.error("saveTrades.kv", e);
     }
@@ -779,14 +808,14 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   async function saveProfile(u: Profile) {
     setProfile(u);
     // ── Legacy KV write (always — keeps live app working until v2 cutover) ──
-    await storage.set("tradr_profile", JSON.stringify(u));
+    await storage.set("koda_profile", JSON.stringify(u));
     if (u.handle) {
       registerHandle(u.handle, profile.handle || null);
       // Write public profile so other traders can view it
       const norm = u.handle.replace(/^@/, "").toLowerCase();
       try {
         await storage.set(
-          `tradr_profile_pub_${norm}`,
+          `koda_profile_pub_${norm}`,
           JSON.stringify({ name: u.name || "Trader", handle: norm, avatar: u.avatar || "", bio: u.bio || "", publicTrades: u.publicTrades || false }),
           true
         );
@@ -816,11 +845,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       } catch (e) { log.error("saveProfile.v2", e, { userId: user.id }); }
     }
   }
-  async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await storage.set("tradr_checklists", JSON.stringify(u)); }
+  async function saveStratChecklists(u: Record<string, { id: number; text: string }[]>) { setStratChecklists(u); await storage.set("koda_checklists", JSON.stringify(u)); }
 
-  async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await storage.set("tradr_thresholds", JSON.stringify(u)); }
-  async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await storage.set("tradr_rules", JSON.stringify(u)); }
-  async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await storage.set("tradr_dark", JSON.stringify(nd)); }
+  async function saveStratThresholds(u: Record<string, { minCount: number; required: string[] }>) { setStratThresholds(u); await storage.set("koda_thresholds", JSON.stringify(u)); }
+  async function saveStratRules(u: Record<string, { id: number; text: string }[]>) { setStratRules(u); await storage.set("koda_rules", JSON.stringify(u)); }
+  async function toggleDark() { const nd = !darkMode; setDarkMode(nd); await storage.set("koda_dark", JSON.stringify(nd)); }
 
   // Swipe — wired via useEffect so we can pass { passive: false } and call
   // preventDefault(), which prevents the browser from interpreting a horizontal
@@ -859,7 +888,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
     const u = { ...form, [name]: value } as Partial<Trade>;
-    if (["entryPrice", "slPrice", "tpPrice"].includes(name)) u.rr = calcRR(name === "entryPrice" ? value : u.entryPrice, name === "slPrice" ? value : u.slPrice, name === "tpPrice" ? value : u.tpPrice);
+    if (["entryPrice", "slPrice", "tpPrice"].includes(name)) u.rr = calcRR(name === "entryPrice" ? value : (u.entryPrice ?? ""), name === "slPrice" ? value : (u.slPrice ?? ""), name === "tpPrice" ? value : (u.tpPrice ?? ""));
     if (name === "strategy") u.setup = "";
     setForm(u);
   }
@@ -869,17 +898,23 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     setSavingTrade(true);
     const now = new Date().toISOString();
     const base = { comments: [], reactions: {}, ...form, updatedAt: now };
-    let u;
+    let u: Trade[];
     if (editId) {
       // Preserve original createdAt; stamp new updatedAt.
-      u = trades.map(t => t.id === editId ? { ...base, id: editId, createdAt: t.createdAt ?? now } : t);
+      u = trades.map(t => t.id === editId ? { ...base, id: editId, createdAt: t.createdAt ?? now } as Trade : t);
       setEditId(null);
     } else {
-      u = [{ ...base, id: Date.now(), createdAt: now }, ...trades];
+      u = [{ ...base, id: Date.now(), createdAt: now } as Trade, ...trades];
     }
     await saveTrades(u); setForm(EMPTY_TRADE);
     phCapture(editId ? "trade_edited" : "trade_logged", { outcome: base.outcome, pair: base.pair, total_trades: u.length });
     showToast("Trade saved");
+    const totalSaved = u.length;
+    const winsSaved = u.filter((t: Trade) => t.outcome === "Win").length;
+    const wrSaved = Math.round(winsSaved / Math.max(totalSaved, 1) * 100);
+    const avgRSaved = parseFloat((u.reduce((s: number, t: Trade) => s + (parseFloat(t.rr) || 0), 0) / Math.max(totalSaved, 1)).toFixed(1));
+    // TODO: streak celebration — fire when streakCount hits 3/7/14/30/100 milestone (needs user_kv dedup)
+    setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
     setTimeout(() => setSavingTrade(false), 1500);
     // Go back if we have history, otherwise land on journal
     setViewHistory(h => { if (h.length > 0) { setView(h[h.length - 1]); return h.slice(0, -1); } setView("history"); return h; });
@@ -1057,13 +1092,13 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
   // ── Handle registry ────────────────────────────────────────────
   // Maps @handle → { code, name } in shared_kv. Owner = the handle's user,
   // so only they can update/delete their own handle row (RLS-safe).
-  // Key: `tradr_handle_${normalised}` where normalised = lowercase, no @.
+  // Key: `koda_handle_${normalised}` where normalised = lowercase, no @.
   function normaliseHandle(h: string): string {
     return h.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
   }
   async function resolveHandle(handle: string): Promise<{ code: string; name: string } | null> {
     try {
-      const key = `tradr_handle_${normaliseHandle(handle)}`;
+      const key = `koda_handle_${normaliseHandle(handle)}`;
       const r = await storage.get(key, true);
       if (!r) return null;
       return JSON.parse(r.value);
@@ -1084,10 +1119,10 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     if (!norm) return;
     // Clean up old handle row if the handle changed (we own it, RLS allows delete).
     if (oldHandle && normaliseHandle(oldHandle) !== norm) {
-      try { await storage.del(`tradr_handle_${normaliseHandle(oldHandle)}`, true); } catch {}
+      try { await storage.del(`koda_handle_${normaliseHandle(oldHandle)}`, true); } catch {}
     }
     await storage.set(
-      `tradr_handle_${norm}`,
+      `koda_handle_${norm}`,
       JSON.stringify({ code: mc, name: profile.name || "Trader" }),
       true
     );
@@ -1178,12 +1213,12 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     try {
       const mc = getMyCode();
       // Wipe all user_kv rows (trades, profile, checklists, etc)
-      const keys = ["tradr_trades","tradr_profile","tradr_friends","tradr_feed","tradr_checklists","tradr_rules","tradr_dark","tradr_circles","tradr_thresholds","tradr_custom_strategies"];
+      const keys = ["koda_trades","koda_profile","koda_friends","koda_feed","koda_checklists","koda_rules","koda_dark","koda_circles","koda_thresholds","koda_custom_strategies"];
       await Promise.all(keys.map(k => storage.del(k).catch(() => {})));
       // Wipe shared_kv rows we own (circle entries, feed, handle, follows)
       await Promise.all([
-        `tradr_feed_${mc}`,
-        `tradr_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
+        `koda_feed_${mc}`,
+        `koda_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
       ].map(k => storage.del(k, true).catch(() => {})));
       // Sign out and let Supabase handle auth deletion
       phReset();
@@ -1290,7 +1325,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const norm = (profile.handle || "").replace(/^@/, "").toLowerCase();
     const today = new Date().toISOString().split("T")[0];
     const wr = total > 0 ? Math.round((wins / total) * 100) : 0;
-    const avgR = total > 0 ? (totalPnL / total).toFixed(2) : "0";
+    const avgR = total > 0 ? (parseFloat(totalPnL) / total).toFixed(2) : "0";
     const recentTrades = [...trades].sort((a, b) => b.date > a.date ? 1 : -1).slice(0, 15);
     const stratMap: Record<string, {w:number;l:number;pnl:number}> = {};
     trades.forEach((t: Trade) => {
@@ -1304,7 +1339,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
     const css = "*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111;padding:40px;max-width:800px;margin:0 auto}h1{font-size:28px;font-weight:600;letter-spacing:-0.02em;margin-bottom:4px}.meta{font-size:12px;color:#888;font-family:monospace;letter-spacing:0.08em;margin-bottom:40px}h2{font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin:32px 0 12px;padding-top:24px;border-top:1px solid #eee}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}.card{background:#f8f8f7;border-radius:8px;padding:14px;text-align:center}.card-n{font-size:28px;font-weight:500;letter-spacing:-0.02em}.card-l{font-size:10px;color:#888;margin-top:2px;letter-spacing:0.08em;text-transform:uppercase}.green{color:#15803d}.red{color:#dc2626}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:8px 0;border-bottom:2px solid #eee;font-family:monospace;font-size:10px;letter-spacing:0.1em;color:#888}td{padding:8px 0;border-bottom:1px solid #f0f0f0}.footer{margin-top:48px;font-size:11px;color:#aaa;font-family:monospace;letter-spacing:0.08em;border-top:1px solid #eee;padding-top:16px}@media print{body{padding:20px}.no-print{display:none}}";
     const stratRows = topStrats.map(([name,s]) => "<tr><td>" + name + "</td><td>" + s.w + "</td><td>" + s.l + "</td><td>" + (s.w+s.l>0?Math.round(s.w/(s.w+s.l)*100):0) + "%</td><td class=\"" + (s.pnl>=0?"green":"red") + "\">" + (s.pnl>=0?"+":"") + s.pnl.toFixed(2) + "R</td></tr>").join("");
     const tradeRows = recentTrades.map(t => "<tr><td>" + t.date + "</td><td>" + (t.pair||"—") + "</td><td>" + (t.strategy||"—") + "</td><td>" + (t.session||"—") + "</td><td class=\"" + (t.outcome==="Win"?"green":t.outcome==="Loss"?"red":"") + "\">" + (t.outcome||"—") + "</td><td class=\"" + (parseFloat(t.pnl)>=0?"green":"red") + "\">" + (parseFloat(t.pnl)>=0?"+":"") + (t.pnl||0) + "R</td></tr>").join("");
-    const pnlClass = totalPnL>=0?"green":"red";
+    const pnlClass = parseFloat(totalPnL)>=0?"green":"red";
     const wrClass = wr>=50?"green":"red";
     const avgRClass = parseFloat(avgR)>=0?"green":"red";
     const html = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Kōda Report — " + (profile.name||"Trader") + " — " + today + "</title><style>" + css + "</style></head><body>"
@@ -1315,7 +1350,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       + "<div class=\"card\"><div class=\"card-n\">" + total + "</div><div class=\"card-l\">Trades</div></div>"
       + "<div class=\"card\"><div class=\"card-n " + wrClass + "\">" + wr + "%</div><div class=\"card-l\">Win Rate</div></div>"
       + "<div class=\"card\"><div class=\"card-n " + avgRClass + "\">" + (parseFloat(avgR)>=0?"+":"") + avgR + "R</div><div class=\"card-l\">Avg R / Trade</div></div>"
-      + "<div class=\"card\"><div class=\"card-n " + pnlClass + "\">" + (totalPnL>=0?"+":"") + totalPnL.toFixed(1) + "R</div><div class=\"card-l\">Total P&L</div></div>"
+      + "<div class=\"card\"><div class=\"card-n " + pnlClass + "\">" + (parseFloat(totalPnL)>=0?"+":"") + parseFloat(totalPnL).toFixed(1) + "R</div><div class=\"card-l\">Total P&L</div></div>"
       + "</div>"
       + "<h2>Top Strategies</h2>"
       + "<table><tr><th>Strategy</th><th>W</th><th>L</th><th>Win %</th><th>Total P&amp;L</th></tr>" + stratRows + "</table>"
@@ -1348,7 +1383,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
       <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ position: "absolute", width: "96px", height: "96px", borderRadius: "50%", border: `1.5px solid ${DARK.text}`, animation: "splashPulse 2s ease-in-out infinite" }} />
         <div style={{ animation: "splashBreath 2.4s ease-in-out infinite" }}>
-          <TrMark size={64} bg={DARK.panel} />
+          <KodaMarkFilled size={64} bg={DARK.panel} />
         </div>
       </div>
       {/* Wordmark */}
@@ -1367,7 +1402,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
 
   // Show onboarding for new users who haven't completed the flow yet.
   // Also check localStorage as a backup in case the Supabase write failed mid-onboarding.
-  const _localOnboarded = typeof window !== "undefined" && localStorage.getItem("tradr_onboarded") === "1";
+  const _localOnboarded = typeof window !== "undefined" && localStorage.getItem("koda_onboarded") === "1";
   if (!profile.onboarded && !_localOnboarded) {
     return (
       <OnboardingFlow
@@ -1376,7 +1411,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
         onComplete={async ({ name, handle, avatar, bio, twitter, instruments, strategy }: OnboardingData) => {
           // Set localStorage immediately so a refresh won't re-show onboarding
           // even if the Supabase write hasn't completed yet.
-          try { localStorage.setItem("tradr_onboarded", "1"); } catch {}
+          try { localStorage.setItem("koda_onboarded", "1"); } catch {}
           const cleanHandle = handle.trim() || `@${name.trim().toLowerCase().replace(/\s+/g, "")}`;
           const updated: Profile = {
             ...profile,
@@ -1394,22 +1429,22 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
             socialLinks: twitter.trim() ? { twitter: twitter.trim() } : profile.socialLinks,
           };
           await saveProfile(updated);
-          // Auto-join TRADR Global circle for every new user (silent — no error on failure).
-          if (TRADR_GLOBAL_CODE && !myCircles.find((c: Circle) => c.code === TRADR_GLOBAL_CODE)) {
+          // Auto-join Kōda Global circle for every new user (silent — no error on failure).
+          if (LEGACY_GLOBAL_CODE && !myCircles.find((c: Circle) => c.code === LEGACY_GLOBAL_CODE)) {
             try {
-              const res = await storage.get("tradr_circle_" + TRADR_GLOBAL_CODE, true);
+              const res = await storage.get("koda_circle_" + LEGACY_GLOBAL_CODE, true);
               if (res) {
                 const circle = JSON.parse(res.value);
                 const me = myMemberRecord();
-                await storage.set(`tradr_circle_member_${TRADR_GLOBAL_CODE}_${me.code}`, JSON.stringify(me), true);
-                const members = await readCircleMembers(TRADR_GLOBAL_CODE, [me]);
+                await storage.set(`koda_circle_member_${LEGACY_GLOBAL_CODE}_${me.code}`, JSON.stringify(me), true);
+                const members = await readCircleMembers(LEGACY_GLOBAL_CODE, [me]);
                 await saveMyCircles([...myCircles, { ...circle, members, isOwner: false }]);
               }
             } catch { /* silently ignore — circle may not exist yet */ }
           }
           setView("log");
           // Show the first-run tour unless they've already seen it
-          if (!localStorage.getItem("tradr_tour_done")) setShowTour(true);
+          if (!localStorage.getItem("koda_tour_done")) setShowTour(true);
         }}
       />
     );
@@ -1482,7 +1517,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                 </button>
               ) : (
                 <>
-                  <TradrMark size={isDesktop ? 24 : 22} color={C.text} />
+                  <KodaMark size={isDesktop ? 24 : 22} color={C.text} />
                   <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "15px" : "14px", fontWeight: 600, letterSpacing: "0.22em", color: C.text, lineHeight: 1 }}>Kōda</span>
                   <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: "9px", letterSpacing: "0.16em", color: C.text2, padding: "2px 5px", borderRadius: "4px", border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
                 </>
@@ -1544,7 +1579,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {/* Section sub-nav dropdown — mobile only; desktop uses the dropdown in the top-nav */}
               {!isDesktop && (
                 <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", paddingBottom: "10px", borderBottom: `0.5px solid ${C.border}` }}>
-                  <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={s => { if (s === "checklist") navigateTo("checklist"); else setHomeSection(s); }} C={C} />
+                  <SubNavDropdown sections={HOME_SECTIONS} value={homeSection} onChange={(s: string) => { if (s === "checklist") navigateTo("checklist"); else setHomeSection(s); }} C={C} />
                   <GearButton onClick={() => setHomeSection("settings")} active={homeSection === "settings"} C={C} />
                 </div>
               )}
@@ -1644,7 +1679,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                                 { label: "WIN RATE", value: `${winRate}%`, color: null },
                                 { label: "AVG R:R", value: avgRR === "—" ? "—" : `${avgRR}R`, color: null },
                                 { label: "STREAK", value: streak.count > 0 ? `${streak.count}${streak.type === "Win" ? "W" : "L"}` : "—", color: streak.count >= 2 ? (streak.type === "Win" ? C.green : C.red) : null },
-                              ].map((s: { label: string; icon: string }, i) => (
+                              ].map((s, i) => (
                                 <div key={s.label} style={{ padding: "14px 10px 0", borderLeft: i === 0 ? "none" : `1px solid ${C.border}` }}>
                                   <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.12em", marginBottom: "5px" }}>{s.label}</div>
                                   <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 600, color: s.color ?? C.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{s.value}</div>
@@ -1890,7 +1925,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   {trades.length === 0 && (
                     <section style={{ marginTop: "clamp(32px, 6vw, 48px)", textAlign: "center", padding: "0 8px" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", padding: "40px 24px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: "16px" }}>
-                        <TrMark size={52} bg={C.bg} />
+                        <KodaMarkFilled size={52} bg={C.bg} />
                         <div>
                           <p style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 700, color: C.text, letterSpacing: "-0.02em", marginBottom: "8px" }}>Your edge starts here</p>
                           <p style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6, maxWidth: "260px", margin: "0 auto" }}>
@@ -2118,16 +2153,15 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   {isFlagOn("socialFeed") && (
                   <section style={{ marginTop: "clamp(40px, 6vw, 56px)", paddingTop: "32px", borderTop: `1px solid ${C.border}` }}>
                     <FriendsFeed
-                      friends={friends} friendFeed={friendFeed} showAddFriend={showAddFriend} setShowAddFriend={setShowAddFriend}
+                      friends={friends} friendFeed={friendFeed as any} showAddFriend={showAddFriend} setShowAddFriend={setShowAddFriend}
                       followHandleInput={followHandleInput} setFollowHandleInput={setFollowHandleInput}
                       followHandleMsg={followHandleMsg} followHandleLoading={followHandleLoading}
                       followByHandle={followByHandle}
-                      removeFriend={removeFriend} unfollowUser={unfollowUser}
+                      unfollowUser={unfollowUser}
                       following={following} followers={followers} followerProfiles={followerProfiles}
-                      followUser={followUser}
-                      publishFeed={publishFeed} refreshFeed={refreshFeed} reactToFeed={reactToFeed}
+                      publishFeed={publishFeed} refreshFeed={refreshFeed} reactToFeed={reactToFeed as any}
                       myFeedReactions={myFeedReactions}
-                      getMyCode={getMyCode} profile={profile} C={C} inp={inp} lbl={lbl} pillGhost={pillGhost} pillPrimary={pillPrimary}
+                      profile={profile} C={C as any} inp={inp} pillPrimary={pillPrimary}
                       openProfile={openProfile}
                     />
                   </section>
@@ -2337,7 +2371,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                               background: C.border2, display: "flex", alignItems: "center",
                               justifyContent: "center", fontSize: "18px", flexShrink: 0,
                             }}>
-                              {circle.icon || "◆"}
+                              {circle.emoji || "◆"}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 700, color: C.text, marginBottom: "4px" }}>
@@ -2484,11 +2518,11 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               )}
             <LogTradeScreen
               C={C}
-              form={form} setForm={setForm}
-              editId={editId} setEditId={setEditId}
+              form={form} setForm={setForm as any}
+              editId={editId as any} setEditId={setEditId as any}
               handleChange={handleChange}
-              handleScreenshotUpload={handleScreenshotUpload}
-              removeScreenshot={removeScreenshot}
+              handleScreenshotUpload={handleScreenshotUpload as any}
+              removeScreenshot={removeScreenshot as any}
               submitTrade={submitTrade}
               savingTrade={savingTrade}
               allStrategyNames={allStrategyNames}
@@ -2556,17 +2590,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
               {filteredTrades.length === 0 ? (
                 trades.length === 0 ? (
                   // True empty — no trades at all yet
-                  <div style={{ textAlign: "center", padding: "72px 0", borderTop: `1px solid ${C.border}` }}>
-                    <div style={{ fontFamily: DISPLAY, fontSize: "clamp(22px, 5vw, 28px)", fontWeight: 500, fontStyle: "italic", color: C.text2, letterSpacing: "-0.02em", marginBottom: "10px" }}>
-                      No trades logged yet.
-                    </div>
-                    <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6, marginBottom: "28px" }}>
-                      Every edge starts with data. Log your first trade.
-                    </div>
-                    <button onClick={() => navigateTo("log")} style={pillPrimary(true)}>
-                      Log a trade →
-                    </button>
-                  </div>
+                  <EmptyTradesState C={C} onLog={() => navigateTo("log")} onSync={() => { setHomeSection("sync"); primaryNav("home"); }} />
                 ) : (
                   // Filters active, nothing matches
                   <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: "13px", fontFamily: BODY, fontStyle: "italic" }}>
@@ -3468,7 +3492,7 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                   <ConfluenceTracker
                     checkItems={checkItems} checkedCount={checkedCount} totalItems={totalItems}
                     isChecked={isChecked} activeStrategy={activeStrategy} C={C}
-                    stratThresholds={stratThresholds} saveStratThresholds={saveStratThresholds}
+                    stratThresholds={stratThresholds as any} saveStratThresholds={saveStratThresholds as any}
                     inp={inp} pillGhost={pillGhost}
                   />
                   <div style={{ borderRadius: "22px", overflow: "hidden", border: `1px solid ${C.border}`, background: C.panel }}>
@@ -3556,35 +3580,6 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
                 </div>
               )}
             </div>
-          )}
-
-          {/* ══════════════════════════ PROFILE ══════════════════════════ */}
-          {view === "profile" && (
-            <ProfileView
-              profile={profile}
-              myCode={getMyCode()}
-              followers={followers}
-              following={following}
-              friendCodes={friendCodes}
-              myCircles={myCircles}
-              followUser={followUser}
-              unfollowUser={unfollowUser}
-              wins={wins}
-              losses={losses}
-              total={total}
-              winRate={winRate}
-              totalPnL={totalPnL}
-              pnlPos={pnlPos}
-              avgRR={avgRR}
-              streak={streak}
-              showToast={showToast}
-              C={C}
-              pillGhost={pillGhost}
-              pillPrimary={pillPrimary}
-              setView={setView}
-              setActiveCircle={setActiveCircle}
-              setCirclesView={setCirclesView}
-            />
           )}
 
           {/* ══════════════════════════ IMPORT ══════════════════════════ */}
@@ -3966,7 +3961,89 @@ export default function Tradr({ user, jwtPlan }: { user?: User; jwtPlan?: "free"
           <LotSizeCalculator C={C} onClose={() => setShowCalc(false)} />
         )}
         {toast && <Toast message={toast} onDone={() => setToast(null)} C={C} />}
+        {celebration && (
+          <CelebrationOverlay
+            C={C}
+            kind={celebration.kind}
+            streakCount={celebration.streakCount}
+            tradeStats={celebration.tradeStats}
+            onDismiss={dismissCelebration}
+            onViewTrade={celebration.kind === "trade" ? () => { dismissCelebration(); navigateTo("history"); } : undefined}
+          />
+        )}
+        {!isOnline && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <ErrorOfflineState C={C} onRetry={() => setIsOnline(navigator.onLine)} />
+          </div>
+        )}
         <ToastStack toasts={toastsV2} onDismiss={dismissToast} C={C} />
+
+        {/* ── Circle Share Picker ── */}
+        {tradeToShare && (
+          <div
+            onClick={() => { setTradeToShare(null); setSharingToCircle(null); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: 420, background: C.panel, borderRadius: "16px 16px 0 0", padding: "20px 16px 32px", border: `1px solid ${C.border2}`, borderBottom: "none" }}
+            >
+              <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Share Trade</div>
+              <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: "0.04em" }}>
+                {tradeToShare.pair} · {(tradeToShare.direction || "").toUpperCase()} · {tradeToShare.date}
+              </div>
+              <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Select Circle</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+                {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).map((circle: Circle) => {
+                  const selected = sharingToCircle === circle.code;
+                  return (
+                    <div
+                      key={circle.code}
+                      onClick={() => setSharingToCircle(selected ? null : circle.code)}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", background: selected ? `${C.text}08` : C.panel, border: `1px solid ${selected ? C.border2 : C.border}`, borderRadius: 9, cursor: "pointer" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 15 }}>{circle.emoji || "◆"}</span>
+                        <div>
+                          <div style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.text }}>{circle.name}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>{circle.members?.length ?? 0} members</div>
+                        </div>
+                      </div>
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: selected ? C.text : "transparent", border: `1px solid ${selected ? C.text : C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {selected && <span style={{ fontSize: 9, color: C.bg }}>✓</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).length === 0 && (
+                  <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted, textAlign: "center", padding: "16px 0" }}>You haven't joined any circles yet.</div>
+                )}
+              </div>
+              <button
+                disabled={!sharingToCircle}
+                onClick={async () => {
+                  if (!sharingToCircle || !tradeToShare) return;
+                  const circleCode = sharingToCircle;
+                  setTradeToShare(null);
+                  setSharingToCircle(null);
+                  const result = await shareTrade(
+                    circleCode,
+                    { name: profile.name, handle: profile.handle, avatar: profile.avatar, code: getMyCode() },
+                    tradeToShare
+                  );
+                  if (result === "ok") showToast("Shared to circle!");
+                  else if (result === "duplicate") showToast("Already shared to this circle");
+                  else showToast("Failed to share");
+                }}
+                style={{ width: "100%", padding: "13px", background: C.text, border: "none", borderRadius: 10, color: C.bg, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: MONO, opacity: sharingToCircle ? 1 : 0.4 }}
+              >
+                {sharingToCircle
+                  ? `Share to ${myCircles.find((c: Circle) => c.code === sharingToCircle)?.name ?? "circle"}`
+                  : "Select a circle"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4118,75 +4195,6 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
         </div>
       )}
 
-      {/* ── Circle Share Picker ── */}
-      {tradeToShare && (
-        <div
-          onClick={() => { setTradeToShare(null); setSharingToCircle(null); }}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ width: "100%", maxWidth: 420, background: C.panel, borderRadius: "16px 16px 0 0", padding: "20px 16px 32px", border: `1px solid ${C.border2}`, borderBottom: "none" }}
-          >
-            <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Share Trade</div>
-            <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: "0.04em" }}>
-              {tradeToShare.pair} · {(tradeToShare.direction || "").toUpperCase()} · {tradeToShare.date}
-            </div>
-
-            <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Select Circle</div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
-              {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).map((circle: Circle) => {
-                const selected = sharingToCircle === circle.code;
-                return (
-                  <div
-                    key={circle.code}
-                    onClick={() => setSharingToCircle(selected ? null : circle.code)}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", background: selected ? `${C.text}08` : C.panel, border: `1px solid ${selected ? C.border2 : C.border}`, borderRadius: 9, cursor: "pointer" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 15 }}>{circle.emoji || "◆"}</span>
-                      <div>
-                        <div style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.text }}>{circle.name}</div>
-                        <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>{circle.members?.length ?? 0} members</div>
-                      </div>
-                    </div>
-                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: selected ? C.text : "transparent", border: `1px solid ${selected ? C.text : C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {selected && <span style={{ fontSize: 9, color: C.bg }}>✓</span>}
-                    </div>
-                  </div>
-                );
-              })}
-              {myCircles.filter((c: Circle) => c.code !== KODA_GLOBAL_CODE).length === 0 && (
-                <div style={{ fontFamily: BODY, fontSize: 13, color: C.muted, textAlign: "center", padding: "16px 0" }}>You haven't joined any circles yet.</div>
-              )}
-            </div>
-
-            <button
-              disabled={!sharingToCircle}
-              onClick={async () => {
-                if (!sharingToCircle || !tradeToShare) return;
-                const circleCode = sharingToCircle;
-                setTradeToShare(null);
-                setSharingToCircle(null);
-                const result = await shareTrade(
-                  circleCode,
-                  { name: profile.name, handle: profile.handle, avatar: profile.avatar, code: getMyCode() },
-                  tradeToShare
-                );
-                if (result === "ok") showToast("Shared to circle!");
-                else if (result === "duplicate") showToast("Already shared to this circle");
-                else showToast("Failed to share");
-              }}
-              style={{ width: "100%", padding: "13px", background: C.text, border: "none", borderRadius: 10, color: C.bg, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: MONO, opacity: sharingToCircle ? 1 : 0.4 }}
-            >
-              {sharingToCircle
-                ? `Share to ${myCircles.find((c: Circle) => c.code === sharingToCircle)?.name ?? "circle"}`
-                : "Select a circle"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

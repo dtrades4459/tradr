@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Stripe Customer Portal
+// Kōda · Stripe Customer Portal
 //
 // POST { stripeCustomerId }
 // → Verifies the caller's Supabase JWT (Authorization: Bearer <token>)
@@ -86,7 +86,7 @@ export default async function handler(req: any, res: any) {
       .from("user_kv")
       .select("value")
       .eq("user_id", authedUser.id)
-      .eq("key", "tradr_stripe_customer")
+      .eq("key", "koda_stripe_customer")
       .maybeSingle();
 
     let storedCustomerId = "";

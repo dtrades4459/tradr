@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Circles — Design Mockup v2</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0A0A0B;color:#EDEDE8;font-family:'Inter',system-ui,sans-serif;min-height:100vh;}
+  :root{
+    --bg:#0A0A0B;--panel:#111113;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.11);
+    --text:#EDEDE8;--text2:#8A8A86;--muted:#555552;--dim:#2E2E2C;
+    --pos:#4ade80;--neg:#f87171;
+    --accent:#7C6EFF;
+  }
+  .mono{font-family:'ui-monospace','Geist Mono',monospace;}
+  .app{max-width:390px;margin:0 auto;padding:0 0 80px;}
+
+  /* Page nav (mockup only) */
+  .page-nav{display:flex;gap:6px;padding:16px 16px 0;flex-wrap:wrap;}
+  .page-btn{padding:5px 13px;border-radius:999px;font-size:11px;font-weight:600;font-family:ui-monospace,monospace;letter-spacing:0.05em;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);}
+  .page-btn.active{background:var(--text);color:var(--bg);border-color:var(--text);}
+  .page-label{padding:6px 16px 0;font-size:9px;font-weight:700;letter-spacing:0.14em;color:var(--muted);font-family:ui-monospace,monospace;text-transform:uppercase;text-align:center;}
+
+  /* Circle header */
+  .circle-header{padding:18px 16px 0;}
+  .circle-meta{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .circle-emoji{width:38px;height:38px;border-radius:10px;background:var(--dim);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .circle-name{font-size:16px;font-weight:600;letter-spacing:-0.01em;}
+  .circle-sub{font-size:10px;color:var(--muted);margin-top:2px;font-family:ui-monospace,monospace;letter-spacing:0.05em;}
+
+  /* Challenge strip — just a thin row, no gradient */
+  .challenge-strip{margin:0 16px 12px;display:flex;align-items:center;justify-content:space-between;border-left:2px solid var(--accent);padding:6px 10px;background:rgba(255,255,255,0.025);border-radius:0 6px 6px 0;}
+  .challenge-strip-label{font-size:12px;font-weight:600;color:var(--text);}
+  .challenge-strip-sub{font-size:10px;color:var(--text2);font-family:ui-monospace,monospace;letter-spacing:0.04em;margin-top:1px;}
+  .challenge-timer{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);letter-spacing:0.05em;}
+
+  /* Tabs */
+  .tabs{display:flex;padding:0 16px;border-bottom:1px solid var(--border);overflow-x:auto;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{padding:9px 10px;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;font-family:ui-monospace,monospace;color:var(--muted);cursor:pointer;border-bottom:1.5px solid transparent;white-space:nowrap;transition:color 0.15s;}
+  .tab.active{color:var(--text);border-bottom-color:var(--text);}
+
+  /* Feed */
+  .feed{padding:10px 16px;display:flex;flex-direction:column;gap:8px;}
+
+  /* Trade card — left border carries outcome, not badge */
+  .trade-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .trade-card.win{border-left:2px solid var(--pos);}
+  .trade-card.loss{border-left:2px solid var(--neg);}
+  .trade-card-header{padding:11px 13px 8px;display:flex;align-items:center;justify-content:space-between;}
+  .trade-author{display:flex;align-items:center;gap:8px;}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--dim);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);}
+  .author-name{font-size:12px;font-weight:600;}
+  .author-time{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.03em;}
+  /* No colored outcome badge — outcome is implicit from border + P&L sign */
+  .trade-body{padding:0 13px 10px;display:flex;flex-direction:column;gap:7px;}
+  .trade-pair-row{display:flex;align-items:baseline;gap:7px;}
+  .trade-pair{font-size:15px;font-weight:700;letter-spacing:-0.01em;}
+  .trade-side{font-size:10px;color:var(--text2);font-family:ui-monospace,monospace;letter-spacing:0.06em;}
+  .trade-metrics{display:flex;gap:16px;}
+  .metric{display:flex;flex-direction:column;gap:1px;}
+  .metric-label{font-size:9px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.1em;text-transform:uppercase;}
+  .metric-val{font-size:13px;font-weight:700;font-family:ui-monospace,monospace;}
+  .metric-val.pos{color:var(--pos);}
+  .metric-val.neg{color:var(--neg);}
+  .metric-val.dim{color:var(--text2);font-size:12px;}
+  .trade-meta-row{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.04em;}
+  .trade-notes{font-size:12px;color:var(--text2);line-height:1.55;}
+  .trade-screenshot{width:100%;border-radius:7px;background:var(--dim);height:100px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px;font-family:ui-monospace,monospace;letter-spacing:0.06em;}
+  /* Reactions — no pill borders, just emoji + count */
+  .trade-reactions{padding:6px 13px 10px;display:flex;gap:10px;border-top:1px solid var(--border);}
+  .reaction{display:flex;align-items:center;gap:3px;font-size:13px;cursor:pointer;opacity:0.6;transition:opacity 0.15s;}
+  .reaction.active{opacity:1;}
+  .reaction-count{font-size:10px;color:var(--text2);font-family:ui-monospace,monospace;}
+
+  /* Chat message */
+  .chat-msg{display:flex;gap:9px;padding:5px 0;}
+  .chat-avatar{width:24px;height:24px;border-radius:50%;background:var(--dim);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text2);flex-shrink:0;margin-top:2px;}
+  .chat-body{flex:1;}
+  .chat-header{display:flex;align-items:baseline;gap:7px;margin-bottom:2px;}
+  .chat-name{font-size:11px;font-weight:600;}
+  .chat-time{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;}
+  .chat-text{font-size:12px;color:var(--text2);line-height:1.5;}
+
+  /* Event pill — very subtle */
+  .event-pill{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.04em;text-align:center;padding:4px 0;}
+
+  /* Leaderboard */
+  .lb-list{padding:10px 16px;display:flex;flex-direction:column;gap:4px;}
+  .lb-row{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--panel);border:1px solid var(--border);border-radius:9px;}
+  .lb-rank{font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);width:20px;text-align:center;flex-shrink:0;}
+  .lb-avatar{width:28px;height:28px;border-radius:50%;background:var(--dim);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2);flex-shrink:0;}
+  .lb-info{flex:1;min-width:0;}
+  .lb-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lb-handle{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;}
+  .lb-val{font-family:ui-monospace,monospace;font-size:13px;font-weight:700;}
+  .lb-val.pos{color:var(--pos);}
+  .lb-val.neg{color:var(--neg);}
+  .lb-row.me{border-color:var(--border2);background:rgba(255,255,255,0.025);}
+
+  /* Trophy shelf */
+  .trophy-list{padding:4px 16px;display:flex;flex-direction:column;gap:6px;}
+  /* Award card — horizontal, gold top-border accent, clean */
+  .award-card{background:var(--panel);border:1px solid var(--border);border-top:1.5px solid #A88C50;border-radius:10px;padding:13px 15px;display:flex;align-items:center;gap:14px;}
+  .award-rank{font-family:ui-monospace,monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#A88C50;writing-mode:vertical-lr;transform:rotate(180deg);flex-shrink:0;text-transform:uppercase;}
+  .award-divider{width:1px;height:36px;background:var(--border2);flex-shrink:0;}
+  .award-body{flex:1;min-width:0;}
+  .award-winner{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .award-val{font-size:13px;font-weight:700;font-family:ui-monospace,monospace;color:var(--text2);margin-top:1px;}
+  .award-meta{display:flex;align-items:center;gap:8px;margin-top:5px;}
+  .award-title{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .award-date{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;flex-shrink:0;}
+  /* Active challenge card */
+  .award-card.active-challenge{border-color:var(--border2);border-top-color:var(--text2);}
+  .award-card.active-challenge .award-rank{color:var(--text2);}
+
+  /* Start challenge row */
+  .start-challenge-row{margin:0 16px 10px;display:flex;align-items:center;justify-content:space-between;padding:10px 13px;background:var(--panel);border:1px solid var(--border);border-radius:9px;cursor:pointer;}
+  .scr-label{font-size:12px;font-weight:600;color:var(--text);}
+  .scr-sub{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;margin-top:1px;}
+  .scr-arrow{color:var(--muted);font-size:14px;}
+
+  /* Section label */
+  .section-label{padding:10px 16px 4px;font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--muted);font-family:ui-monospace,monospace;text-transform:uppercase;}
+
+  /* Toggle */
+  .toggle-row{display:flex;gap:5px;padding:10px 16px 4px;}
+  .toggle-btn{flex:1;padding:6px;border-radius:7px;font-size:10px;font-weight:700;letter-spacing:0.07em;font-family:ui-monospace,monospace;text-transform:uppercase;text-align:center;cursor:pointer;border:1px solid var(--border);}
+  .toggle-btn.on{background:var(--text);color:var(--bg);border-color:var(--text);}
+  .toggle-btn.off{background:transparent;color:var(--muted);}
+  .section-note{padding:8px 16px;font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.04em;text-align:center;}
+
+  /* Compose bar */
+  .compose{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:390px;padding:10px 16px 22px;background:linear-gradient(to top,var(--bg) 65%,transparent);display:flex;align-items:center;gap:7px;}
+  .compose-input{flex:1;background:var(--panel);border:1px solid var(--border2);border-radius:999px;padding:9px 15px;font-size:12px;color:var(--text);outline:none;font-family:inherit;}
+  .compose-input::placeholder{color:var(--muted);}
+  .compose-btn{width:36px;height:36px;border-radius:50%;background:var(--text);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+  .compose-share{width:36px;height:36px;border-radius:50%;background:transparent;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+
+  /* Share page */
+  .circle-option{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:var(--panel);border:1px solid var(--border);border-radius:9px;cursor:pointer;}
+  .circle-option.selected{border-color:var(--border2);background:rgba(255,255,255,0.04);}
+  .circle-check{width:16px;height:16px;border-radius:50%;border:1px solid var(--border2);flex-shrink:0;}
+  .circle-check.checked{background:var(--text);border-color:var(--text);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Page nav (mockup switcher) -->
+  <div style="padding:14px 16px 0;text-align:center;">
+    <div style="font-size:9px;color:var(--muted);font-family:ui-monospace,monospace;letter-spacing:0.1em;margin-bottom:10px;">CIRCLES IMPROVEMENTS — MOCKUP v2</div>
+  </div>
+  <div class="page-nav">
+    <button class="page-btn active" onclick="showPage('feed',this)">Feed</button>
+    <button class="page-btn" onclick="showPage('leaderboard',this)">Leaderboard</button>
+    <button class="page-btn" onclick="showPage('trophies',this)">Trophies</button>
+    <button class="page-btn" onclick="showPage('share',this)">Share Trade</button>
+  </div>
+
+  <!-- Circle header -->
+  <div class="circle-header">
+    <div class="circle-meta">
+      <div class="circle-emoji">◆</div>
+      <div>
+        <div class="circle-name">London Kills</div>
+        <div class="circle-sub mono">ICT · 6 MEMBERS · PRIVATE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Challenge strip (thin, not a banner) -->
+  <div class="challenge-strip">
+    <div>
+      <div class="challenge-strip-label">Best R This Week</div>
+      <div class="challenge-strip-sub mono">R-MULTIPLE · CHALLENGE</div>
+    </div>
+    <div class="challenge-timer">4d 12h</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs">
+    <div class="tab active" onclick="switchTab('feed',this)">Feed</div>
+    <div class="tab" onclick="switchTab('leaderboard',this)">Leaderboard</div>
+    <div class="tab" onclick="switchTab('chat',this)">Chat</div>
+    <div class="tab" onclick="switchTab('members',this)">Members</div>
+    <div class="tab" onclick="switchTab('trophies',this)">Trophies</div>
+  </div>
+
+  <!-- ═══ FEED ═══ -->
+  <div id="page-feed">
+    <div class="feed">
+
+      <div class="event-pill">challenge started · Best R This Week</div>
+
+      <!-- Trade card — WIN (left border is green, no badge) -->
+      <div class="trade-card win">
+        <div class="trade-card-header">
+          <div class="trade-author">
+            <div class="avatar">D</div>
+            <div>
+              <div class="author-name">@dylon</div>
+              <div class="author-time mono">2h ago</div>
+            </div>
+          </div>
+        </div>
+        <div class="trade-body">
+          <div class="trade-pair-row">
+            <div class="trade-pair">NQ</div>
+            <div class="trade-side">LONG · May 23</div>
+          </div>
+          <div class="trade-metrics">
+            <div class="metric">
+              <div class="metric-label">P&amp;L</div>
+              <div class="metric-val pos">+$420</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">R</div>
+              <div class="metric-val pos">+2.8R</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Strategy</div>
+              <div class="metric-val dim">OB Retest</div>
+            </div>
+          </div>
+          <div class="trade-notes">Perfect OB retest at 09:32 NY. Held through pullback, scaled out at first draw on liq. Should've held runners but took the 2.8R.</div>
+          <div class="trade-screenshot">[ screenshot ]</div>
+        </div>
+        <div class="trade-reactions">
+          <div class="reaction active">🔥 <span class="reaction-count">3</span></div>
+          <div class="reaction">💎 <span class="reaction-count">1</span></div>
+          <div class="reaction">🎯 <span class="reaction-count">2</span></div>
+          <div class="reaction">👍</div>
+          <div class="reaction">💀</div>
+          <div class="reaction">🤯</div>
+        </div>
+      </div>
+
+      <!-- Chat message -->
+      <div class="chat-msg">
+        <div class="chat-avatar">B</div>
+        <div class="chat-body">
+          <div class="chat-header">
+            <span class="chat-name">@bruno</span>
+            <span class="chat-time mono">1h ago</span>
+          </div>
+          <div class="chat-text">That OB entry was clean bro. I got stopped out same setup 😭</div>
+        </div>
+      </div>
+
+      <!-- Trade card — LOSS (left border is red) -->
+      <div class="trade-card loss">
+        <div class="trade-card-header">
+          <div class="trade-author">
+            <div class="avatar">B</div>
+            <div>
+              <div class="author-name">@bruno</div>
+              <div class="author-time mono">45m ago</div>
+            </div>
+          </div>
+        </div>
+        <div class="trade-body">
+          <div class="trade-pair-row">
+            <div class="trade-pair">ES</div>
+            <div class="trade-side">SHORT · May 23</div>
+          </div>
+          <div class="trade-metrics">
+            <div class="metric">
+              <div class="metric-label">P&amp;L</div>
+              <div class="metric-val neg">-$150</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">R</div>
+              <div class="metric-val neg">-1R</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Strategy</div>
+              <div class="metric-val dim">FVG Fill</div>
+            </div>
+          </div>
+          <div class="trade-notes">FVG fill at 4452. Stop ran by 2 ticks then continued down. Need wider stops here.</div>
+        </div>
+        <div class="trade-reactions">
+          <div class="reaction active">💀 <span class="reaction-count">2</span></div>
+          <div class="reaction">🤯 <span class="reaction-count">1</span></div>
+          <div class="reaction">🔥</div>
+          <div class="reaction">💎</div>
+          <div class="reaction">🎯</div>
+          <div class="reaction">👍</div>
+        </div>
+      </div>
+
+      <div class="event-pill">@kai joined the circle</div>
+
+      <div style="height:70px;"></div>
+    </div>
+
+    <!-- Compose bar -->
+    <div class="compose">
+      <button class="compose-share" title="Share a trade" onclick="showPage('share',null)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M10 2h4v4M14 2l-6 6M7 4H4a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-3" stroke="#8A8A86" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <input class="compose-input" placeholder="Message the circle…"/>
+      <button class="compose-btn">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M2 8h12M8 2l6 6-6 6" stroke="#0A0A0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ LEADERBOARD ═══ -->
+  <div id="page-leaderboard" style="display:none;">
+    <div class="toggle-row">
+      <div class="toggle-btn on">All Time</div>
+      <div class="toggle-btn off">This Week</div>
+      <div class="toggle-btn off">Challenge</div>
+    </div>
+    <div class="lb-list">
+      <div class="lb-row me">
+        <div class="lb-rank">01</div>
+        <div class="lb-avatar">D</div>
+        <div class="lb-info">
+          <div class="lb-name">@dylon</div>
+          <div class="lb-handle mono">14 trades</div>
+        </div>
+        <div class="lb-val pos">+8.4R</div>
+      </div>
+      <div class="lb-row">
+        <div class="lb-rank">02</div>
+        <div class="lb-avatar">B</div>
+        <div class="lb-info">
+          <div class="lb-name">@bruno</div>
+          <div class="lb-handle mono">11 trades</div>
+        </div>
+        <div class="lb-val pos">+4.2R</div>
+      </div>
+      <div class="lb-row">
+        <div class="lb-rank">03</div>
+        <div class="lb-avatar">K</div>
+        <div class="lb-info">
+          <div class="lb-name">@kai</div>
+          <div class="lb-handle mono">8 trades</div>
+        </div>
+        <div class="lb-val pos">+2.1R</div>
+      </div>
+      <div class="lb-row">
+        <div class="lb-rank">04</div>
+        <div class="lb-avatar">M</div>
+        <div class="lb-info">
+          <div class="lb-name">@marcus</div>
+          <div class="lb-handle mono">6 trades</div>
+        </div>
+        <div class="lb-val neg">-0.8R</div>
+      </div>
+    </div>
+    <div class="section-note">R-MULTIPLE · CHALLENGE: BEST R THIS WEEK</div>
+  </div>
+
+  <!-- ═══ TROPHIES ═══ -->
+  <div id="page-trophies" style="display:none;">
+    <div style="height:10px;"></div>
+
+    <!-- Start challenge (plain row, not accented) -->
+    <div class="start-challenge-row">
+      <div>
+        <div class="scr-label">Start New Challenge</div>
+        <div class="scr-sub mono">PRO · OWNER ONLY</div>
+      </div>
+      <div class="scr-arrow">→</div>
+    </div>
+
+    <div class="section-label">Active</div>
+    <div class="trophy-list">
+      <div class="award-card active-challenge">
+        <div class="award-rank">Live</div>
+        <div class="award-divider"></div>
+        <div class="award-body">
+          <div class="award-winner" style="color:var(--text2);">Best R This Week</div>
+          <div class="award-val" style="color:var(--muted);font-size:11px;">In progress</div>
+          <div class="award-meta">
+            <div class="award-title">R-MULTIPLE</div>
+            <div class="award-date">4d 12h left</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Past Challenges</div>
+    <div class="trophy-list">
+      <div class="award-card">
+        <div class="award-rank">1st</div>
+        <div class="award-divider"></div>
+        <div class="award-body">
+          <div class="award-winner">@dylon</div>
+          <div class="award-val">22 trades</div>
+          <div class="award-meta">
+            <div class="award-title">Most Trades · May Week 2</div>
+            <div class="award-date">May 12</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="award-card">
+        <div class="award-rank">1st</div>
+        <div class="award-divider"></div>
+        <div class="award-body">
+          <div class="award-winner">@bruno</div>
+          <div class="award-val">74% win rate</div>
+          <div class="award-meta">
+            <div class="award-title">Best Win Rate · April</div>
+            <div class="award-date">Apr 30</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="award-card">
+        <div class="award-rank">1st</div>
+        <div class="award-divider"></div>
+        <div class="award-body">
+          <div class="award-winner">@kai</div>
+          <div class="award-val">+$3,240</div>
+          <div class="award-meta">
+            <div class="award-title">Biggest Month · April</div>
+            <div class="award-date">Apr 1</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="height:20px;"></div>
+  </div>
+
+  <!-- ═══ SHARE TRADE ═══ -->
+  <div id="page-share" style="display:none;">
+    <div style="padding:14px 16px;">
+
+      <!-- Trade preview -->
+      <div class="trade-card win" style="margin-bottom:14px;">
+        <div class="trade-card-header">
+          <div class="trade-pair-row" style="gap:8px;">
+            <div class="trade-pair">NQ</div>
+            <div class="trade-side">LONG · May 23</div>
+          </div>
+        </div>
+        <div class="trade-body" style="padding-top:0;">
+          <div class="trade-metrics">
+            <div class="metric"><div class="metric-label">P&amp;L</div><div class="metric-val pos">+$420</div></div>
+            <div class="metric"><div class="metric-label">R</div><div class="metric-val pos">+2.8R</div></div>
+            <div class="metric"><div class="metric-label">Strategy</div><div class="metric-val dim">OB Retest</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Circle picker -->
+      <div class="section-label" style="padding:0 0 8px;">Select Circle</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
+        <div class="circle-option selected">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:15px;">◆</span>
+            <div>
+              <div style="font-size:12px;font-weight:600;">London Kills</div>
+              <div style="font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;">6 members</div>
+            </div>
+          </div>
+          <div class="circle-check checked">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 8l2.5 2.5L12 5" stroke="#0A0A0B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+        <div class="circle-option">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:15px;">◈</span>
+            <div>
+              <div style="font-size:12px;font-weight:600;">Kōda Global</div>
+              <div style="font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;">Community</div>
+            </div>
+          </div>
+          <div class="circle-check"></div>
+        </div>
+      </div>
+
+      <button style="width:100%;padding:13px;background:var(--text);border:none;border-radius:10px;color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.01em;">Share to London Kills</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    ['feed','leaderboard','trophies','share'].forEach(p => {
+      const pg = document.getElementById('page-' + p);
+      if (pg) pg.style.display = 'none';
+    });
+    const target = document.getElementById('page-' + name);
+    if (target) target.style.display = '';
+    const compose = document.querySelector('.compose');
+    if (compose) compose.style.display = name === 'feed' ? 'flex' : 'none';
+  }
+
+  function showPage(name, btn) {
+    document.querySelectorAll('.page-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    ['feed','leaderboard','trophies','share'].forEach(p => {
+      const pg = document.getElementById('page-' + p);
+      if (pg) pg.style.display = 'none';
+    });
+    const target = document.getElementById('page-' + name);
+    if (target) target.style.display = '';
+    const tabMap = {feed:0, leaderboard:1, trophies:4};
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    const idx = tabMap[name];
+    if (idx !== undefined && tabs[idx]) tabs[idx].classList.add('active');
+    const compose = document.querySelector('.compose');
+    if (compose) compose.style.display = name === 'feed' ? 'flex' : 'none';
+  }
+</script>
+</body>
+</html>

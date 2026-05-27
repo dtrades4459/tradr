@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · stats.ts
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · stats.ts
 //
 // Pure calculation functions for trade statistics.
 // No React, no side-effects — safe to unit-test in isolation.

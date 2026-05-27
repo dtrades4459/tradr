@@ -10,7 +10,7 @@ npx tsc --noEmit || exit 1
 # We only look at added lines (+) and only match JS/TS comment syntax
 # (// or /* prefix) so shell-script comments in this file don't trigger.
 
-STAGED_ADDITIONS=$(git diff --cached --unified=0 | grep "^+" | grep -v "^+++" || true)
+STAGED_ADDITIONS=$(git diff --cached --unified=0 -- '*.ts' '*.tsx' | grep "^+" | grep -v "^+++" || true)
 
 FAILED=0
 

@@ -1,7 +1,7 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · bootstrap loader (v2)
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · bootstrap loader (v2)
 //
-// Single parallel load for the screens TRADR.tsx renders. Replaces the chain
+// Single parallel load for the screens Koda.tsx renders. Replaces the chain
 // of try/catch reads in loadAll(). Each resource has its own error path and
 // fallback so one failure does not blank the whole UI.
 //

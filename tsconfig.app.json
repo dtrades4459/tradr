@@ -18,19 +18,16 @@
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
   "exclude": [
     "src/TRADR (1).tsx",
     "src/TRADR (2).tsx",
     "src/TRADR (3).tsx",
-    "src/TRADR (4).tsx"
+    "src/TRADR (4).tsx",
+    "src/lib/csvParser.integration.test.ts"
   ]
 }

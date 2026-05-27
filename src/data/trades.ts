@@ -1,10 +1,10 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · trades data layer (v2)
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · trades data layer (v2)
 //
-// One row per trade against public.trades. Replaces the JSON-blob "tradr_trades"
+// One row per trade against public.trades. Replaces the JSON-blob "koda_trades"
 // stored in user_kv. Hand-rolled validation — no zod dep needed.
 //
-// THIS FILE IS NOT WIRED INTO TRADR.tsx YET. It's safe to ship — nothing
+// THIS FILE IS NOT WIRED INTO Koda.tsx YET. It's safe to ship — nothing
 // imports it. When ready, swap saveTrades/loadAll over behind a feature flag
 // (see src/lib/flags.ts).
 // ═══════════════════════════════════════════════════════════════════════════════

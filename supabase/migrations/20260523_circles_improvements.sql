@@ -14,13 +14,17 @@ CREATE TABLE IF NOT EXISTS public.circle_messages (
 );
 
 ALTER TABLE public.circle_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.circle_messages ADD COLUMN IF NOT EXISTS sender_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 
+DROP POLICY IF EXISTS "circle_messages_select" ON public.circle_messages;
 CREATE POLICY "circle_messages_select" ON public.circle_messages
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "circle_messages_insert" ON public.circle_messages;
 CREATE POLICY "circle_messages_insert" ON public.circle_messages
   FOR INSERT TO authenticated WITH CHECK (sender_id = auth.uid());
 
+DROP POLICY IF EXISTS "circle_messages_delete" ON public.circle_messages;
 CREATE POLICY "circle_messages_delete" ON public.circle_messages
   FOR DELETE TO authenticated USING (sender_id = auth.uid());
 
@@ -44,9 +48,11 @@ CREATE TABLE IF NOT EXISTS public.circle_challenges (
 
 ALTER TABLE public.circle_challenges ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "circle_challenges_select" ON public.circle_challenges;
 CREATE POLICY "circle_challenges_select" ON public.circle_challenges
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "circle_challenges_insert" ON public.circle_challenges;
 CREATE POLICY "circle_challenges_insert" ON public.circle_challenges
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -76,6 +82,7 @@ CREATE TABLE IF NOT EXISTS public.circle_challenge_results (
 
 ALTER TABLE public.circle_challenge_results ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "circle_challenge_results_select" ON public.circle_challenge_results;
 CREATE POLICY "circle_challenge_results_select" ON public.circle_challenge_results
   FOR SELECT TO authenticated USING (true);
 
@@ -109,9 +116,11 @@ CREATE TABLE IF NOT EXISTS public.circle_shared_trades (
 
 ALTER TABLE public.circle_shared_trades ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "circle_shared_trades_select" ON public.circle_shared_trades;
 CREATE POLICY "circle_shared_trades_select" ON public.circle_shared_trades
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "circle_shared_trades_insert" ON public.circle_shared_trades;
 CREATE POLICY "circle_shared_trades_insert" ON public.circle_shared_trades
   FOR INSERT TO authenticated WITH CHECK (true);
 
@@ -121,6 +130,7 @@ CREATE POLICY "circle_shared_trades_insert" ON public.circle_shared_trades
 -- policy is intentional for v1 — the data layer (reactToSharedTrade) enforces
 -- that only the reactions field is ever written, and a full-row author-only update
 -- guard will require adding an author_uid uuid column in a future migration.
+DROP POLICY IF EXISTS "circle_shared_trades_update" ON public.circle_shared_trades;
 CREATE POLICY "circle_shared_trades_update" ON public.circle_shared_trades
   FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 

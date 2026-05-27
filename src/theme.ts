@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// theme.ts — TRADR design system
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// theme.ts — Kōda design system
 //
 // OKLCH-based palette, Geist type scale, glass surfaces.
 // Import DARK / LIGHT for the colour token set.

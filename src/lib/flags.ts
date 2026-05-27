@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · feature flags
+// Kōda · feature flags
 //
 // Tiny flag system backed by localStorage. Lets you ship dark-launched code
 // to production and turn it on per-device without redeploying.
 //
 // Toggle a flag from the browser console:
-//   window.tradrFlags.enableFlag("newTrades"); location.reload();
-//   window.tradrFlags.disableFlag("newProfile"); location.reload();
+//   window.kodaFlags.enableFlag("newTrades"); location.reload();
+//   window.kodaFlags.disableFlag("newProfile"); location.reload();
 //
 // Read a flag in code:
 //   import { isFlagOn } from "./lib/flags";
@@ -16,13 +16,13 @@
 // week with no issues, delete the flag and the old code path in the same PR.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "tradr_flags";
-const STORAGE_KEY_OFF = "tradr_flags_off";
+const STORAGE_KEY = "koda_flags";
+const STORAGE_KEY_OFF = "koda_flags_off";
 
 // Flags that are ON by default for all users.
 // Add a flag here once you've validated it on your own account.
 // To turn one off for debugging:
-//   window.tradrFlags.disableFlag("newProfile"); location.reload();
+//   window.kodaFlags.disableFlag("newProfile"); location.reload();
 const DEFAULT_ON: ReadonlySet<string> = new Set([
   "newProfile",  // dual-write + read from public.profiles (v2 schema)
   "newTrades",   // dual-write to public.trades (KV remains the read source for 2 weeks)
@@ -89,5 +89,5 @@ function persistOff(s: Set<string>): void {
 // Expose on window so you can flip flags from devtools — dev/localhost only.
 // In production builds Vite dead-code-eliminates this entire block.
 if (import.meta.env.DEV && typeof window !== "undefined") {
-  (window as any).tradrFlags = { isFlagOn, enableFlag, disableFlag, listFlags };
+  (window as any).kodaFlags = { isFlagOn, enableFlag, disableFlag, listFlags };
 }

@@ -1,7 +1,7 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · SettingsScreen
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · SettingsScreen
 //
-// Extracted from TRADR.tsx — Settings tab (homeSection === "settings").
+// Extracted from Koda.tsx — Settings tab (homeSection === "settings").
 // All state lives in the parent Tradr component and is passed down as props.
 // No behavior changes — this is a pure structural extraction.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -143,7 +143,9 @@ export function SettingsScreen({
       </div>
 
       {/* ── Account section ── */}
-      <div style={{ padding: "0 4px 8px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Account</div>
+      <div style={{ marginBottom: 8 }}>
+        <Kicker C={C as any}>Account</Kicker>
+      </div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         {/* Edit profile row */}
         <div onClick={() => { setProfileDraft({ ...profile }); setEditingProfile(!editingProfile); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
@@ -217,7 +219,9 @@ export function SettingsScreen({
       </div>
 
       {/* ── Subscription section ── */}
-      <div style={{ padding: "16px 4px 8px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" as const }}>Subscription</div>
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <Kicker C={C as any}>Subscription</Kicker>
+      </div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
           <div>
@@ -265,7 +269,9 @@ export function SettingsScreen({
       </div>
 
       {/* ── Text size ── */}
-      <div style={{ margin: "16px 0 4px", padding: "0 4px 8px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Text Size</div>
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <Kicker C={C as any}>Text Size</Kicker>
+      </div>
       <div style={{ borderRadius: "16px", background: C.panel, border: `1px solid ${C.border}`, padding: "14px 16px", marginBottom: "4px" }}>
         <div style={{ display: "flex", gap: "8px" }}>
           {([["S", 0.85], ["M", 1.0], ["L", 1.15], ["XL", 1.3]] as [string, number][]).map(([label, scale]) => (
@@ -275,7 +281,9 @@ export function SettingsScreen({
       </div>
 
       {/* ── Privacy & Data ── */}
-      <div style={{ margin: "16px 0 8px", padding: "0 4px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Privacy & Data</div>
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <Kicker C={C as any}>Privacy & Data</Kicker>
+      </div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         {/* Public trades toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}` }}>
@@ -350,6 +358,33 @@ export function SettingsScreen({
           )}
         </div>
 
+        {/* Push notifications */}
+        {("serviceWorker" in navigator && "PushManager" in window) && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.border}` }}>
+            <div>
+              <div style={{ fontFamily: BODY, fontSize: 14, color: C.text }}>Push notifications</div>
+              <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em", marginTop: 2 }}>New circle activity, AI insights</div>
+            </div>
+            <button
+              onClick={async () => {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) return;
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+                });
+                await fetch("/api/push/subscribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+                  body: JSON.stringify(sub.toJSON()),
+                });
+                showToast("Push notifications enabled");
+              }}
+              style={{ padding: "8px 14px", borderRadius: 999, background: C.live, color: "#0A0A0A", border: "none", fontFamily: MONO, fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}
+            >Enable</button>
+          </div>
+        )}
         {/* Export CSV */}
         <div onClick={() => { if (isFlagOn("paywall") && profile.plan !== "pro" && profile.plan !== "elite") { setShowUpgrade(true); return; } exportCSV(); }} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -382,7 +417,9 @@ export function SettingsScreen({
       </div>
 
       {/* ── Support ── */}
-      <div style={{ margin: "16px 0 8px", padding: "0 4px", fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>Support</div>
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <Kicker C={C as any}>Support</Kicker>
+      </div>
       <div style={{ borderRadius: "22px", background: C.panel, border: `1px solid ${C.border}`, overflow: "hidden", marginBottom: "4px" }}>
         <div onClick={() => setFeedbackOpen(true)} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

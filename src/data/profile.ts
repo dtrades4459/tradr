@@ -1,10 +1,10 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · profile data layer (v2)
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · profile data layer (v2)
 //
-// One row per user against public.profiles. Replaces tradr_profile in user_kv
-// AND tradr_profile_pub_<handle> in shared_kv (split across is_public flag).
+// One row per user against public.profiles. Replaces koda_profile in user_kv
+// AND koda_profile_pub_<handle> in shared_kv (split across is_public flag).
 //
-// NOT WIRED INTO TRADR.tsx YET. Safe to ship.
+// NOT WIRED INTO Koda.tsx YET. Safe to ship.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from "../lib/supabase";

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · api/lib/rateLimit.ts
+// Kōda · api/lib/rateLimit.ts
 //
 // Supabase-backed IP rate limiter — survives Vercel cold starts because state
 // lives in shared_kv, not in memory.
@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createHash } from "crypto";
-import { getAdminClient } from "./supabaseAdmin";
+import { getAdminClient } from "./supabaseAdmin.js";
 
 /** Stable 16-char hex derived from the IP via SHA-256 — avoids storing raw IPs in the DB. */
 export function hashIp(ip: string): string {
@@ -33,9 +33,10 @@ export async function checkRateLimit(
 ): Promise<boolean> {
   const { limit = 5, windowMs = 60_000 } = options;
   const admin = getAdminClient();
-  const key = `tradr_rl_${action}_${hashIp(ip)}`;
+  const key = `koda_rl_${action}_${hashIp(ip)}`;
 
-  const { data, error } = await admin.rpc("check_and_increment_rate_limit", {
+  type RpcCall = (fn: string, args: Record<string, unknown>) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+  const { data, error } = await (admin.rpc as unknown as RpcCall)("check_and_increment_rate_limit", {
     p_key: key,
     p_limit: limit,
     p_window_ms: windowMs,

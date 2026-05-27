@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Circles data layer
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · Circles data layer
 //
 // Circles are the USP. This module is the single funnel for every circle
 // read/write, so the per-row ownership pattern is enforced by the API surface
@@ -7,9 +7,9 @@
 // that broke Jason's updates against Dylon's circle row.
 //
 // Row layout in shared_kv:
-//   tradr_circle_<CODE>                        — metadata, owned by creator
-//   tradr_circle_member_<CODE>_<memberCode>    — membership, owned by each member
-//   tradr_circle_entry_<CODE>_<memberCode>     — leaderboard stats, owned by each member
+//   koda_circle_<CODE>                        — metadata, owned by creator
+//   koda_circle_member_<CODE>_<memberCode>    — membership, owned by each member
+//   koda_circle_entry_<CODE>_<memberCode>     — leaderboard stats, owned by each member
 //
 // Every write goes through a row whose owner_id = auth.uid(), so RLS
 // `auth.uid() = owner_id` always holds. Members enumerate via listByPrefix.
@@ -64,12 +64,12 @@ export interface LeaderboardEntry {
 // ── Key helpers (single source of truth for row naming) ─────────────────────
 
 export const circleKeys = {
-  meta: (code: string) => `tradr_circle_${code}`,
-  memberPrefix: (code: string) => `tradr_circle_member_${code}_`,
-  member: (code: string, memberCode: string) => `tradr_circle_member_${code}_${memberCode}`,
-  entryPrefix: (code: string) => `tradr_circle_entry_${code}_`,
-  entry: (code: string, memberCode: string) => `tradr_circle_entry_${code}_${memberCode}`,
-  myCirclesCache: () => `tradr_circles`,
+  meta: (code: string) => `koda_circle_${code}`,
+  memberPrefix: (code: string) => `koda_circle_member_${code}_`,
+  member: (code: string, memberCode: string) => `koda_circle_member_${code}_${memberCode}`,
+  entryPrefix: (code: string) => `koda_circle_entry_${code}_`,
+  entry: (code: string, memberCode: string) => `koda_circle_entry_${code}_${memberCode}`,
+  myCirclesCache: () => `koda_circles`,
 };
 
 
@@ -207,7 +207,7 @@ export async function publishLeaderboardEntry(input: {
 
 // ── Realtime ────────────────────────────────────────────────────────────────
 // Subscribe to shared_kv changes for a specific circle. Fires on any INSERT
-// /UPDATE/DELETE whose key starts with tradr_circle_<CODE> — that covers
+// /UPDATE/DELETE whose key starts with koda_circle_<CODE> — that covers
 // meta, member rows, and leaderboard entries. The caller supplies a refresh
 // callback; this module stays dumb about React state.
 
@@ -227,7 +227,7 @@ export function subscribeToCircle(code: string, onChange: (c: CircleChange) => v
         const row = (payload.new || payload.old) as { key?: string } | undefined;
         const key = row?.key;
         if (!key) return;
-        if (!key.startsWith(`tradr_circle_`)) return;
+        if (!key.startsWith(`koda_circle_`)) return;
         // Only fire if the row belongs to THIS circle.
         const belongs =
           key === circleKeys.meta(code) ||

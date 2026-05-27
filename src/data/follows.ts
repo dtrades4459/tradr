@@ -1,14 +1,14 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · Follows data layer
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · Follows data layer
 //
 // One-way follow graph backing the friends/feed loop. Two rows per follow,
 // both owned by the follower so neither write touches a row owned by anyone
 // else. This was the fix for the RLS bug where the second follower's UPDATE
-// against a shared `tradr_followers_<target>` row was rejected.
+// against a shared `koda_followers_<target>` row was rejected.
 //
 // Row layout in shared_kv:
-//   tradr_follow_<follower>_<target>     — enumerates my "following"
-//   tradr_follower_<target>_<follower>   — enumerates target's "followers"
+//   koda_follow_<follower>_<target>     — enumerates my "following"
+//   koda_follower_<target>_<follower>   — enumerates target's "followers"
 //                                          (still owned by the follower)
 //
 // Friends = mutual follows (I follow them AND they follow me).
@@ -25,10 +25,10 @@ export interface FollowEdge {
 }
 
 export const followKeys = {
-  followPrefix: (follower: string) => `tradr_follow_${follower}_`,
-  follow: (follower: string, target: string) => `tradr_follow_${follower}_${target}`,
-  followerPrefix: (target: string) => `tradr_follower_${target}_`,
-  follower: (target: string, follower: string) => `tradr_follower_${target}_${follower}`,
+  followPrefix: (follower: string) => `koda_follow_${follower}_`,
+  follow: (follower: string, target: string) => `koda_follow_${follower}_${target}`,
+  followerPrefix: (target: string) => `koda_follower_${target}_`,
+  follower: (target: string, follower: string) => `koda_follower_${target}_${follower}`,
 };
 
 
@@ -68,12 +68,12 @@ export async function readFollowGraph(myCode: string): Promise<FollowGraph> {
   }
 }
 
-// One-shot migration. Reads any legacy `tradr_following_<myCode>` row,
+// One-shot migration. Reads any legacy `koda_following_<myCode>` row,
 // materializes each entry as a per-row edge (both sides, owned by us), and
 // drops the legacy row. Safe because the legacy row is owned by us.
 export async function migrateLegacyFollows(myCode: string): Promise<void> {
   try {
-    const legacyFg = await storage.get(`tradr_following_${myCode}`, true);
+    const legacyFg = await storage.get(`koda_following_${myCode}`, true);
     if (!legacyFg) return;
     const legacy: string[] = (() => {
       try { return JSON.parse(legacyFg.value) || []; }
@@ -87,7 +87,7 @@ export async function migrateLegacyFollows(myCode: string): Promise<void> {
       try { await storage.set(followKeys.follower(target, myCode), JSON.stringify(edge), true); }
       catch (e) { log.error("follows.migrateLegacyFollows.follower", e, { target }); }
     }));
-    try { await storage.del(`tradr_following_${myCode}`, true); }
+    try { await storage.del(`koda_following_${myCode}`, true); }
     catch (e) { log.error("follows.migrateLegacyFollows.delete", e); }
   } catch (e) {
     log.error("follows.migrateLegacyFollows", e, { myCode });

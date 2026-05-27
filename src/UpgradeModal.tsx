@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { supabase } from "./lib/supabase";
-
-const MONO = "'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace";
-const BODY = "'Geist', 'Inter', system-ui, sans-serif";
-const DISPLAY = "'Geist', 'Inter', system-ui, sans-serif";
+import { MONO, BODY, DISPLAY } from "./shared";
 
 export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustomerId, onClose, mandatory = false }: {
   C: Record<string, string>;
@@ -67,12 +64,15 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
       <div style={{
         position: "relative",
         width: "100%", maxWidth: "380px",
-        background: C.panel ?? "#131317",
+        background: (C as any).surfaceGlass ?? C.panel ?? "#131317",
         border: `1px solid ${C.border2 ?? "rgba(255,255,255,0.13)"}`,
         borderRadius: "24px",
         padding: "28px 24px 24px",
         display: "flex", flexDirection: "column", gap: "20px",
         overflow: "hidden",
+        backdropFilter: "blur(28px) saturate(180%)",
+        WebkitBackdropFilter: "blur(28px) saturate(180%)",
+        animation: "kRise 0.42s ease-out",
       }}>
         {/* Iridescent corner glow — top-left */}
         <div style={{
@@ -81,6 +81,14 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
           background: `conic-gradient(from 200deg at 50% 50%, ${orb3}, ${orb1}, ${orb2}, ${orb3})`,
           filter: "blur(40px)", opacity: 0.5, zIndex: 0,
         }}/>
+
+        {/* Centered orb bloom behind badge */}
+        <div style={{
+          position: "absolute", top: 40, left: "50%", transform: "translateX(-50%)",
+          width: 300, height: 300, borderRadius: "50%",
+          background: `conic-gradient(from 180deg, ${orb1}, ${(C as any).live ?? "oklch(0.84 0.14 175)"}, ${orb3}, ${orb1})`,
+          filter: "blur(80px)", opacity: 0.35, pointerEvents: "none",
+        }} />
 
         {/* Ghost "PRO" word */}
         <div style={{

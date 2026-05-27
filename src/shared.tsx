@@ -1,15 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import type { StrategyDef } from "./types";
 import type { Theme } from "./theme";
 
-// ─── FONT STACKS (duplicated from TRADR.tsx for standalone use) ──────────────
+// ─── FONT STACKS (duplicated from Koda.tsx for standalone use) ──────────────
 export const MONO = "'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace";
 export const BODY = "'Geist', 'Inter', system-ui, sans-serif";
 export const DISPLAY = "'Geist', 'Inter', system-ui, sans-serif";
 
 // ─── STRATEGY CODE HELPERS ───────────────────────────────────────────────────
 // Module-level mutable full strategies map (built-ins + custom).
-// TRADR.tsx calls setSharedStrategiesMap(getAllStrategiesMap()) whenever strategies
+// Koda.tsx calls setSharedStrategiesMap(getAllStrategiesMap()) whenever strategies
 // change (on load and after saveCustomStrategies). This keeps stratCode in sync.
 let _sharedStrategiesMap: Record<string, StrategyDef> = {};
 export function setSharedStrategiesMap(map: Record<string, StrategyDef>) {
@@ -52,7 +52,7 @@ export function outcomeLetter(outcome: string) {
 }
 
 // ─── TR MARK ─────────────────────────────────────────────────────────────────
-export function TradrMark({ size = 28, color = "currentColor", strokeWidth = 1.6 }: {
+export function KodaMark({ size = 28, color = "currentColor", strokeWidth = 1.6 }: {
   size?: number; color?: string; strokeWidth?: number;
 }) {
   const w = size;
@@ -67,8 +67,8 @@ export function TradrMark({ size = 28, color = "currentColor", strokeWidth = 1.6
   );
 }
 
-/** @deprecated Use TradrMark instead — kept for backward compat */
-export function TrMark({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
+/** @deprecated Use KodaMark instead — kept for backward compat */
+export function KodaMarkFilled({ size = 28, bg = "#0C0C0B" }: { size?: number; bg?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
       <rect width="100" height="100" rx="18" fill={bg}/>
@@ -649,7 +649,7 @@ export function ScreenHeader({ C, right }: {
       padding: "8px 22px 6px", position: "relative", zIndex: 2,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <TradrMark size={22} color={C.text} />
+        <KodaMark size={22} color={C.text} />
         <span style={{
           fontFamily: DISPLAY, fontWeight: 600, fontSize: 14,
           letterSpacing: "0.22em", color: C.text,
@@ -688,6 +688,227 @@ export function IconButton({ C, icon, onClick }: {
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
         <path d={ICON_PATHS[icon] || ""} stroke={C.text} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
+    </div>
+  );
+}
+
+// ── Skeleton bar ─────────────────────────────────────────────────────────────
+export function SkeletonBar({ w = "100%", h = 14, C }: { w?: string | number; h?: number; C: Theme }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: 6,
+      background: `linear-gradient(90deg, ${C.panel} 0%, ${C.border2} 50%, ${C.panel} 100%)`,
+      backgroundSize: "600px 100%",
+      animation: "kShimmer 1.4s linear infinite",
+    }} />
+  );
+}
+
+// ── Empty: no trades ─────────────────────────────────────────────────────────
+export function EmptyTradesState({ C, onLog, onSync }: { C: Theme; onLog: () => void; onSync: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "60px 24px 40px" }}>
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" style={{ opacity: 0.7 }}>
+        <rect x="14" y="14" width="52" height="62" rx="6" stroke={C.border2} strokeWidth="1.4"/>
+        <path d="M22 28h36M22 38h36M22 48h28M22 58h22" stroke={C.border2} strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 4"/>
+        <circle cx="62" cy="20" r="10" fill={C.live} opacity="0.18"/>
+        <path d="M58 20l3 3 5-6" stroke={C.live} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      </svg>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>Your journal awaits.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          Log a trade to start seeing your win rate, average R, and edge patterns.
+        </div>
+      </div>
+      <button onClick={onLog} style={{
+        marginTop: 4, padding: "13px 28px", borderRadius: 999,
+        background: C.text, color: C.bg, border: "none",
+        fontFamily: MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase" as const, fontWeight: 600, cursor: "pointer",
+      }}>Log first trade</button>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.12em", marginTop: 4 }}>
+        OR <span onClick={onSync} style={{ color: C.live, cursor: "pointer" }}>connect Tradovate</span> · <span onClick={onSync} style={{ color: C.accent, cursor: "pointer" }}>import CSV</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty: no circles ────────────────────────────────────────────────────────
+export function EmptyCirclesState({ C, onDiscover, onJoin }: { C: Theme; onDiscover: () => void; onJoin: () => void }) {
+  const colors = [C.accent, C.live, C.green];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "60px 24px 40px" }}>
+      <div style={{ position: "relative", width: 110, height: 90 }}>
+        {colors.map((c, i) => (
+          <div key={i} style={{
+            position: "absolute", width: 56, height: 56, borderRadius: "50%",
+            border: `1.5px solid ${C.border2}`,
+            left: i * 24, top: i % 2 === 0 ? 0 : 28,
+            background: `radial-gradient(circle, color-mix(in oklch, ${c} 19%, transparent) 0%, transparent 70%)`,
+          }} />
+        ))}
+      </div>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text }}>Don't trade alone.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 270, lineHeight: 1.6 }}>
+          Join the Kōda Global circle, find a niche group, or create your own with friends.
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button onClick={onDiscover} style={{ padding: "11px 18px", borderRadius: 999, background: C.live, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Discover</button>
+        <button onClick={onJoin} style={{ padding: "11px 18px", borderRadius: 999, background: "transparent", color: C.text, border: `1px solid ${C.border2}`, fontFamily: MONO, fontSize: 11, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Join by code</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty: inbox zero ────────────────────────────────────────────────────────
+export function EmptyInboxState({ C }: { C: Theme }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "80px 24px 40px" }}>
+      <div style={{ width: 76, height: 76, borderRadius: "50%", background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border2}` }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M4 12h6l2 4 2-8 2 4h4" stroke={C.live} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text }}>All clear.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          New circle activity, follower pings, and Kōda AI insights will land here.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Error: offline ────────────────────────────────────────────────────────────
+export function ErrorOfflineState({ C, onRetry }: { C: Theme; onRetry: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "80px 24px 40px" }}>
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+        <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" stroke={C.red} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.text }}>You're offline.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          Your trades are safe locally. Kōda will sync when the connection returns.
+        </div>
+      </div>
+      <button onClick={onRetry} style={{ padding: "11px 22px", borderRadius: 999, background: C.panel, color: C.text, border: `1px solid ${C.border2}`, fontFamily: MONO, fontSize: 11, letterSpacing: "0.10em", textTransform: "uppercase" as const, cursor: "pointer" }}>Retry</button>
+    </div>
+  );
+}
+
+// ── Error: sync failed ────────────────────────────────────────────────────────
+export function ErrorSyncFailedState({ C, broker, onRetry }: { C: Theme; broker: string; onRetry: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "20px 0" }}>
+      <div style={{ padding: "16px 18px", borderRadius: 14, background: `color-mix(in oklch, ${C.red} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 25%, transparent)`, display: "flex", alignItems: "center", gap: 12 }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={C.red} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <div>
+          <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.08em", color: C.red, textTransform: "uppercase" as const }}>Sync error · {broker}</div>
+          <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}>Last attempt failed. Check your connection or re-authenticate.</div>
+        </div>
+        <button onClick={onRetry} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 999, background: "transparent", border: `1px solid color-mix(in oklch, ${C.red} 38%, transparent)`, color: C.red, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", flexShrink: 0 }}>Retry</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Celebration overlays ─────────────────────────────────────────────────────
+type CelebrationKind = "trade" | "streak" | "pro";
+
+interface CelebrationProps {
+  C: Theme;
+  kind: CelebrationKind;
+  streakCount?: number;
+  tradeStats?: { winRate: number; avgR: number; streak: number };
+  onDismiss: () => void;
+  onViewTrade?: () => void;
+}
+
+export function CelebrationOverlay({ C, kind, streakCount, tradeStats, onDismiss, onViewTrade }: CelebrationProps) {
+  const live = C.live;
+  const orb1 = (C as any).orb1 ?? C.accent;
+  const orb3 = (C as any).orb3 ?? C.green;
+  const confettiColors = [live, C.accent, C.green, orb1, orb3];
+
+  useEffect(() => {
+    if (kind === "trade") {
+      const t = setTimeout(onDismiss, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [kind, onDismiss]);
+
+  return (
+    <div
+      onClick={kind === "streak" ? undefined : onDismiss}
+      style={{
+        position: "fixed", inset: 0, zIndex: 8000,
+        background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "kFadeIn 0.25s ease-out",
+      }}
+    >
+      {kind === "trade" && (
+        <div style={{ position: "relative", width: "min(360px, 92vw)", padding: "36px 24px 28px", borderRadius: 24, background: C.panel, border: `1px solid ${C.border2}`, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14, animation: "kRise 0.42s ease-out" }} onClick={e => e.stopPropagation()}>
+          {/* confetti burst */}
+          <div style={{ position: "absolute", top: 120, left: "50%", width: 1, height: 1, pointerEvents: "none" }}>
+            {Array.from({ length: 20 }).map((_, i) => {
+              const angle = (i / 20) * 360;
+              return <span key={i} style={{ position: "absolute", top: 0, left: 0, width: 6, height: 11, borderRadius: 1, background: confettiColors[i % confettiColors.length], transform: `translate(-50%,-50%) rotate(${angle}deg)`, animation: `kConfettiA 2s ${i * 0.05}s ease-out forwards` }} />;
+            })}
+          </div>
+          {/* checkmark ring */}
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: `color-mix(in oklch, ${live} 13%, transparent)`, border: `1.5px solid ${live}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12.5l4 4L19 7" stroke={live} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="30" style={{ animation: "kTick 0.7s ease-out forwards" }} />
+            </svg>
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.text, letterSpacing: "-0.02em" }}>Trade logged.</div>
+          {tradeStats && (
+            <div style={{ width: "100%", padding: "14px 16px", borderRadius: 14, background: C.bg, border: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {[
+                { l: "Win rate", v: `${tradeStats.winRate}%` },
+                { l: "Avg R", v: tradeStats.avgR > 0 ? `+${tradeStats.avgR.toFixed(1)}` : tradeStats.avgR.toFixed(1) },
+                { l: "Streak", v: tradeStats.streak > 0 ? `${tradeStats.streak}W` : "—" },
+              ].map(s => (
+                <div key={s.l} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.14em", color: C.muted, textTransform: "uppercase" as const }}>{s.l}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.text, marginTop: 4 }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {onViewTrade && (
+            <button onClick={onViewTrade} style={{ padding: "11px 24px", borderRadius: 999, background: C.text, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" as const, cursor: "pointer" }}>View trade →</button>
+          )}
+        </div>
+      )}
+
+      {kind === "streak" && (
+        <div style={{ width: "min(360px, 92vw)", padding: "36px 24px 28px", borderRadius: 24, background: C.panel, border: `1px solid ${C.border2}`, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 12, animation: "kRise 0.42s ease-out" }} onClick={e => e.stopPropagation()}>
+          <div style={{ color: live, animation: "kStreakGlow 1.6s ease-in-out infinite" }}>
+            <svg width="72" height="72" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1.5 4 6 5 6 10a6 6 0 0 1-12 0c0-3 2-4 2-7 2 1 3 3 4 4 0-3 0-5 0-7z"/></svg>
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 72, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1, background: `linear-gradient(180deg, ${C.text}, ${live})`, WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent" }}>{streakCount}</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, color: C.text, fontStyle: "italic" }}>green days in a row.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={onDismiss} style={{ padding: "11px 20px", borderRadius: 999, background: live, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Keep going</button>
+          </div>
+        </div>
+      )}
+
+      {kind === "pro" && (
+        <div style={{ width: "min(380px, 92vw)", padding: "36px 24px 28px", borderRadius: 24, background: C.panel, border: `1px solid ${C.border2}`, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14, position: "relative", overflow: "hidden", animation: "kRise 0.42s ease-out" }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: "absolute", top: 60, left: "50%", transform: "translateX(-50%)", width: 320, height: 320, borderRadius: "50%", background: `conic-gradient(from 180deg, ${orb1}, ${orb3}, ${live}, ${orb1})`, filter: "blur(80px)", opacity: 0.35, pointerEvents: "none" }} />
+          <div style={{ position: "relative", padding: "12px 28px", borderRadius: 999, background: `linear-gradient(135deg, ${live}, ${C.accent})`, color: C.bg, overflow: "hidden", fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: "0.16em" }}>
+            PRO
+            <div style={{ position: "absolute", top: 0, left: 0, width: "40%", height: "100%", background: "rgba(255,255,255,0.45)", animation: "kSheen 2.8s linear infinite" }} />
+          </div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: C.text, letterSpacing: "-0.02em", position: "relative" }}>You're in.</div>
+          <div style={{ fontSize: 13, color: C.text2, maxWidth: 270, lineHeight: 1.5, position: "relative" }}>Auto-import, unlimited circles, prop firm tracker, and Kōda AI are now active.</div>
+          <button onClick={onDismiss} style={{ marginTop: 8, padding: "12px 28px", borderRadius: 999, background: C.text, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" as const, cursor: "pointer", position: "relative" }}>Start trading →</button>
+        </div>
+      )}
     </div>
   );
 }

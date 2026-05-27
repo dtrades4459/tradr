@@ -1,10 +1,10 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · DataSourcesScreen
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · DataSourcesScreen
 //
 // "Sync" tab — manage broker connections (Tradovate live sync) and CSV imports.
 //
 // Props surface:
-//   C              — colour palette from TRADR.tsx
+//   C              — colour palette from Koda.tsx
 //   supabase       — Supabase browser client (reads broker_connections + sync_events via RLS)
 //   userId         — authenticated user ID
 //   accessToken    — Supabase JWT (passed to /api/broker/connect + /api/cron/sync)
@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from "react";
-import { MONO, BODY } from "./shared";
+import { Kicker, MONO, BODY, DISPLAY } from "./shared";
 import { CsvImportPanel } from "./CsvImportPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -94,21 +94,6 @@ function _StatusDot({ status }: { status: string }) {
   );
 }
 
-function SectionHeader({ children, C }: { children: React.ReactNode; C: Record<string, string> }) {
-  return (
-    <div style={{
-      fontSize: 11,
-      fontFamily: MONO,
-      fontWeight: 600,
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
-      color: C.muted ?? "#888",
-      marginBottom: 10,
-    }}>
-      {children}
-    </div>
-  );
-}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -308,7 +293,7 @@ export function DataSourcesScreen({
       {/* ── HEADER ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: C.text ?? "#e2e8f0" }}>Data Sources</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: C.text ?? "#e2e8f0" }}>Data Sources</div>
           <div style={{ fontSize: 13, color: C.muted ?? "#888", marginTop: 2 }}>
             Live sync and CSV imports
           </div>
@@ -322,19 +307,27 @@ export function DataSourcesScreen({
       </div>
 
       {/* ── LIVE CONNECTIONS — COMING SOON ── */}
-      <SectionHeader C={C}>Live Connections</SectionHeader>
+      <div style={{ marginBottom: 10 }}><Kicker C={C as any}>Live Connections</Kicker></div>
 
       <div style={{ position: "relative", marginBottom: 24 }}>
         {/* Blurred preview of what the section will look like */}
         <div style={{ filter: "blur(3px)", pointerEvents: "none", userSelect: "none", opacity: 0.45 }}>
-          <div style={{ ...card, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`,
+            background: C.panel ?? "#131317", padding: "16px 18px",
+            display: "flex", alignItems: "center", gap: 14, marginBottom: 10,
+          }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Tradovate — Live</div>
               <div style={{ fontSize: 12, color: C.muted ?? "#888", fontFamily: MONO, marginTop: 2 }}>Last sync: just now · 3 new trades</div>
             </div>
           </div>
-          <div style={{ ...card, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`,
+            background: C.panel ?? "#131317", padding: "16px 18px",
+            display: "flex", alignItems: "center", gap: 14, marginBottom: 10,
+          }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Rithmic — Demo</div>
@@ -356,7 +349,7 @@ export function DataSourcesScreen({
           <div style={{
             fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
             textTransform: "uppercase", color: C.accent ?? "#7c3aed",
-            background: `${C.accent ?? "#7c3aed"}18`, padding: "4px 10px", borderRadius: 6,
+            background: `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 12%, transparent)`, padding: "4px 10px", borderRadius: 6,
           }}>
             Coming Soon
           </div>
@@ -386,8 +379,8 @@ export function DataSourcesScreen({
       {/* Connect button hidden until live sync ships */}
 
       {/* ── CSV IMPORT ── */}
-      <SectionHeader C={C}>CSV Import</SectionHeader>
-      <div style={{ ...card, marginBottom: 24 }}>
+      <div style={{ marginBottom: 10 }}><Kicker C={C as any}>CSV Import</Kicker></div>
+      <div style={{ borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`, background: C.panel ?? "#131317", padding: "16px 18px", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontWeight: 600, color: C.text ?? "#e2e8f0", fontSize: 15 }}>Manual CSV Import</div>
@@ -425,7 +418,7 @@ export function DataSourcesScreen({
 
       {/* ── SYNC AUDIT LOG ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <SectionHeader C={C}>Sync Audit Log</SectionHeader>
+        <div style={{ marginBottom: 0 }}><Kicker C={C as any}>Sync Audit Log</Kicker></div>
         <button
           style={{ ...btn("ghost"), fontSize: 11, padding: "4px 10px", fontFamily: MONO }}
           onClick={() => setAuditExpanded(v => !v)}

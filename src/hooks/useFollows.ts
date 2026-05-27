@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// useFollows — follow-graph state + sync for TRADR
+// useFollows — follow-graph state + sync for Kōda
 //
 // Owns:  following[], followers[], followerProfiles[]
 //        followUser(), unfollowUser()
@@ -7,8 +7,8 @@
 //
 // Data source: per-row shared_kv edges (two rows per follow edge, both
 // owned by the follower so RLS never blocks a second writer).
-//   tradr_follow_<me>_<target>      — enumerates who I follow
-//   tradr_follower_<me>_<follower>  — enumerates who follows me
+//   koda_follow_<me>_<target>      — enumerates who I follow
+//   koda_follower_<me>_<follower>  — enumerates who follows me
 //
 // V2 (public.follows) migration is tracked behind the 'newFollows' flag.
 // That path is intentionally removed here to avoid a 3-source merge on
@@ -48,7 +48,7 @@ interface UseFollowsParams {
 // ── Hook ──────────────────────────────────────────────────────────────────────────────
 
 /** One-time legacy migration per browser — guarded by localStorage flag. */
-const MIGRATION_FLAG = "tradr_follows_migrated_v1";
+const MIGRATION_FLAG = "koda_follows_migrated_v1";
 
 export function useFollows({ loading, getMyCode, uid, showToast }: UseFollowsParams) {
   const [following, setFollowing]           = useState<string[]>([]);

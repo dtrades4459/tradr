@@ -1,5 +1,5 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRADR · BetaGate
+﻿// ═══════════════════════════════════════════════════════════════════════════════
+// Kōda · BetaGate
 //
 // Password-gated entry screen shown before sign-up/login during closed beta.
 // Set VITE_BETA_PASSWORD in Vercel env vars to enable the gate.
@@ -10,7 +10,7 @@
 import { useState } from "react";
 
 const BETA_PASSWORD = import.meta.env.VITE_BETA_PASSWORD as string | undefined;
-const STORAGE_KEY   = "tradr_beta_unlocked";
+const STORAGE_KEY   = "koda_beta_unlocked";
 
 export const betaEnabled = !!BETA_PASSWORD;
 
@@ -23,7 +23,7 @@ function unlock() {
   try { localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
 }
 
-// ── Palette — matches DARK theme in TRADR.tsx ─────────────────────────────────
+// ── Palette — matches DARK theme in Koda.tsx ─────────────────────────────────
 const BG      = "#0A0A0B";
 const PANEL   = "#131317";
 const BORDER  = "rgba(255,255,255,0.07)";
@@ -38,8 +38,8 @@ const RED     = "oklch(0.70 0.21 25)";
 const MONO    = "'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace";
 const BODY    = "'Geist', 'Inter', system-ui, sans-serif";
 
-// ── TRADR mark (square "tr" badge) ────────────────────────────────────────────
-function TrMark({ size = 28 }: { size?: number }) {
+// ── Kōda mark (square badge) ──────────────────────────────────────────────────
+function KodaMarkFilled({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
       <rect width="100" height="100" rx="20" fill={PANEL}/>
@@ -139,7 +139,7 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
 
         {/* Masthead */}
         <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 64 }}>
-          <TrMark size={28} />
+          <KodaMarkFilled size={28} />
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <span style={{
               fontFamily: BODY, fontSize: 16, fontWeight: 600,

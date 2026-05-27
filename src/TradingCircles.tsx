@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
-import { SectionKicker, StrategyPill, Toast, stratCode, TradrMark, MONO, BODY, DISPLAY } from "./shared";
+import { SectionKicker, StrategyPill, Toast, stratCode, KodaMark, MONO, BODY, DISPLAY, EmptyCirclesState, CornerGlow } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
 import { createChallenge, fetchActiveChallenge, fetchTrophies } from "./data/circlesChallenges";
 import { fetchSharedTrades, reactToSharedTrade, rowToSharedTrade } from "./data/circlesSharedTrades";
 import { SharedTradeCard } from "./components/SharedTradeCard";
-import type { CircleChallenge, ChallengeResult, FeedItem, CircleMessage } from "./types";
+import type { CircleChallenge, ChallengeResult, FeedItem, CircleMessage, CircleMember } from "./types";
 
 export function TradingCircles({ myCircles, circlesView, setCirclesView, activeCircle, setActiveCircle, circleForm, setCircleForm, circleJoinCode, setCircleJoinCode, circleMsg, setCircleMsg, createCircle, joinCircle, publishToCircle, fetchCircleLeaderboard, profile, getMyCode, showToast, wins, losses, total, winRate, totalPnL, pnlPos, weekPnL, weekPnLPos, weekPnLStr, avgRR, streak, STRATEGY_NAMES, C, inp, sel, lbl, pillPrimary, pillGhost, following, followUser, unfollowUser, kickMember, leaveCircle, openProfile, isJoiningCircle, isCreatingCircle, totalPnlDollar, hasDollarData }: any) {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -284,7 +284,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       if (document.visibilityState === "visible") refresh();
     }, 120_000);
     let unsub = () => {};
-    try { unsub = subscribeToCircle(activeCircle.code, () => { refresh(); }); } catch {}
+    // subscribeToCircle removed — real-time updates via setInterval + Supabase channels below
     const chatChannel = supabase
       .channel(`circle_chat_${activeCircle.code}`)
       .on("postgres_changes" as any, {
@@ -363,9 +363,9 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
 
   function shareInviteLink(circle: any) {
     const url = `https://tradrjournal.xyz/?join=${circle.code}`;
-    const msg = `Join my TRADR circle "${circle.name}" → ${url}`;
+    const msg = `Join my Kōda circle "${circle.name}" → ${url}`;
     if (navigator.share) {
-      navigator.share({ title: "Join my TRADR circle", text: msg, url }).catch(() => {});
+      navigator.share({ title: "Join my Kōda circle", text: msg, url }).catch(() => {});
     } else {
       navigator.clipboard?.writeText(url);
       showToast("Invite link copied");
@@ -420,7 +420,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                 </div>
                 {/* Avatar stack */}
                 <div style={{ display: "flex", marginTop: "18px", alignItems: "center", position: "relative", zIndex: 1 }}>
-                  {(circle.members || []).slice(0, 5).map((m, i) => (
+                  {(circle.members || []).slice(0, 5).map((m: CircleMember, i: number) => (
                     <div key={m.code || i} style={{ width: 34, height: 34, borderRadius: "999px", background: `linear-gradient(135deg, oklch(0.7 0.16 ${200 + i * 30}), oklch(0.5 0.18 ${280 + i * 20}))`, border: `2px solid ${C.bg}`, marginLeft: i === 0 ? 0 : -10, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: DISPLAY, fontWeight: 600, fontSize: "10px" }}>{(m.name || "?").slice(0, 2).toUpperCase()}</div>
                   ))}
                   {(circle.members?.length || 0) > 5 && (
@@ -432,19 +432,22 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
 
             {/* Other circles list */}
             {sortedCircles.length > 1 && (
-            <div style={{ marginTop: "12px", borderRadius: "22px", overflow: "hidden", isolation: "isolate", background: C.panel, border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
-              {sortedCircles.slice(1).map((circle, i, arr) => (
+            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px", position: "relative", zIndex: 2 }}>
+              {sortedCircles.slice(1).map((circle, i) => (
                 <div key={circle.id} className="row-hvr" onClick={() => openCircle(circle)}
-                  style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 14px", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "14px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <TradrMark size={16} color={C.accent} strokeWidth={2} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{circle.name}</div>
-                    <div style={{ fontSize: "11px", color: C.text2, marginTop: "2px", fontFamily: MONO }}>{circle.code} · {circle.members?.length || 1} members</div>
-                  </div>
-                  <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: C.text2 }}>
-                    {circle.isOwner ? "OWNER" : "›"}
+                  style={{ background: (C as any).surfaceGlass ?? C.panel, backdropFilter: "blur(20px) saturate(160%)", WebkitBackdropFilter: "blur(20px) saturate(160%)", border: `1px solid ${C.border2}`, borderRadius: 20, overflow: "hidden", position: "relative", padding: "18px 20px", cursor: "pointer", animation: `kRise 0.42s ease-out ${i * 0.06}s backwards` }}>
+                  <CornerGlow C={C} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", position: "relative", zIndex: 1 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "14px", background: (C as any).accentSoft ?? C.panel, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <KodaMark size={16} color={C.accent} strokeWidth={2} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{circle.name}</div>
+                      <div style={{ fontSize: "11px", color: C.text2, marginTop: "2px", fontFamily: MONO }}>{circle.code} · {circle.members?.length || 1} members</div>
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: "12px", fontWeight: 600, color: C.text2 }}>
+                      {circle.isOwner ? "OWNER" : "›"}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -459,21 +462,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             </div>
             </>
           ) : (
-            <section style={{ marginTop: "12px", padding: "48px 24px", background: C.panel, borderRadius: "22px", textAlign: "center", border: `1px solid ${C.border}`, position: "relative", zIndex: 2 }}>
-              <div style={{ fontFamily: MONO, fontSize: "32px", color: C.border2, marginBottom: "16px", letterSpacing: "-0.02em" }}>◆</div>
-              <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontStyle: "italic", fontWeight: 500, color: C.text2, letterSpacing: "-0.01em", marginBottom: "8px" }}>No circles yet.</div>
-              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, lineHeight: 1.6, marginBottom: "24px" }}>
-                Compete with friends, share trades, and build your edge together.
-              </div>
-              <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
-                <button onClick={() => setCirclesView("create")} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "10px 22px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  + Create circle
-                </button>
-                <button onClick={() => setCirclesView("join")} style={{ background: "transparent", color: C.text, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "10px 22px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  ⤵ Join with code
-                </button>
-              </div>
-            </section>
+            <EmptyCirclesState C={C} onDiscover={() => setCirclesView("create")} onJoin={() => setCirclesView("join")} />
           )}
         </>
       )}
@@ -582,7 +571,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             </div>
             <input value={circleJoinCode} onChange={e => setCircleJoinCode(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === "Enter" && joinCircle()}
-              placeholder="TRADR-ABCD-EFGH"
+              placeholder="KODA-ABCD-EFGH"
               style={{ ...inp, textAlign: "center", fontFamily: MONO, fontSize: "22px", letterSpacing: "0.14em", padding: "16px 0" }} />
             <button onClick={joinCircle} disabled={isJoiningCircle || !circleJoinCode.trim()} style={{ ...pillPrimary(!!circleJoinCode.trim() && !isJoiningCircle), marginTop: "20px" }}>
               {isJoiningCircle ? "Joining…" : "Join →"}
