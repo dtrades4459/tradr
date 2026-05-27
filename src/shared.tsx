@@ -692,6 +692,128 @@ export function IconButton({ C, icon, onClick }: {
   );
 }
 
+// ── Skeleton bar ─────────────────────────────────────────────────────────────
+export function SkeletonBar({ w = "100%", h = 14, C }: { w?: string | number; h?: number; C: Theme }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: 6,
+      background: `linear-gradient(90deg, ${C.panel} 0%, ${C.border2} 50%, ${C.panel} 100%)`,
+      backgroundSize: "600px 100%",
+      animation: "kShimmer 1.4s linear infinite",
+    }} />
+  );
+}
+
+// ── Empty: no trades ─────────────────────────────────────────────────────────
+export function EmptyTradesState({ C, onLog, onSync }: { C: Theme; onLog: () => void; onSync: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "60px 24px 40px" }}>
+      <svg width="80" height="80" viewBox="0 0 80 80" fill="none" style={{ opacity: 0.7 }}>
+        <rect x="14" y="14" width="52" height="62" rx="6" stroke={C.border2} strokeWidth="1.4"/>
+        <path d="M22 28h36M22 38h36M22 48h28M22 58h22" stroke={C.border2} strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 4"/>
+        <circle cx="62" cy="20" r="10" fill={C.live} opacity="0.18"/>
+        <path d="M58 20l3 3 5-6" stroke={C.live} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      </svg>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>Your journal awaits.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          Log a trade to start seeing your win rate, average R, and edge patterns.
+        </div>
+      </div>
+      <button onClick={onLog} style={{
+        marginTop: 4, padding: "13px 28px", borderRadius: 999,
+        background: C.text, color: C.bg, border: "none",
+        fontFamily: MONO, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase" as const, fontWeight: 600, cursor: "pointer",
+      }}>Log first trade</button>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.12em", marginTop: 4 }}>
+        OR <span onClick={onSync} style={{ color: C.live, cursor: "pointer" }}>connect Tradovate</span> · <span onClick={onSync} style={{ color: C.accent, cursor: "pointer" }}>import CSV</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty: no circles ────────────────────────────────────────────────────────
+export function EmptyCirclesState({ C, onDiscover, onJoin }: { C: Theme; onDiscover: () => void; onJoin: () => void }) {
+  const colors = [C.accent, C.live, C.green];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "60px 24px 40px" }}>
+      <div style={{ position: "relative", width: 110, height: 90 }}>
+        {colors.map((c, i) => (
+          <div key={i} style={{
+            position: "absolute", width: 56, height: 56, borderRadius: "50%",
+            border: `1.5px solid ${C.border2}`,
+            left: i * 24, top: i % 2 === 0 ? 0 : 28,
+            background: `radial-gradient(circle, ${c}30 0%, transparent 70%)`,
+          }} />
+        ))}
+      </div>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text }}>Don't trade alone.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 270, lineHeight: 1.6 }}>
+          Join the Kōda Global circle, find a niche group, or create your own with friends.
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button onClick={onDiscover} style={{ padding: "11px 18px", borderRadius: 999, background: C.live, color: "#0A0A0A", border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Discover</button>
+        <button onClick={onJoin} style={{ padding: "11px 18px", borderRadius: 999, background: "transparent", color: C.text, border: `1px solid ${C.border2}`, fontFamily: MONO, fontSize: 11, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Join by code</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty: inbox zero ────────────────────────────────────────────────────────
+export function EmptyInboxState({ C }: { C: Theme }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "80px 24px 40px" }}>
+      <div style={{ width: 76, height: 76, borderRadius: "50%", background: C.border, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border2}` }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M4 12h6l2 4 2-8 2 4h4" stroke={C.live} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.text }}>All clear.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          New circle activity, follower pings, and Kōda AI insights will land here.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Error: offline ────────────────────────────────────────────────────────────
+export function ErrorOfflineState({ C, onRetry }: { C: Theme; onRetry: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "80px 24px 40px" }}>
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+        <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" stroke={C.red} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.text }}>You're offline.</div>
+        <div style={{ fontSize: 13, color: C.text2, marginTop: 8, maxWidth: 260, lineHeight: 1.6 }}>
+          Your trades are safe locally. Kōda will sync when the connection returns.
+        </div>
+      </div>
+      <button onClick={onRetry} style={{ padding: "11px 22px", borderRadius: 999, background: C.panel, color: C.text, border: `1px solid ${C.border2}`, fontFamily: MONO, fontSize: 11, letterSpacing: "0.10em", textTransform: "uppercase" as const, cursor: "pointer" }}>Retry</button>
+    </div>
+  );
+}
+
+// ── Error: sync failed ────────────────────────────────────────────────────────
+export function ErrorSyncFailedState({ C, broker, onRetry }: { C: Theme; broker: string; onRetry: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "20px 0" }}>
+      <div style={{ padding: "16px 18px", borderRadius: 14, background: `${C.red}18`, border: `1px solid ${C.red}40`, display: "flex", alignItems: "center", gap: 12 }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={C.red} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <div>
+          <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.08em", color: C.red, textTransform: "uppercase" as const }}>Sync error · {broker}</div>
+          <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}>Last attempt failed. Check your connection or re-authenticate.</div>
+        </div>
+        <button onClick={onRetry} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 999, background: "transparent", border: `1px solid ${C.red}60`, color: C.red, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", flexShrink: 0 }}>Retry</button>
+      </div>
+    </div>
+  );
+}
+
 
 // ─── EMPTY STATE ────────────────────────────────────────────────────────────
 // Reusable branded empty state: icon, headline, body, optional CTA.
