@@ -90,7 +90,7 @@ type EvalStatus = "passing" | "at_risk" | "failed";
 
 function evalStatus(targetPct: number, ddPct: number, dailyPct: number): EvalStatus {
   if (ddPct >= 100 || dailyPct >= 100) return "failed";
-  if (ddPct > 75 || dailyPct > 75) return "at_risk";
+  if (ddPct >= 75 || dailyPct >= 75) return "at_risk";
   return "passing";
 }
 
@@ -256,7 +256,7 @@ export default function EvalAccountScreen({ profile, trades, C, onEditTargets }:
 
       {/* ── Rules checklist ── */}
       {(ddPct > 75 || dailyPct > 75) && (
-        <div style={{ background: `${C.red}18`, border: `1px solid ${C.red}40`, borderRadius: "16px", padding: "14px 16px" }}>
+        <div style={{ background: `color-mix(in oklch, ${C.red} 12%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 25%, transparent)`, borderRadius: "16px", padding: "14px 16px" }}>
           <div style={{ fontFamily: MONO, fontSize: "10px", fontWeight: 600, color: C.red, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>
             {dailyPct >= 100 ? "Daily loss limit hit — stop trading today" : ddPct >= 100 ? "Max drawdown hit — eval failed" : "Approaching a limit"}
           </div>
