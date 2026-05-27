@@ -1,9 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="18" fill="#0A0A0B"/>
-  <g fill="none" stroke="#EDEDE8" stroke-width="2.2" stroke-linejoin="miter">
-    <polygon points="10,23 37,50 10,77"/>
-    <polygon points="28,23 55,50 28,77"/>
-    <polygon points="46,23 73,50 46,77"/>
-    <polygon points="64,23 91,50 64,77"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+  <rect width="100" height="100" rx="22.5" fill="#0A0A0B"/>
+  <polyline points="12,14 24,50 12,86" stroke="#F2F2EE" stroke-width="3" stroke-linejoin="miter" fill="none"/>
+  <polyline points="29,14 41,50 29,86" stroke="#F2F2EE" stroke-width="3" stroke-linejoin="miter" fill="none"/>
+  <polyline points="46,14 58,50 46,86" stroke="#F2F2EE" stroke-width="3" stroke-linejoin="miter" fill="none"/>
+  <polyline points="63,14 75,50 63,86" stroke="#F2F2EE" stroke-width="3" stroke-linejoin="miter" fill="none"/>
 </svg>
