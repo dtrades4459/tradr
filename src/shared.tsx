@@ -743,7 +743,7 @@ export function EmptyCirclesState({ C, onDiscover, onJoin }: { C: Theme; onDisco
             position: "absolute", width: 56, height: 56, borderRadius: "50%",
             border: `1.5px solid ${C.border2}`,
             left: i * 24, top: i % 2 === 0 ? 0 : 28,
-            background: `radial-gradient(circle, ${c}30 0%, transparent 70%)`,
+            background: `radial-gradient(circle, color-mix(in oklch, ${c} 19%, transparent) 0%, transparent 70%)`,
           }} />
         ))}
       </div>
@@ -802,13 +802,13 @@ export function ErrorOfflineState({ C, onRetry }: { C: Theme; onRetry: () => voi
 export function ErrorSyncFailedState({ C, broker, onRetry }: { C: Theme; broker: string; onRetry: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "20px 0" }}>
-      <div style={{ padding: "16px 18px", borderRadius: 14, background: `${C.red}18`, border: `1px solid ${C.red}40`, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ padding: "16px 18px", borderRadius: 14, background: `color-mix(in oklch, ${C.red} 10%, transparent)`, border: `1px solid color-mix(in oklch, ${C.red} 25%, transparent)`, display: "flex", alignItems: "center", gap: 12 }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={C.red} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         <div>
           <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.08em", color: C.red, textTransform: "uppercase" as const }}>Sync error · {broker}</div>
           <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}>Last attempt failed. Check your connection or re-authenticate.</div>
         </div>
-        <button onClick={onRetry} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 999, background: "transparent", border: `1px solid ${C.red}60`, color: C.red, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", flexShrink: 0 }}>Retry</button>
+        <button onClick={onRetry} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 999, background: "transparent", border: `1px solid color-mix(in oklch, ${C.red} 38%, transparent)`, color: C.red, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", flexShrink: 0 }}>Retry</button>
       </div>
     </div>
   );
