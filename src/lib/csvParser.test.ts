@@ -254,9 +254,12 @@ describe("normalizeDate", () => {
     expect(normalizeDate("25/03/2024")).toBe("2024-03-25");
   });
 
-  it("returns a date string for empty input (today)", () => {
-    const result = normalizeDate("");
-    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  it("returns null for empty input", () => {
+    expect(normalizeDate("")).toBeNull();
+  });
+
+  it("returns null for unparseable input", () => {
+    expect(normalizeDate("not-a-date")).toBeNull();
   });
 });
 

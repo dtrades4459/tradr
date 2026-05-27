@@ -20,13 +20,13 @@ export function detectDelimiter(text: string): "," | "\t" {
 /**
  * Parse a CSV (or TSV) string into headers + rows.
  * Handles:
- *   - UTF-8 BOM (\uFEFF) at the start — Excel adds this
+ *   - UTF-8 BOM (U+FEFF) at the start — Excel adds this
  *   - Windows CRLF and Unix LF line endings
  *   - RFC 4180 quoted fields (embedded commas, escaped quotes)
  *   - Tab-separated files auto-detected by delimiter sniffing
  */
 export function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  // Strip UTF-8 BOM — Excel prepends \uFEFF to every CSV it exports
+  // Strip UTF-8 BOM (U+FEFF) — Excel prepends it to every CSV it exports
   const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
 
   const delimiter = detectDelimiter(clean);
@@ -137,8 +137,13 @@ export function parseNum(s: string): number {
   return parseFloat(n);
 }
 
-export function normalizeDate(s: string): string {
-  if (!s) return new Date().toISOString().split("T")[0];
+/**
+ * Parse a date string into YYYY-MM-DD.
+ * Returns null for empty input or strings that can't be parsed as a valid date.
+ * locale controls MM/DD vs DD/MM for ambiguous slash-delimited dates.
+ */
+export function normalizeDate(s: string, locale: "us" | "eu" = "us"): string | null {
+  if (!s) return null;
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const slash = s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})/);
@@ -146,16 +151,24 @@ export function normalizeDate(s: string): string {
     const [, a, b] = slash;
     let y = slash[3];
     if (y.length === 2) y = "20" + y;
-    const aN = parseInt(a), bN = parseInt(b);
-    const mm = aN > 12 ? bN : aN;
-    const dd = aN > 12 ? aN : bN;
+    const aN = parseInt(a, 10), bN = parseInt(b, 10);
+    let mm: number, dd: number;
+    if (aN > 12)      { mm = bN; dd = aN; }       // unambiguous: a must be day
+    else if (bN > 12) { mm = aN; dd = bN; }       // unambiguous: b must be day
+    else if (locale === "eu") { dd = aN; mm = bN; } // EU: DD/MM
+    else              { mm = aN; dd = bN; }        // US default: MM/DD
     return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
   }
   const d = new Date(s);
   if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
-  return new Date().toISOString().split("T")[0];
+  return null;
 }
 
+/**
+ * Derive the trading session (NY / London / Asia) from a datetime string.
+ * Handles UTC timestamps correctly by converting to Eastern Time using the
+ * Intl API so DST transitions (EDT -4 / EST -5) are applied accurately.
+ */
 export function detectSessionFromDateStr(raw: string): string {
   if (!raw) return "";
   const m = raw.match(/[T\s](\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(AM|PM))?(?:\s*([+-]\d{2}:?\d{2}|UTC|Z))?/i);
@@ -166,10 +179,47 @@ export function detectSessionFromDateStr(raw: string): string {
   const tz = (m[4] || "").toUpperCase();
   if (ampm === "PM" && hour !== 12) hour += 12;
   if (ampm === "AM" && hour === 12) hour = 0;
-  if (tz === "Z" || tz === "UTC" || tz === "+00:00") hour = (hour - 4 + 24) % 24;
+  if (tz === "Z" || tz === "UTC" || tz === "+00:00") {
+    // Convert UTC → Eastern Time via Intl so DST is respected
+    const dateMatch = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      const utcMs = Date.UTC(
+        parseInt(dateMatch[1], 10),
+        parseInt(dateMatch[2], 10) - 1,
+        parseInt(dateMatch[3], 10),
+        hour, min
+      );
+      const etHourStr = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York", hour: "numeric", hour12: false,
+      }).format(utcMs);
+      const etHour = parseInt(etHourStr, 10);
+      hour = etHour === 24 ? 0 : etHour;
+    } else {
+      // No date in string — fall back to fixed -4 (EDT)
+      hour = (hour - 4 + 24) % 24;
+    }
+  }
   const t = hour * 60 + min;
   if (t >= 570 && t < 960)  return "NY";
   if (t >= 180 && t < 510)  return "London";
   if (t >= 1200 || t < 120) return "Asia";
   return "";
+}
+
+/**
+ * Strip futures contract month+year suffix so NQZ4 → NQ, ESH25 → ES, etc.
+ * Month codes: F G H J K M N Q U V X Z
+ * Leaves forex pairs, stock tickers, and crypto symbols unchanged.
+ */
+export function normaliseSymbol(pair: string): string {
+  if (!pair) return pair;
+  const upper = pair.toUpperCase().trim();
+  const m = upper.match(/^([A-Z]{1,5})[FGHJKMNQUVXZ]\d{1,2}$/);
+  return m ? m[1] : upper;
+}
+
+/** Returns true when a symbol value is a CSV summary/total row, not a real trade. */
+export function isSummarySymbol(sym: string): boolean {
+  const SUMMARY = new Set(["total", "total:", "subtotal", "subtotals", "sum", "grand total", "summary", "net"]);
+  return SUMMARY.has(sym.trim().toLowerCase());
 }

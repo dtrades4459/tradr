@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type React from "react";
+import { read as xlsxRead, utils as xlsxUtils } from "xlsx";
 import { MONO, BODY } from "./shared";
 import type { Trade } from "./types";
 import type { Theme } from "./theme";
@@ -12,6 +13,8 @@ import {
   normalizeOutcome,
   parseNum,
   normalizeDate,
+  normaliseSymbol,
+  isSummarySymbol,
 } from "./lib/csvParser";
 import { calcRR } from "./lib/stats";
 
@@ -21,40 +24,55 @@ function _djb2(s: string): string {
   return (h >>> 0).toString(36);
 }
 
+// Dedup key uses only the fields that are reliably present across all brokers.
+// slPrice/tpPrice/session are often empty and caused false duplicate matches.
 function tradeKey(t: Partial<Trade>): string {
-  const content = [t.date ?? "", (t.pair ?? "").toUpperCase(), t.entryPrice ?? "", t.slPrice ?? "", t.tpPrice ?? "", t.pnl ?? "", t.session ?? ""].join("|");
+  const content = [t.date ?? "", (t.pair ?? "").toUpperCase(), t.entryPrice ?? "", t.pnl ?? ""].join("|");
   return _djb2(content);
 }
 
-function rowToTrade(row: Record<string, string>, mapping: Record<string, string>, defaultStrategy: string) {
+function rowToTrade(
+  row: Record<string, string>,
+  mapping: Record<string, string>,
+  defaultStrategy: string,
+  dateLocale: "us" | "eu",
+): Trade | null {
   const get = (f: string) => mapping[f] ? row[mapping[f]] : "";
   const rawDate = get("date");
+  const date = normalizeDate(rawDate, dateLocale);
+  const pair = normaliseSymbol((get("pair") || "").toUpperCase());
+
+  // Reject rows with no parseable date or no symbol — they're summary/header rows
+  if (!date || !pair) return null;
+
   const pnl = parseNum(get("pnl"));
   const qty = get("qty") ? parseNum(get("qty")) : NaN;
-  // Session: prefer mapped column, fall back to auto-detection from timestamp
   const session = get("session") || detectSessionFromDateStr(rawDate);
+  const entryPrice = get("entryPrice");
+  const slPrice = get("slPrice");
+  const tpPrice = get("tpPrice");
+
   const trade: Trade = {
     id: Date.now() * 1000 + Math.floor(Math.random() * 999),
-    date: normalizeDate(rawDate),
-    pair: (get("pair") || "").toUpperCase(),
+    date,
+    pair,
     session,
     bias: normalizeBias(get("bias")),
     strategy: defaultStrategy || "",
     setup: "",
-    entryPrice: get("entryPrice"),
-    exitPrice: get("exitPrice"),
-    slPrice: get("slPrice"),
-    tpPrice: get("tpPrice"),
-    qty: isNaN(qty) ? "" : String(qty),
-    rr: get("rr") || (get("entryPrice") && get("slPrice") && get("tpPrice") ? calcRR(get("entryPrice"), get("slPrice"), get("tpPrice")) : ""),
+    entryPrice,
+    slPrice,
+    tpPrice,
+    rr: get("rr") || (entryPrice && slPrice && tpPrice ? calcRR(entryPrice, slPrice, tpPrice) : ""),
     outcome: normalizeOutcome(get("outcome"), pnl),
     pnl: isNaN(pnl) ? "" : pnl.toFixed(2),
     notes: get("notes"),
     emotions: "",
     screenshot: "",
-    pnlDollar: "",
+    pnlDollar: isNaN(qty) ? "" : "",
     comments: [],
     reactions: {},
+    source: "csv_import",
   };
   return trade;
 }
@@ -117,11 +135,18 @@ function removeTemplate(name: string) {
 }
 
 // ─── CSV PRESETS ──────────────────────────────────────────────────────────────
-const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record<string, string>; fallbacks?: Record<string, string[]> }> = {
+const CSV_PRESETS: Record<string, {
+  label: string;
+  hint: string;
+  mapping: Record<string, string>;
+  fallbacks?: Record<string, string[]>;
+  dateLocale?: "us" | "eu";
+}> = {
   tradovate: {
     label: "Tradovate",
     hint: "Tradovate account statement CSV (Account -> Statements -> Trade History)",
     mapping: { pair: "Symbol", date: "Buy Time", bias: "B/S", pnl: "P&L", entryPrice: "Buy Price", notes: "Account" },
+    dateLocale: "us",
   },
   rithmic: {
     label: "Rithmic",
@@ -134,16 +159,19 @@ const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record
       exitPrice:  ["Exit Price", "Close Price"],
       qty:        ["Quantity", "Size", "Contracts"],
     },
+    dateLocale: "us",
   },
   tradingview: {
     label: "TradingView",
     hint: "TradingView Trade List export (Strategy Tester -> List of Trades -> Export)",
     mapping: { pair: "Symbol", date: "Date/Time", bias: "Type", pnl: "Profit", entryPrice: "Price", rr: "Run-up" },
+    dateLocale: "us",
   },
   mt4: {
     label: "MT4 / MT5",
     hint: "MetaTrader account history export",
     mapping: { pair: "Symbol", date: "Open Time", bias: "Type", pnl: "Profit", entryPrice: "Open Price", slPrice: "S / L", tpPrice: "T / P", notes: "Comment" },
+    dateLocale: "eu",
   },
   ninjatrader8: {
     label: "NinjaTrader 8",
@@ -168,6 +196,7 @@ const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record
       qty:        ["Quantity", "Size", "Contracts"],
       notes:      ["Exit name", "Comment", "Setup"],
     },
+    dateLocale: "us",
   },
   topstepx: {
     label: "TopstepX",
@@ -190,6 +219,7 @@ const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record
       exitPrice:  ["Close Price", "Sell Fill Price"],
       qty:        ["Quantity", "Contracts", "Volume", "Lots"],
     },
+    dateLocale: "us",
   },
   ftmo_mt5: {
     label: "FTMO / MT5",
@@ -217,6 +247,7 @@ const CSV_PRESETS: Record<string, { label: string; hint: string; mapping: Record
       qty:        ["Lots", "Size", "Contracts", "Lot"],
       notes:      ["comment", "Memo"],
     },
+    dateLocale: "eu",
   },
 };
 
@@ -239,6 +270,8 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
   const [defaultStrategy, setDefaultStrategy] = useState("");
   const [error, setError] = useState("");
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [dateLocale, setDateLocale] = useState<"us" | "eu">("us");
+  const [grossNet, setGrossNet] = useState<"net" | "gross">("net");
   // Analytics reveal
   const [revealStats, setRevealStats] = useState<ImportStats | null>(null);
   const [revealTrades, setRevealTrades] = useState<Trade[]>([]);
@@ -263,6 +296,7 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
     }
     setMapping(prev => ({ ...prev, ...resolved }));
     setActivePreset(presetKey);
+    if (preset.dateLocale) setDateLocale(preset.dateLocale);
   }
 
   function applyTemplate(name: string) {
@@ -288,11 +322,39 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
     refreshTemplates();
   }
 
+  function processText(text: string) {
+    try {
+      const { headers: h, rows: r } = parseCSV(text);
+      if (!h.length) { setError("No column headers found. Make sure you're exporting a trade history CSV, not an account statement PDF."); return; }
+      if (!r.length) { setError("No trade rows found. The file may be empty or use a format we don't recognise yet."); return; }
+      setHeaders(h);
+      setRows(r);
+      const autoMap = autoDetectMapping(h);
+      const broker = detectBroker(h);
+      if (broker) {
+        const preset = CSV_PRESETS[broker];
+        const presetMap: Record<string, string> = {};
+        for (const [field, col] of Object.entries(preset.mapping)) {
+          let hit = h.find(hh => hh.toLowerCase() === col.toLowerCase());
+          const fbs = preset.fallbacks?.[field];
+          if (!hit && fbs) {
+            for (const fb of fbs) { hit = h.find(hh => hh.toLowerCase() === fb.toLowerCase()); if (hit) break; }
+          }
+          if (hit) presetMap[field] = hit;
+        }
+        setMapping({ ...autoMap, ...presetMap });
+        setActivePreset(broker);
+        if (preset.dateLocale) setDateLocale(preset.dateLocale);
+      } else {
+        setMapping(autoMap);
+      }
+    } catch (err: unknown) { setError("Couldn't parse this file: " + (err instanceof Error ? err.message : "unknown error")); }
+  }
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Guard against accidental large files (> 10 MB)
     if (file.size > 10 * 1024 * 1024) {
       setError("File is too large (max 10 MB). Export a smaller date range from your platform.");
       return;
@@ -302,38 +364,28 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
     setError("");
     setActivePreset(null);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = String(reader.result);
-        const { headers: h, rows: r } = parseCSV(text);
-        if (!h.length) { setError("No column headers found. Make sure you're exporting a trade history CSV, not an account statement PDF."); return; }
-        if (!r.length) { setError("No trade rows found. The file may be empty or use a format we don't recognise yet."); return; }
-        setHeaders(h);
-        setRows(r);
-        const autoMap = autoDetectMapping(h);
-        const broker = detectBroker(h);
-        if (broker) {
-          const preset = CSV_PRESETS[broker];
-          const presetMap: Record<string, string> = {};
-          for (const [field, col] of Object.entries(preset.mapping)) {
-            let hit = h.find(hh => hh.toLowerCase() === col.toLowerCase());
-            const fbs = preset.fallbacks?.[field];
-            if (!hit && fbs) {
-              for (const fb of fbs) { hit = h.find(hh => hh.toLowerCase() === fb.toLowerCase()); if (hit) break; }
-            }
-            if (hit) presetMap[field] = hit;
-          }
-          setMapping({ ...autoMap, ...presetMap });
-          setActivePreset(broker);
-        } else {
-          setMapping(autoMap);
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const wb = xlsxRead(reader.result, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const csv = xlsxUtils.sheet_to_csv(ws);
+          processText(csv);
+        } catch (err: unknown) {
+          setError("Couldn't parse Excel file: " + (err instanceof Error ? err.message : "unknown error"));
         }
-      } catch (err: unknown) { setError("Couldn't parse this file: " + (err instanceof Error ? err.message : "unknown error")); }
-    };
-    reader.onerror = () => setError("Couldn't read the file. Try saving it as CSV (UTF-8) from your platform.");
-    // Explicitly request UTF-8 — prevents Windows-1252 misreads on some machines
-    reader.readAsText(file, "utf-8");
+      };
+      reader.onerror = () => setError("Couldn't read the file.");
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => processText(String(reader.result));
+      reader.onerror = () => setError("Couldn't read the file. Try saving it as CSV (UTF-8) from your platform.");
+      reader.readAsText(file, "utf-8");
+    }
   }
 
   const fields = [
@@ -353,19 +405,29 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
   ];
 
   const existingKeys = new Set(existingTrades.map(tradeKey));
-  // Cap computation at 5,000 rows so a huge CSV doesn't freeze the render loop.
-  // Users rarely import more than a few hundred trades at once anyway.
+
   const MAX_IMPORT_ROWS = 5_000;
   const cappedRows = rows.length > MAX_IMPORT_ROWS ? rows.slice(0, MAX_IMPORT_ROWS) : rows;
-  const previewTrades = cappedRows.map(r => rowToTrade(r, mapping, defaultStrategy));
+  const rowsCapped = rows.length > MAX_IMPORT_ROWS;
+
+  // CRIT-1: Strip trailing summary/total rows before parsing
+  const pairCol = mapping["pair"] || "";
+  const filteredRows = pairCol
+    ? cappedRows.filter(row => {
+        const sym = (row[pairCol] || "").trim();
+        return sym !== "" && !isSummarySymbol(sym);
+      })
+    : cappedRows;
+
+  const allParsed = filteredRows.map(r => rowToTrade(r, mapping, defaultStrategy, dateLocale));
+  const previewTrades = allParsed.filter((t): t is Trade => t !== null);
+  const invalidCount = allParsed.length - previewTrades.length;
   const uniquePreview = previewTrades.filter(t => !existingKeys.has(tradeKey(t)));
   const dupCount = previewTrades.length - uniquePreview.length;
-  const rowsCapped = rows.length > MAX_IMPORT_ROWS;
   const canImport = !!mapping.date && !!mapping.pair && uniquePreview.length > 0;
 
   function doImport() {
     if (!canImport) return;
-    // Show analytics reveal before committing
     setRevealStats(computeImportStats(uniquePreview));
     setRevealTrades(uniquePreview);
   }
@@ -403,7 +465,12 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
           <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: "2px" }}>trades ready to import</div>
         </div>
 
-        {/* Stats grid */}
+        {grossNet === "gross" && (
+          <div style={{ background: C.warn + "22", border: `1px solid ${C.warn}44`, borderRadius: "8px", padding: "10px 14px", fontFamily: BODY, fontSize: "12px", color: C.warn }}>
+            P&L is marked as <strong>gross</strong> — figures shown here are pre-commission. Review pnlDollar after import.
+          </div>
+        )}
+
         {s.withPnl > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
             {[
@@ -420,7 +487,6 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
           </div>
         )}
 
-        {/* Best / worst */}
         {s.best !== null && (
           <div style={{ display: "flex", gap: "10px" }}>
             <div style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: "10px", padding: "12px 14px" }}>
@@ -434,7 +500,6 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
           </div>
         )}
 
-        {/* Session breakdown */}
         {sessionEntries.length > 0 && (
           <div>
             <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>
@@ -466,7 +531,7 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
   return (
     <div style={{ border: `1px solid ${C.border2}`, borderRadius: "14px", padding: "20px", background: C.panel, display: "flex", flexDirection: "column", gap: "18px", marginBottom: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Import CSV</div>
+        <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Import CSV / Excel</div>
         <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "14px" }}>x</button>
       </div>
 
@@ -494,11 +559,11 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
       {!headers.length && (
         <div>
           <label htmlFor="csv-file" style={{ display: "block", border: `1px dashed ${C.border2}`, padding: "28px 16px", borderRadius: "10px", cursor: "pointer", textAlign: "center", color: C.muted, fontFamily: MONO, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {fileName || "Click to select a CSV file"}
-            <input id="csv-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values" onChange={handleFile} style={{ display: "none" }} />
+            {fileName || "Click to select a CSV or Excel file"}
+            <input id="csv-file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleFile} style={{ display: "none" }} />
           </label>
           <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, marginTop: "10px", lineHeight: 1.5 }}>
-            Works with Rithmic (Apex, TopstepX, Earn2Trade), MT4/MT5, TradingView, ThinkorSwim, and most crypto exchange CSVs. Load your file, then pick a broker preset or map columns manually.
+            Works with Rithmic (Apex, TopstepX, Earn2Trade), MT4/MT5, TradingView, ThinkorSwim, and most crypto exchange CSVs. Accepts CSV, TSV, and Excel (.xlsx) files.
           </div>
         </div>
       )}
@@ -529,6 +594,34 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
             {activePreset && (
               <div style={{ fontFamily: BODY, fontSize: "11px", color: C.muted, marginTop: "6px", lineHeight: 1.4 }}>
                 {CSV_PRESETS[activePreset].hint}. Unmapped fields will use auto-detection.
+              </div>
+            )}
+          </div>
+
+          {/* Import options: date locale + gross/net */}
+          <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "6px" }}>Date format</div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {(["us", "eu"] as const).map(loc => (
+                  <button key={loc} onClick={() => setDateLocale(loc)}
+                    style={{ padding: "6px 12px", border: `1px solid ${dateLocale === loc ? C.text : C.border2}`, borderRadius: "999px", background: dateLocale === loc ? C.text : "transparent", color: dateLocale === loc ? C.bg : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                    {loc === "us" ? "MM/DD" : "DD/MM"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mapping.pnl && (
+              <div>
+                <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "6px" }}>P&amp;L column is</div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {(["net", "gross"] as const).map(gn => (
+                    <button key={gn} onClick={() => setGrossNet(gn)}
+                      style={{ padding: "6px 12px", border: `1px solid ${grossNet === gn ? C.text : C.border2}`, borderRadius: "999px", background: grossNet === gn ? C.text : "transparent", color: grossNet === gn ? C.bg : C.muted, cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                      {gn === "net" ? "Net (after fees)" : "Gross (before fees)"}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -591,6 +684,11 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
             {dupCount > 0 && (
               <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "8px" }}>
                 {dupCount} duplicate{dupCount === 1 ? "" : "s"} will be skipped.
+              </div>
+            )}
+            {invalidCount > 0 && (
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: C.warn, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "6px" }}>
+                {invalidCount} row{invalidCount === 1 ? "" : "s"} skipped — missing symbol or unparseable date.
               </div>
             )}
             {rowsCapped && (
