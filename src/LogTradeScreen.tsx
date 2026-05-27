@@ -9,7 +9,7 @@
 
 import React from "react";
 import type { Trade } from "./types";
-import { Card, Kicker, Pill, MONO, BODY, DISPLAY } from "./shared";
+import { Card, Kicker, Pill, FloatingInput, MONO, BODY, DISPLAY } from "./shared";
 import type { Theme } from "./theme";
 import { SESSIONS, BIAS, EMOTION_TAGS, MISTAKE_TAGS, getEmotionTags } from "./tradeConstants";
 
@@ -64,7 +64,14 @@ export function LogTradeScreen({
     fontSize: 16, width: "100%", outline: "none",
     fontFamily: BODY, boxSizing: "border-box", letterSpacing: "0.01em",
   };
-  const sel: React.CSSProperties = { ...inp, cursor: "pointer" };
+  const sel: React.CSSProperties = {
+    background: C.panel ?? "#131317", color: C.text ?? "#e2e8f0",
+    border: `1px solid ${C.border2 ?? "#2a2a3e"}`,
+    borderRadius: 12, padding: "11px 14px",
+    fontFamily: MONO, fontSize: 13, width: "100%",
+    WebkitAppearance: "none" as const,
+    outline: "none", cursor: "pointer",
+  };
   const lbl: React.CSSProperties = {
     fontSize: 11, color: C.muted, letterSpacing: "0.06em",
     marginBottom: 4, display: "block", fontFamily: MONO, textTransform: "uppercase",
