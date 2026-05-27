@@ -754,7 +754,7 @@ export function EmptyCirclesState({ C, onDiscover, onJoin }: { C: Theme; onDisco
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <button onClick={onDiscover} style={{ padding: "11px 18px", borderRadius: 999, background: C.live, color: "#0A0A0A", border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Discover</button>
+        <button onClick={onDiscover} style={{ padding: "11px 18px", borderRadius: 999, background: C.live, color: C.bg, border: "none", fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Discover</button>
         <button onClick={onJoin} style={{ padding: "11px 18px", borderRadius: 999, background: "transparent", color: C.text, border: `1px solid ${C.border2}`, fontFamily: MONO, fontSize: 11, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>Join by code</button>
       </div>
     </div>
@@ -765,7 +765,7 @@ export function EmptyCirclesState({ C, onDiscover, onJoin }: { C: Theme; onDisco
 export function EmptyInboxState({ C }: { C: Theme }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 18, padding: "80px 24px 40px" }}>
-      <div style={{ width: 76, height: 76, borderRadius: "50%", background: C.border, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border2}` }}>
+      <div style={{ width: 76, height: 76, borderRadius: "50%", background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.border2}` }}>
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
           <path d="M4 12h6l2 4 2-8 2 4h4" stroke={C.live} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
