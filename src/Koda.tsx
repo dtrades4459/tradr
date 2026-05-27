@@ -375,6 +375,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const touchStartY = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); }, []);
+  const dismissCelebration = useCallback(() => setCelebration(null), []);
 
   // ── Surface Supabase write failures as user-visible toasts ───────────────────
   // storage.ts calls this callback instead of silently logging to the console.
@@ -894,7 +895,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     const wrSaved = Math.round(winsSaved / Math.max(totalSaved, 1) * 100);
     const avgRSaved = parseFloat((u.reduce((s: number, t: Trade) => s + (parseFloat(t.rr) || 0), 0) / Math.max(totalSaved, 1)).toFixed(1));
     // TODO: streak celebration — fire when streakCount hits 3/7/14/30/100 milestone (needs user_kv dedup)
-    setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: streak.count } });
+    setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
     setTimeout(() => setSavingTrade(false), 1500);
     // Go back if we have history, otherwise land on journal
     setViewHistory(h => { if (h.length > 0) { setView(h[h.length - 1]); return h.slice(0, -1); } setView("history"); return h; });
@@ -3977,8 +3978,8 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
             kind={celebration.kind}
             streakCount={celebration.streakCount}
             tradeStats={celebration.tradeStats}
-            onDismiss={() => setCelebration(null)}
-            onViewTrade={celebration.kind === "trade" ? () => { setCelebration(null); navigateTo("history"); } : undefined}
+            onDismiss={dismissCelebration}
+            onViewTrade={celebration.kind === "trade" ? () => { dismissCelebration(); navigateTo("history"); } : undefined}
           />
         )}
         {!isOnline && (
