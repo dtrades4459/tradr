@@ -319,7 +319,15 @@ export function StrategySelect({ strategies, value, onChange, C, align = "left" 
 // ─── SUB-NAV DROPDOWN ────────────────────────────────────────────────────────
 // Compact dropdown for the current section's sub-views. Lives inside the desktop
 // top-nav on the right, so main-nav + sub-nav collapse from 2 rows to 1.
-export function SubNavDropdown({ sections, value, onChange, C }: any) {
+export interface SubNavSection { id: string; label: string }
+export interface SubNavDropdownProps {
+  sections: SubNavSection[];
+  value: string;
+  onChange: (id: string) => void;
+  C: Theme;
+  align?: "left" | "right";
+}
+export function SubNavDropdown({ sections, value, onChange, C, align = "right" }: SubNavDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<any>(null);
   useEffect(() => {
@@ -342,7 +350,9 @@ export function SubNavDropdown({ sections, value, onChange, C }: any) {
       </button>
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+          position: "absolute", top: "calc(100% + 6px)",
+          ...(align === "left" ? { left: 0 } : { right: 0 }),
+          zIndex: 50,
           minWidth: "180px", background: C.panel, border: `1px solid ${C.border2}`,
           borderRadius: "12px", padding: "6px", boxShadow: `0 8px 24px ${C.shadow}`,
         }}>
