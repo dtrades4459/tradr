@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { SectionKicker, StrategyPill, Toast, stratCode, KodaMark, MONO, BODY, DISPLAY, EmptyCirclesState, CornerGlow } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
+import { readCircleMembers } from "./data/circles";
 import { createChallenge, fetchActiveChallenge, fetchTrophies } from "./data/circlesChallenges";
 import { fetchSharedTrades, reactToSharedTrade, rowToSharedTrade } from "./data/circlesSharedTrades";
 import { SharedTradeCard } from "./components/SharedTradeCard";
@@ -11,6 +12,8 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [lbSort, setLbSort] = useState<"all" | "week">("all");
   const [loadingLB, setLoadingLB] = useState(false);
+  const [lbError, setLbError] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [circleTab, setCircleTab] = useState<"feed" | "leaderboard" | "chat" | "members" | "trophies">("feed");
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -230,12 +233,19 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     setActiveChallenge(null);
     setTrophies([]);
     setLoadingLB(true);
-    const [entries, challenge] = await Promise.all([
-      fetchCircleLeaderboard(circle),
-      fetchActiveChallenge(circle.code),
-    ]);
-    setLeaderboard(entries);
-    setActiveChallenge(challenge);
+    setLbError(false);
+    try {
+      const [entries, challenge] = await Promise.all([
+        fetchCircleLeaderboard(circle),
+        fetchActiveChallenge(circle.code),
+      ]);
+      setLeaderboard(entries);
+      setLbError(false);
+      setActiveChallenge(challenge);
+    } catch {
+      setLbError(true);
+      setLeaderboard([]);
+    }
     setLoadingLB(false);
     loadFeed(circle);
     // Client-side fallback: trigger cron if challenge already expired
@@ -711,6 +721,13 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                     onClick={() => {
                       setCircleTab(t);
                       if (t === "chat" && chatMessages.length === 0) loadChatMessages(activeCircle.code);
+                      if (t === "members" && activeCircle) {
+                        setMembersLoading(true);
+                        readCircleMembers(activeCircle.code, activeCircle.members || [])
+                          .then(fresh => { setActiveCircle((c: unknown) => c ? { ...(c as object), members: fresh } : c); })
+                          .catch(() => {})
+                          .finally(() => setMembersLoading(false));
+                      }
                     }}
                     style={{
                       background: "none",
@@ -822,6 +839,11 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             {/* ── LEADERBOARD ── */}
             {circleTab === "leaderboard" && (
               <div>
+                {lbError && (
+                  <div style={{ padding: "20px", textAlign: "center", fontFamily: BODY, fontSize: "13px", color: C.muted }}>
+                    Couldn't load leaderboard. <button onClick={async () => { setLoadingLB(true); setLbError(false); try { const e = await fetchCircleLeaderboard(activeCircle); setLeaderboard(e); } catch { setLbError(true); } setLoadingLB(false); }} style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontFamily: MONO, fontSize: "11px", textDecoration: "underline" }}>Try again</button>
+                  </div>
+                )}
                 {loadingLB ? (
                   <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>Loading…</div>
                 ) : leaderboard.length === 0 ? (
@@ -966,39 +988,47 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             })()}
 
             {/* ── MEMBERS ── */}
-            {circleTab === "members" && (
-              <div style={{ borderTop: `1px solid ${C.border}` }}>
-                {(activeCircle.members || []).length === 0 ? (
-                  <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>No member data available.</div>
-                ) : (activeCircle.members || []).map((m: any, idx: number) => {
-                  const isMe = m.code === getMyCode();
-                  const isFollowing = (following || []).includes(m.code);
-                  const lbEntry = leaderboard.find((e: any) => e.memberCode === m.code);
-                  return (
-                    <div key={m.code || idx} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
-                      <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DISPLAY, fontSize: "18px", flexShrink: 0, border: `1px solid ${C.border}` }}>
-                        {m.avatar ? (m.avatar.length <= 8 && !m.avatar.startsWith("http") && !m.avatar.startsWith("data:") ? m.avatar : "👤") : "👤"}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-                          <span style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{m.name || "Trader"}</span>
-                          {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.12em" }}>· YOU</span>}
-                          {m.code === activeCircle.createdBy || m.isOwner ? <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em" }}>OWNER</span> : null}
-                        </div>
-                        {m.alias && <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px" }}>{m.alias}</div>}
-                        {lbEntry && <div style={{ fontFamily: MONO, fontSize: "10px", color: lbEntry.totalPnL >= 0 ? C.green : C.red, letterSpacing: "0.06em", marginTop: "2px" }}>{lbEntry.totalPnL >= 0 ? "+" : ""}{lbEntry.totalPnL.toFixed(1)}R · {lbEntry.winRate.toFixed(0)}% WR</div>}
-                      </div>
-                      {!isMe && (
-                        <button onClick={() => isFollowing ? unfollowUser(m.code) : followUser(m.code)}
-                          style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0 }}>
-                          {isFollowing ? "\u2713" : "+Follow"}
-                        </button>
-                      )}
+            {circleTab === "members" && (() => {
+              const members = activeCircle?.members || [];
+              return (
+                <div style={{ borderTop: `1px solid ${C.border}` }}>
+                  {membersLoading && (
+                    <div style={{ padding: "8px 0 0", fontFamily: MONO, fontSize: "10px", color: C.muted }}>Refreshing…</div>
+                  )}
+                  {members.length === 0 && !membersLoading ? (
+                    <div style={{ padding: "28px 0", fontFamily: BODY, fontSize: "13px", color: C.muted, fontStyle: "italic" }}>
+                      No members found. Members appear here after they open the app.
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ) : (members as (CircleMember & { alias?: string; isOwner?: boolean })[]).map((m, idx) => {
+                    const isMe = m.code === getMyCode();
+                    const isFollowing = (following || []).includes(m.code);
+                    const lbEntry = (leaderboard as { memberCode: string; totalPnL: number; winRate: number }[]).find(e => e.memberCode === m.code);
+                    return (
+                      <div key={m.code || idx} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DISPLAY, fontSize: "18px", flexShrink: 0, border: `1px solid ${C.border}` }}>
+                          {m.avatar ? (m.avatar.length <= 8 && !m.avatar.startsWith("http") && !m.avatar.startsWith("data:") ? m.avatar : "👤") : "👤"}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                            <span style={{ fontFamily: DISPLAY, fontSize: "16px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{m.name || "Trader"}</span>
+                            {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.12em" }}>· YOU</span>}
+                            {(m.code === activeCircle.createdBy || m.isOwner) ? <span style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.1em" }}>OWNER</span> : null}
+                          </div>
+                          {m.alias && <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.06em", marginTop: "2px" }}>{m.alias}</div>}
+                          {lbEntry && <div style={{ fontFamily: MONO, fontSize: "10px", color: lbEntry.totalPnL >= 0 ? C.green : C.red, letterSpacing: "0.06em", marginTop: "2px" }}>{lbEntry.totalPnL >= 0 ? "+" : ""}{lbEntry.totalPnL.toFixed(1)}R · {lbEntry.winRate.toFixed(0)}% WR</div>}
+                        </div>
+                        {!isMe && (
+                          <button onClick={() => isFollowing ? unfollowUser(m.code) : followUser(m.code)}
+                            style={{ background: isFollowing ? "transparent" : C.text, color: isFollowing ? C.muted : C.bg, border: `1px solid ${isFollowing ? C.border2 : C.text}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase" as const, flexShrink: 0 }}>
+                            {isFollowing ? "✓" : "+Follow"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* \u2500\u2500 TROPHIES \u2500\u2500 */}
             {circleTab === "trophies" && (
