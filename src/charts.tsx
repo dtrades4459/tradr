@@ -405,7 +405,7 @@ export function CalendarView({ trades, C, onDayClick }: ChartProps & { onDayClic
   const hasDollar = trades.some(t => t.pnlDollar && t.pnlDollar !== "");
   const [showDollar, setShowDollar] = useState(false);
   const dayPnL: Record<string, { pnl: number; pnlDollar: number; count: number }> = {};
-  trades.forEach(t => { if (t.date) { if (!dayPnL[t.date]) dayPnL[t.date] = { pnl: 0, pnlDollar: 0, count: 0 }; dayPnL[t.date].pnl += parseFloat(t.pnl) || 0; dayPnL[t.date].pnlDollar += parseFloat(t.pnlDollar as string) || 0; dayPnL[t.date].count++; } });
+  trades.forEach(t => { if (t.date) { if (!dayPnL[t.date]) dayPnL[t.date] = { pnl: 0, pnlDollar: 0, count: 0 }; dayPnL[t.date].pnl += parseFloat(t.pnl) || 0; dayPnL[t.date].pnlDollar += Number(t.pnlDollar) || 0; dayPnL[t.date].count++; } });
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [];
@@ -442,7 +442,7 @@ export function CalendarView({ trades, C, onDayClick }: ChartProps & { onDayClic
           const data = dayPnL[key];
           const isToday = key === new Date().toISOString().split("T")[0];
           const textCol = data ? (data.pnl > 0 ? C.green : data.pnl < 0 ? C.red : C.muted) : C.muted;
-          const displayVal = showDollar && hasDollar ? data?.pnlDollar : data?.pnl;
+          const displayVal = (showDollar && hasDollar ? data?.pnlDollar : data?.pnl) ?? 0;
           const displayStr = data ? (showDollar && hasDollar
             ? `${displayVal >= 0 ? "+" : ""}$${Math.abs(displayVal).toFixed(0)}`
             : `${displayVal >= 0 ? "+" : ""}${displayVal.toFixed(1)}`) : "";
