@@ -394,9 +394,8 @@ import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin";
 
 ## What's Next / Backlog
 
-### Broker sync follow-ups (highest priority)
+### Broker sync follow-ups
 
-- [ ] **Review Inbox UI** — trades land as `review_status = 'draft'` but there's no UI to see/publish them. Add a badge to the Log tab + a drawer or screen listing drafts with "Publish" / "Skip" actions. This is the most important missing piece.
 - [ ] Update `.env.example` with the 4 new required vars (`SUPABASE_SERVICE_ROLE_KEY`, `TRADR_ENCRYPTION_KEY`, `CRON_SECRET`, `TRADOVATE_*`)
 - [ ] Add Rithmic/NinjaTrader 8/TopstepX live API connections (CSV covers import; API would enable live sync)
 
@@ -440,12 +439,12 @@ Kōda target pricing: Free tier · Pro $24.99/mo.
 - [x] Lot Size Calculator — futures-only, floating button, 16 contracts ✓
 - [x] PostHog analytics — wired, key events captured ✓
 - [x] Beta access wall — BetaGate component, env-var controlled ✓
-- [ ] Review Inbox — publish draft trades from auto-sync
+- [x] Review Inbox — publish draft trades from auto-sync ✓ (`src/ReviewInboxScreen.tsx`, Log-tab badge + CTA)
 
 **Sprint 2 — Psychology + Prop Firm**
-- [ ] Per-trade emotional state field (Calm / FOMO / Revenge / Confident) + rule-adherence Y/N + mistake tag
-- [ ] Prop firm account mode — evaluation targets (profit target, daily loss limit, max drawdown), live progress bars
-- [ ] Discipline score card — "You followed your rules on 71% of trades this month"
+- [x] Per-trade emotional state field (Calm / FOMO / Revenge / Confident) + rule-adherence Y/N + mistake tag ✓ (`LogTradeScreen.tsx` Discipline/Emotional/Mistake cards)
+- [ ] Prop firm account mode — evaluation targets (profit target, daily loss limit, max drawdown), live progress bars *(EvalAccountScreen.tsx exists — needs verification it's fully wired)*
+- [x] Discipline score card — "You followed your rules on 71% of trades this month" ✓ (`Koda.tsx` psychology stats tab: rule adherence %, mistake frequency, emotion × outcome)
 
 **Sprint 3 — Advanced Analytics**
 - [ ] Setup P&L breakdown — which setups actually make money
