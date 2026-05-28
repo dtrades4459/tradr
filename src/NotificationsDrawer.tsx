@@ -27,16 +27,22 @@ export default function NotificationsDrawer({ open, onClose, draftCount, onOpenI
 
   useEffect(() => {
     if (!open) return;
-    function onDoc(e: MouseEvent) {
+    function onDoc(e: PointerEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     function onEsc(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
-    document.addEventListener("mousedown", onDoc);
+    // Defer attaching the outside-click listener by one tick so the very tap
+    // that opened the drawer doesn't immediately close it again on mobile,
+    // where pointerdown on the trigger fires before this effect runs.
+    const t = setTimeout(() => {
+      document.addEventListener("pointerdown", onDoc);
+    }, 0);
     document.addEventListener("keydown", onEsc);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
+      clearTimeout(t);
+      document.removeEventListener("pointerdown", onDoc);
       document.removeEventListener("keydown", onEsc);
     };
   }, [open, onClose]);

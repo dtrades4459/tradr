@@ -65,7 +65,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   async function handleSubmit() {
     const u = username.toLowerCase().trim();
     if (!u || !password) return;
-    if (!USERNAME_RE.test(u)) { setError("Username must be 3â€“20 chars, lowercase letters, numbers, or underscores only."); return; }
+    if (!USERNAME_RE.test(u)) { setError("Username must be 3–20 chars, lowercase letters, numbers, or underscores only."); return; }
     if (password.length < 6)  { setError("Password must be at least 6 characters."); return; }
     setLoading(true); setError(""); setMsg("");
     try {
@@ -171,7 +171,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
             background: C.text, color: C.bg, border: "none", borderRadius: 999,
             padding: "14px 20px", fontSize: 13, fontFamily: BODY, cursor: "pointer", width: "100%",
             opacity: loading ? 0.6 : 1,
-          }}>{loading ? "â€¦" : "Update password â†’"}</button>
+          }}>{loading ? "…" : "Update password →"}</button>
         </div>
       </div>
     );
@@ -192,11 +192,11 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
             background: C.text, color: C.bg, border: "none", borderRadius: 999,
             padding: "14px 20px", fontSize: 13, fontFamily: BODY, cursor: "pointer", width: "100%",
             opacity: loading ? 0.6 : 1,
-          }}>{loading ? "â€¦" : "Send reset link â†’"}</button>
+          }}>{loading ? "…" : "Send reset link →"}</button>
           <button onClick={() => { setMode("signin"); setError(""); }} style={{
             background: "none", border: "none", color: C.muted, fontSize: 12,
             cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0,
-          }}>â† Back to sign in</button>
+          }}>← Back to sign in</button>
         </div>
       </div>
     );
@@ -225,7 +225,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
         <FloatingInput C={C} label="Username" value={username} placeholder={mode === "signup" ? "pick a handle" : "yourname"}
           onChange={v => setUsername(v.toLowerCase())} />
 
-        <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
+        <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
           onChange={v => setPassword(v)} />
 
         {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
@@ -237,7 +237,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
           cursor: "pointer", width: "100%", marginTop: 8,
           opacity: loading ? 0.6 : 1, transition: "opacity 0.15s, transform 0.15s",
         }}>
-          {loading ? "â€¦" : mode === "signin" ? "Sign in â†’" : "Create account â†’"}
+          {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
         </button>
 
         {mode === "signin" && (
@@ -287,7 +287,7 @@ function parseOAuthError(): string {
     return "Google sign-in was cancelled. Use your username and password instead.";
   }
   if (desc) return `Sign-in failed: ${desc.replace(/\+/g, " ")}. Please use username and password.`;
-  return "Google sign-in isnâ€™t available. Please use your username and password.";
+  return "Google sign-in isn’t available. Please use your username and password.";
 }
 
 // â”€â”€â”€ LANDING PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -355,7 +355,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <KodaMark size={26} color={C.text} />
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>KÅda</span>
+              <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1.5px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
           </div>
@@ -451,7 +451,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             </div>
           </div>
 
-          {/* Auth column â€” glass card with corner glow */}
+          {/* Auth column — glass card with corner glow */}
           <aside className="koda-auth-card" style={{
             position: "relative", padding: 32, borderRadius: 28,
             background: "rgba(18,18,22,0.7)",
@@ -476,7 +476,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               gap: 10, justifyContent: "center", marginBottom: 26,
             }}>
               <KodaMark size={24} color={C.text} />
-              <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>KÅda</span>
+              <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>Kōda</span>
               <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
 
@@ -520,7 +520,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               { n: "01", name: "ICT / Smart Money",     desc: "Order blocks, fair value gaps, liquidity sweeps. Mark your bias before the open." },
               { n: "02", name: "Supply & Demand",        desc: "Fresh zones, base-to-base, institutional imbalances. No stale levels." },
               { n: "03", name: "Wyckoff / VSA",          desc: "Accumulation, distribution, spring and upthrust. Read the auction, not the candle." },
-              { n: "04", name: "Opening Range Breakout", desc: "First 15â€“30 min range. Clean breakouts with defined risk." },
+              { n: "04", name: "Opening Range Breakout", desc: "First 15–30 min range. Clean breakouts with defined risk." },
             ].map((s) => (
               <div key={s.n} className="koda-strat-item">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 10 }}>
@@ -548,7 +548,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             WebkitBackgroundClip: "text", backgroundClip: "text",
             WebkitTextFillColor: "transparent",
             WebkitTextStroke: "1px rgba(255,255,255,0.06)",
-          }}>KÅŒDA</div>
+          }}>KŌDA</div>
         </div>
 
         {/* â”€â”€ FOOTER â”€â”€ */}
@@ -561,9 +561,9 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <KodaMark size={18} color={C.dim} />
-            <span>KÅŒDA Â· KEEP THE EDGE YOU EARNED</span>
+            <span>KŌDA · KEEP THE EDGE YOU EARNED</span>
           </div>
-          <span>Â©2026 KÅda Â· v1.0 Â· <span style={{ color: C.live }}>â— LIVE</span></span>
+          <span>©2026 Kōda · v1.0 · <span style={{ color: C.live }}>● LIVE</span></span>
         </footer>
 
       </div>

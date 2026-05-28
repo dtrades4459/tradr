@@ -729,13 +729,41 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
 
   // Backfill: every user gets auto-joined to Kōda Global. The onboarding flow
   // already does this for new users; this effect covers existing users who
-  // onboarded before the auto-join was added (and re-joins anyone who left,
-  // since the global community is on by default).
+  // onboarded before the auto-join was added.
+  //
+  // Race guard: joinCircleByCode is async. Without a ref the effect can fire
+  // repeatedly while the first join is in-flight, producing duplicate
+  // KODA_GLOBAL_CODE entries in myCircles. The ref ensures we only attempt
+  // once per uid.
+  //
+  // Heal: if duplicates already exist on disk (from earlier broken backfills),
+  // dedupe them in a single saveMyCircles pass.
+  const kodaGlobalBackfillRef = useRef<string | null>(null);
   useEffect(() => {
     if (loading || !profile.uid) return;
-    if (myCircles.some((c: Circle) => c.code === KODA_GLOBAL_CODE)) return;
+    const globalEntries = myCircles.filter((c: Circle) => c.code === KODA_GLOBAL_CODE);
+
+    if (globalEntries.length > 1) {
+      const seen = new Set<string>();
+      const deduped = myCircles.filter((c: Circle) => {
+        if (c.code !== KODA_GLOBAL_CODE) return true;
+        if (seen.has(c.code)) return false;
+        seen.add(c.code);
+        return true;
+      });
+      saveMyCircles(deduped).catch(() => {});
+      kodaGlobalBackfillRef.current = profile.uid;
+      return;
+    }
+
+    if (kodaGlobalBackfillRef.current === profile.uid) return;
+    if (globalEntries.length === 1) {
+      kodaGlobalBackfillRef.current = profile.uid;
+      return;
+    }
+    kodaGlobalBackfillRef.current = profile.uid;
     joinCircleByCode(KODA_GLOBAL_CODE).catch(() => {});
-  }, [loading, profile.uid, myCircles, joinCircleByCode]);
+  }, [loading, profile.uid, myCircles, joinCircleByCode, saveMyCircles]);
 
   async function handleCsvImport(newTrades: Trade[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
@@ -1475,7 +1503,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         }}>
 
         {/* ── MASTHEAD ── */}
-        <header style={{ padding: isDesktop ? "16px 40px 0" : "8px 22px 6px", position: "sticky", top: 0, background: C.bg, zIndex: 10, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
+        <header style={{ padding: isDesktop ? "calc(16px + env(safe-area-inset-top)) 40px 0" : "calc(8px + env(safe-area-inset-top)) 22px 6px", position: "sticky", top: 0, background: C.bg, zIndex: 10, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
             {/* Left: back button when history exists, otherwise logo */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
