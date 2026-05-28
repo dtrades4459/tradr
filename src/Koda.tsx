@@ -1503,7 +1503,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         }}>
 
         {/* ── MASTHEAD ── */}
-        <header style={{ padding: isDesktop ? "calc(16px + env(safe-area-inset-top)) 40px 0" : "calc(8px + env(safe-area-inset-top)) 22px 6px", position: "sticky", top: 0, background: C.bg, zIndex: 10, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
+        <header style={{ padding: isDesktop ? "calc(16px + env(safe-area-inset-top)) 40px 0" : "calc(8px + env(safe-area-inset-top)) 22px 6px", position: "sticky", top: 0, background: C.bg, zIndex: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", paddingBottom: isDesktop ? "14px" : 0 }}>
             {/* Left: back button when history exists, otherwise logo */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

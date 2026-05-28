@@ -25,14 +25,19 @@ export const CSV_FIELD_HINTS: { field: string; patterns: RegExp[] }[] = [
 
 /**
  * Auto-detect the delimiter for a CSV/TSV file.
- * Checks the first non-empty line for tab vs comma frequency.
- * Returns "\t" for TSV, "," for everything else.
+ * Checks the first non-empty line and picks whichever of comma, tab, or
+ * semicolon appears most often. Semicolon support matters for European
+ * broker exports (FTMO, MT5, locale-formatted Excel) where the comma is
+ * a decimal separator and the column delimiter is `;`.
  */
-export function detectDelimiter(text: string): "," | "\t" {
+export function detectDelimiter(text: string): "," | "\t" | ";" {
   const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) ?? "";
   const tabs   = (firstLine.match(/\t/g) ?? []).length;
-  const commas = (firstLine.match(/,/g) ?? []).length;
-  return tabs > commas ? "\t" : ",";
+  const commas = (firstLine.match(/,/g)  ?? []).length;
+  const semis  = (firstLine.match(/;/g)  ?? []).length;
+  if (semis >= Math.max(tabs, commas) && semis > 0) return ";";
+  if (tabs > commas) return "\t";
+  return ",";
 }
 
 /**
