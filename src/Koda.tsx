@@ -1189,22 +1189,32 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     if (deleteConfirm.toUpperCase() !== "DELETE") { showToast("Type DELETE to confirm"); return; }
     setDeletingAccount(true);
     try {
-      const mc = getMyCode();
-      // Wipe all user_kv rows (trades, profile, checklists, etc)
-      const keys = ["koda_trades","koda_profile","koda_friends","koda_feed","koda_checklists","koda_rules","koda_dark","koda_circles","koda_thresholds","koda_custom_strategies"];
-      await Promise.all(keys.map(k => storage.del(k).catch(() => {})));
-      // Wipe shared_kv rows we own (circle entries, feed, handle, follows)
-      await Promise.all([
-        `koda_feed_${mc}`,
-        `koda_handle_${profile.handle ? profile.handle.replace("@","").toLowerCase() : ""}`,
-      ].map(k => storage.del(k, true).catch(() => {})));
-      // Sign out and let Supabase handle auth deletion
+      // Call the service-role endpoint. The browser session can't delete from
+      // public.trades / broker_connections / sync_events / auth.users, so the
+      // legacy client-side wipe was incomplete. The endpoint does:
+      //   broker tokens → sync audit → trades → profiles → user_kv → shared_kv
+      //   → Stripe subscription cancel → auth.users delete
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not signed in");
+
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Delete failed (${res.status})`);
+      }
+
       phReset();
-      await supabase.auth.signOut();
-      showToast("Account data wiped. Goodbye.");
+      // The auth.users row is already gone server-side; this clears any
+      // local Supabase session state.
+      await supabase.auth.signOut().catch(() => {});
+      showToast("Account deleted. Goodbye.");
     } catch (e) {
       log.error("deleteAccount", e);
-      showToast("Error deleting account. Please contact support.");
+      showToast(e instanceof Error ? e.message : "Error deleting account. Please contact support.");
     } finally {
       setDeletingAccount(false);
     }
