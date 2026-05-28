@@ -105,12 +105,15 @@ export interface DataSourcesScreenProps {
   allStrategyNames: string[];
   onTradesImported: (trades: Trade[]) => void;
   showToast: (msg: string) => void;
+  autoOpenCsv?: boolean;
+  onAutoOpenCsvDone?: () => void;
 }
 
 export function DataSourcesScreen({
   C, supabase, userId, accessToken,
   existingTrades, allStrategyNames,
   onTradesImported, showToast,
+  autoOpenCsv, onAutoOpenCsvDone,
 }: DataSourcesScreenProps) {
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -169,6 +172,13 @@ export function DataSourcesScreen({
     fetchConnections();
     fetchAudit();
   }, [fetchConnections, fetchAudit]);
+
+  useEffect(() => {
+    if (autoOpenCsv) {
+      setShowCsv(true);
+      onAutoOpenCsvDone?.();
+    }
+  }, [autoOpenCsv]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -378,7 +388,7 @@ export function DataSourcesScreen({
       {/* Connect button hidden until live sync ships */}
 
       {/* ── CSV IMPORT ── */}
-      <div style={{ marginBottom: 10 }}><Kicker C={C as any}>CSV Import</Kicker></div>
+      <div style={{ marginBottom: 10 }}><Kicker C={C as any}>Sync from CSV</Kicker></div>
       <div style={{ borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`, background: C.panel ?? "#131317", padding: "16px 18px", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>

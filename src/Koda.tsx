@@ -265,6 +265,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     setToastsV2(prev => prev.filter(t => t.id !== id));
   }, []);
   const [homeSection, setHomeSection] = useState("feed");
+  const [autoOpenCsv, setAutoOpenCsv] = useState(false);
   // Supabase JWT access token — used by DataSourcesScreen for broker API calls.
   const [accessToken, setAccessToken] = useState("");
   useEffect(() => {
@@ -1979,8 +1980,8 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                           <button onClick={() => navigateTo("log")} style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", padding: "13px 24px", fontFamily: MONO, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, cursor: "pointer" }}>
                             Log your first trade →
                           </button>
-                          <button onClick={() => navigateTo("sync")} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "11px 24px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>
-                            Or import from CSV
+                          <button onClick={() => { setAutoOpenCsv(true); navigateTo("sync"); }} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "11px 24px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer" }}>
+                            Or sync trades
                           </button>
                         </div>
                       </div>
@@ -2486,6 +2487,8 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   allStrategyNames={allStrategyNames}
                   onTradesImported={handleCsvImport}
                   showToast={showToast}
+                  autoOpenCsv={autoOpenCsv}
+                  onAutoOpenCsvDone={() => setAutoOpenCsv(false)}
                 />
               )}
 
