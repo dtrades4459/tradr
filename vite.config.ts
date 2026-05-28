@@ -47,7 +47,7 @@ export default defineConfig({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       url: "https://de.sentry.io",
       // Only upload during CI/Vercel builds — skip locally when token is absent.
-      disable: !process.env.SENTRY_AUTH_TOKEN,
+      disable: true,
       sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
       telemetry: false,
       // Never let upload failures break the deployment.
@@ -63,9 +63,7 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    // "hidden" generates map files for Sentry upload but omits the
-    // sourceMappingURL comment from bundles, so maps stay off the public CDN.
-    sourcemap: "hidden",
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
