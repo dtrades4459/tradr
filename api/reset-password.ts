@@ -22,7 +22,7 @@ import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
 
 export const config = { runtime: "nodejs" };
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const USERNAME_DOMAIN = "users.tradr.app";
 
 // ── CORS ────────────────────────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ export default async function handler(req: any, res: any) {
         },
         signal: controller.signal,
         body: JSON.stringify({
-          from: "Kōda <noreply@tradrjournal.xyz>",
+          from: "Kōda <noreply@kodatrade.co.uk>",
           to: [recoveryEmail],
           subject: "Reset your Kōda password",
           html: [

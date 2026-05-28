@@ -18,7 +18,7 @@ type VercelResponse = { status(n: number): VercelResponse; json(d: unknown): Ver
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE  = "https://live.tradovateapi.com/v1";
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const ALLOWED_ORIGINS = new Set([
   APP_URL,
   APP_URL.replace("://", "://www."),

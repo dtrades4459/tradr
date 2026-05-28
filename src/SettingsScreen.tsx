@@ -308,7 +308,7 @@ export function SettingsScreen({
               <div style={{ fontFamily: DISPLAY, fontSize: "14px", fontWeight: 600, color: C.text }}>Share with mentor</div>
               <div style={{ fontFamily: MONO, fontSize: "11px", color: C.muted, marginTop: "2px" }}>Copy your public profile link</div>
             </div>
-            <button onClick={() => { const handle = (profile.handle || "").replace(/^@/, ""); const url = `https://tradrjournal.xyz/@${handle}`; navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Link: " + url)); }} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "5px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.06em", color: C.muted }}>Copy</button>
+            <button onClick={() => { const handle = (profile.handle || "").replace(/^@/, ""); const url = `https://kodatrade.co.uk/@${handle}`; navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Link: " + url)); }} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "5px 12px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.06em", color: C.muted }}>Copy</button>
           </div>
         )}
         {/* Prop firm / eval account */}

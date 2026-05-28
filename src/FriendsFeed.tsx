@@ -421,7 +421,7 @@ export function FriendsFeed({
                               const o = item.outcome === "Win" ? "WIN" : item.outcome === "Loss" ? "LOSS" : "BE";
                               const p = item.pnl ? ` ${parseFloat(item.pnl) >= 0 ? "+" : ""}${item.pnl}R` : "";
                               window.open(
-                                `https://x.com/intent/post?text=${encodeURIComponent(`${o} ${item.pair ?? ""}${p}${item.rr ? " | " + item.rr + "R" : ""} — #Kōda\nhttps://tradrjournal.xyz`)}`,
+                                `https://x.com/intent/post?text=${encodeURIComponent(`${o} ${item.pair ?? ""}${p}${item.rr ? " | " + item.rr + "R" : ""} — #Kōda\nhttps://kodatrade.co.uk`)}`,
                                 "_blank", "noopener",
                               );
                             }}

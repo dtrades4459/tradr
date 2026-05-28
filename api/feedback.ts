@@ -18,7 +18,7 @@ import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
 import { getUserIdFromJwt } from "./lib/supabaseAdmin.js";
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const ALLOWED_ORIGINS = new Set([
   APP_URL,
   APP_URL.replace("://", "://www."),

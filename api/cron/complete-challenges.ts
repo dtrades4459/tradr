@@ -30,7 +30,7 @@ function getMetricValue(entry: Record<string, number>, metric: string): number {
 }
 
 export default async function handler(req: Req, res: Res) {
-  res.setHeader("Access-Control-Allow-Origin", process.env.APP_URL ?? "https://tradrjournal.xyz");
+  res.setHeader("Access-Control-Allow-Origin", process.env.APP_URL ?? "https://kodatrade.co.uk");
   res.setHeader("Vary", "Origin");
 
   // Cron calls use GET with the secret header

@@ -30,7 +30,7 @@ import { checkRateLimit, getClientIp } from "../lib/rateLimit.js";
 const DEMO_BASE = "https://demo.tradovateapi.com/v1";
 const LIVE_BASE = "https://live.tradovateapi.com/v1";
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const CRON_ALLOWED_ORIGINS = new Set([
   APP_URL,
   APP_URL.replace("://", "://www."),

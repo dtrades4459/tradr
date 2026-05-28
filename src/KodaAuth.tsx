@@ -41,7 +41,7 @@ function OAuthBtn({ label, provider, onClick }: {
 // â”€â”€â”€ AUTH FORM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type AuthMode = "signin" | "signup" | "reset" | "reset-sent" | "new-password";
 
-const USERNAME_DOMAIN = "users.tradr.app";
+const USERNAME_DOMAIN = "users.kodatrade.co.uk";
 const usernameToEmail = (u: string) => `${u.toLowerCase().trim()}@${USERNAME_DOMAIN}`;
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 

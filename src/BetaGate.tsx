@@ -39,11 +39,11 @@ const RED     = "oklch(0.70 0.21 25)";
 // ── Kōda mark (square badge) ──────────────────────────────────────────────────
 function KodaMarkFilled({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", flexShrink: 0 }}>
-      <rect width="100" height="100" rx="20" fill={PANEL}/>
-      <text x="50" y="67" textAnchor="middle" fill={TEXT}
-        fontFamily="'Geist Mono', 'IBM Plex Mono', ui-monospace, monospace"
-        fontWeight="700" fontSize="52" letterSpacing="-2">kd</text>
+    <svg width={size} height={Math.round(size * 0.8)} viewBox="0 0 100 80" fill="none" style={{ display: "block", flexShrink: 0 }}>
+      <polyline points="8,8 22,40 8,72" stroke={TEXT} strokeWidth="3" strokeLinejoin="miter" />
+      <polyline points="28,8 42,40 28,72" stroke={TEXT} strokeWidth="3" strokeLinejoin="miter" />
+      <polyline points="48,8 62,40 48,72" stroke={TEXT} strokeWidth="3" strokeLinejoin="miter" />
+      <polyline points="68,8 82,40 68,72" stroke={TEXT} strokeWidth="3" strokeLinejoin="miter" />
     </svg>
   );
 }

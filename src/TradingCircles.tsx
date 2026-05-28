@@ -362,7 +362,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
   const circleTotalTrades = leaderboard.reduce((s: number, e: any) => s + (e.total || 0), 0);
 
   function shareInviteLink(circle: any) {
-    const url = `https://tradrjournal.xyz/?join=${circle.code}`;
+    const url = `https://kodatrade.co.uk/?join=${circle.code}`;
     const msg = `Join my Kōda circle "${circle.name}" → ${url}`;
     if (navigator.share) {
       navigator.share({ title: "Join my Kōda circle", text: msg, url }).catch(() => {});
@@ -1075,7 +1075,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
               <div style={{ flex: 1, borderBottom: `1px solid ${C.border2}`, padding: "12px 0", fontFamily: MONO, fontSize: "16px", color: C.text, letterSpacing: "0.14em" }}>{activeCircle.code}</div>
               <button onClick={() => { navigator.clipboard?.writeText(activeCircle.code); showToast("Code copied"); }}
                 style={{ ...pillGhost, padding: "8px 16px" }}>CODE</button>
-              <button onClick={() => { navigator.clipboard?.writeText(`https://tradrjournal.xyz/?join=${activeCircle.code}`); showToast("Link copied"); }}
+              <button onClick={() => { navigator.clipboard?.writeText(`https://kodatrade.co.uk/?join=${activeCircle.code}`); showToast("Link copied"); }}
                 style={{ ...pillGhost, padding: "8px 16px" }}>LINK</button>
               <button onClick={() => shareInviteLink(activeCircle)}
                 style={{ ...pillPrimary(true), width: "auto", padding: "8px 16px" }}>SHARE</button>
