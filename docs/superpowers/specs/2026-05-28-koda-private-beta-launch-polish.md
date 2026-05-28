@@ -3,7 +3,7 @@
 **Date:** 2026-05-28  
 **Goal:** Ship all remaining audit + visual pass work so Kōda is ready to invite 20–50 private beta traders.  
 **Approach:** Polish then launch (Approach A). Live journaling / auto-positions is Sprint 1 post-launch.  
-**Source audits:** `AUDIT.md`, `DEV_ENV_AUDIT.md`, `CSV_IMPORT_AUDIT.md`, `docs/superpowers/plans/2026-05-26-koda-visual-pass-v2.md`
+**Source audits:** `docs/AUDIT.md`, `docs/DEV_ENV_AUDIT.md`, `docs/CSV_IMPORT_AUDIT.md`, `docs/superpowers/plans/2026-05-26-koda-visual-pass-v2.md`
 
 ---
 

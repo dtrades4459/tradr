@@ -32,5 +32,6 @@ src/TRADR.tsx.tmp
 
 # Local Claude AI session files
 .claude/
+.superpowers/
 
 .vercel
