@@ -725,6 +725,16 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     showToast,
   });
 
+  // Backfill: every user gets auto-joined to Kōda Global. The onboarding flow
+  // already does this for new users; this effect covers existing users who
+  // onboarded before the auto-join was added (and re-joins anyone who left,
+  // since the global community is on by default).
+  useEffect(() => {
+    if (loading || !profile.uid) return;
+    if (myCircles.some((c: Circle) => c.code === KODA_GLOBAL_CODE)) return;
+    joinCircleByCode(KODA_GLOBAL_CODE).catch(() => {});
+  }, [loading, profile.uid, myCircles, joinCircleByCode]);
+
   async function handleCsvImport(newTrades: Trade[]) {
     if (!newTrades.length) { setShowCsvImport(false); return; }
     setIsImportingCsv(true);
@@ -1451,15 +1461,15 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
       <div className="koda-app" ref={swipeRef}
         style={{
           width: "100%",
-          maxWidth: viewport === "phone" ? "none" : viewport === "tablet" ? "720px" : viewport === "desktop" ? "1440px" : "1680px",
+          maxWidth: viewport === "phone" || viewport === "desktop" || viewport === "wide" ? "none" : "720px",
           margin: "0 auto",
           paddingLeft: "clamp(16px, 4vw, 48px)",
           paddingRight: "clamp(16px, 4vw, 48px)",
           paddingBottom: viewport === "phone" || viewport === "tablet" ? "96px" : "32px",
           minHeight: "100dvh",
           background: C.bg,
-          borderLeft: viewport === "desktop" ? `1px solid ${C.border}` : "none",
-          borderRight: viewport === "desktop" ? `1px solid ${C.border}` : "none",
+          borderLeft: "none",
+          borderRight: "none",
         }}>
 
         {/* ── MASTHEAD ── */}
@@ -2879,7 +2889,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {/* pill tabs + controls */}
               {!isDesktop && (<>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "0 6px", position: "relative", zIndex: 2, flexWrap: "wrap" }}>
-                  <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} />
+                  <SubNavDropdown sections={STATS_SECTIONS} value={statsTab} onChange={setStatsTab} C={C} align="left" />
                   <button onClick={openExportPdf} style={{ background: "transparent", border: `1px solid ${C.border2}`, borderRadius: "999px", padding: "6px 14px", cursor: "pointer", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" as const, color: C.muted, whiteSpace: "nowrap" as const }}>
                     Export PDF ↗
                   </button>
