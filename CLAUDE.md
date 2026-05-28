@@ -398,7 +398,6 @@ import { getAdminClient, getUserIdFromJwt } from "../lib/supabaseAdmin";
 
 - [ ] **Review Inbox UI** — trades land as `review_status = 'draft'` but there's no UI to see/publish them. Add a badge to the Log tab + a drawer or screen listing drafts with "Publish" / "Skip" actions. This is the most important missing piece.
 - [ ] Update `.env.example` with the 4 new required vars (`SUPABASE_SERVICE_ROLE_KEY`, `TRADR_ENCRYPTION_KEY`, `CRON_SECRET`, `TRADOVATE_*`)
-- [ ] Repo cleanup — delete one-off PowerShell/bat scripts, `tradr-redesign.html`, `dist-verify/` folder, `TRADR-BRAIN.md` (commit: `chore: remove stale scripts and committed build artifacts`)
 - [ ] Add Rithmic/NinjaTrader 8/TopstepX live API connections (CSV covers import; API would enable live sync)
 
 ### v2 data layer migration
