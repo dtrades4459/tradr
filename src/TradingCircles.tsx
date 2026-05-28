@@ -205,6 +205,8 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
         sender_handle: profile.handle || "",
         text,
       });
+      // Reload to ensure sender sees their own message even without realtime
+      await loadChatMessages(circleCode);
     } catch { setChatInput(text); }
     setChatSending(false);
   }
@@ -721,7 +723,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                     key={t}
                     onClick={() => {
                       setCircleTab(t);
-                      if (t === "chat" && chatMessages.length === 0) loadChatMessages(activeCircle.code);
+                      if (t === "chat") loadChatMessages(activeCircle.code);
                       if (t === "members" && activeCircle) {
                         setMembersLoading(true);
                         readCircleMembers(activeCircle.code, activeCircle.members || [])
