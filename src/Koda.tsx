@@ -36,6 +36,7 @@ import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
 import WeeklyReportCard from "./WeeklyReportCard";
+import NotificationsDrawer from "./NotificationsDrawer";
 import { DARK, LIGHT, makeStyles } from "./theme";
 import { useIsDesktop, useViewport } from "./hooks/useViewport";
 import { EditInline } from "./components/EditInline";
@@ -187,6 +188,7 @@ function StrategyEditor({ draft, setDraft, onSave, onCancel, isEdit, C, inp, lbl
 export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [draftCount, setDraftCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [view, setView] = useState("home");
   const [viewHistory, setViewHistory] = useState<string[]>([]);
 
@@ -1500,7 +1502,15 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
             </div>
             {/* Right: bell + avatar (design spec) */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <IconButton C={C} icon="bell" />
+              <div style={{ position: "relative" }}>
+                <IconButton C={C} icon="bell" onClick={() => setNotificationsOpen(o => !o)} label="Notifications" />
+                {draftCount > 0 && (
+                  <span aria-hidden style={{
+                    position: "absolute", top: 6, right: 6, width: 9, height: 9, borderRadius: 999,
+                    background: C.green ?? "#22c55e", border: `2px solid ${C.bg}`, pointerEvents: "none",
+                  }} />
+                )}
+              </div>
               <button
                 onClick={() => { setView("home"); setHomeSection("settings"); }}
                 style={{ width: 36, height: 36, borderRadius: 999, background: `linear-gradient(135deg, ${C.orb1}, ${C.orb2})`, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: DISPLAY, fontWeight: 600, fontSize: 12, letterSpacing: "0.04em", cursor: "pointer", padding: 0 }}
@@ -3959,6 +3969,13 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         {showCalc && (
           <LotSizeCalculator C={C} onClose={() => setShowCalc(false)} />
         )}
+        <NotificationsDrawer
+          open={notificationsOpen}
+          onClose={() => setNotificationsOpen(false)}
+          draftCount={draftCount}
+          onOpenInbox={() => navigateTo("inbox")}
+          C={C}
+        />
         {toast && <Toast message={toast} onDone={() => setToast(null)} C={C} />}
         {celebration && (
           <CelebrationOverlay
