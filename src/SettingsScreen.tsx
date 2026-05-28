@@ -36,7 +36,7 @@ export interface SettingsScreenProps {
   setShowUpgrade: (v: boolean) => void;
   setFeedbackOpen: (v: boolean) => void;
   isFlagOn: (name: string) => boolean;
-  onSignOut: () => void;
+  onSignOut: () => Promise<void>;
 }
 
 export function SettingsScreen({

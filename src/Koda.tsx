@@ -2512,7 +2512,9 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   setFeedbackOpen={setFeedbackOpen}
                   isFlagOn={isFlagOn}
                   onSignOut={async () => {
-                    await supabase.auth.signOut();
+                    try {
+                      await supabase.auth.signOut();
+                    } catch (_) {}
                     phReset();
                   }}
                 />
