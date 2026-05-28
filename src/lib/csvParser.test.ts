@@ -27,6 +27,11 @@ describe("detectDelimiter", () => {
     expect(detectDelimiter("Symbol\tP&L\tDate\nNQ\t2.5\t2024-01-01")).toBe("\t");
   });
 
+  it("returns semicolon for European CSV", () => {
+    // Decimal commas → semicolons used as column separator (FTMO, MT5, locale-Excel).
+    expect(detectDelimiter("Symbol;P&L;Date\nNQ;2,5;2024-01-01")).toBe(";");
+  });
+
   it("defaults to comma when no clear winner", () => {
     expect(detectDelimiter("abc")).toBe(",");
   });

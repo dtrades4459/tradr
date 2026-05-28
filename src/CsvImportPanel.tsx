@@ -329,8 +329,21 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
   function processText(text: string) {
     try {
       const { headers: h, rows: r } = parseCSV(text);
-      if (!h.length) { setError("No column headers found. Make sure you're exporting a trade history CSV, not an account statement PDF."); return; }
-      if (!r.length) { setError("No trade rows found. The file may be empty or use a format we don't recognise yet."); return; }
+      if (!h.length) {
+        setError("No column headers found. Make sure you're exporting a trade history CSV, not an account statement PDF.");
+        return;
+      }
+      // Single-header smell test: if there's exactly one header and it contains
+      // a likely-delimiter character inside, the file probably uses an unusual
+      // delimiter our detector missed (rare since we cover , \t and ;).
+      if (h.length === 1 && /[,\t;|]/.test(h[0])) {
+        setError("Couldn't split columns — the file uses an unrecognised delimiter. Save as standard CSV (comma-separated) or TSV (tab-separated) from your platform.");
+        return;
+      }
+      if (!r.length) {
+        setError("Headers found but no trade rows. The file may be empty, contain only a header, or use a format we don't recognise yet.");
+        return;
+      }
       setHeaders(h);
       setRows(r);
       const autoMap = autoDetectMapping(h);
@@ -385,11 +398,40 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
       reader.onerror = () => setError("Couldn't read the file.");
       reader.readAsArrayBuffer(file);
     } else {
+      // Read as ArrayBuffer so we can sniff the byte-order mark and pick the
+      // right encoding. Excel sometimes exports CSVs as UTF-16 LE; readAsText
+      // with "utf-8" produces garbage from those files.
       const reader = new FileReader();
-      reader.onload = () => processText(String(reader.result));
+      reader.onload = () => {
+        try {
+          const buf = reader.result as ArrayBuffer;
+          const text = decodeCsvBuffer(buf);
+          processText(text);
+        } catch {
+          setError("Couldn't decode the file. Try saving it as CSV (UTF-8) from your platform.");
+        }
+      };
       reader.onerror = () => setError("Couldn't read the file. Try saving it as CSV (UTF-8) from your platform.");
-      reader.readAsText(file, "utf-8");
+      reader.readAsArrayBuffer(file);
     }
+  }
+
+  /**
+   * Decode a CSV file's bytes using the right encoding. Sniffs BOM:
+   *   FE FF       → UTF-16 BE
+   *   FF FE       → UTF-16 LE
+   *   EF BB BF    → UTF-8 with BOM (parseCSV strips the U+FEFF after decode)
+   *   otherwise   → UTF-8
+   */
+  function decodeCsvBuffer(buf: ArrayBuffer): string {
+    const bytes = new Uint8Array(buf);
+    if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      return new TextDecoder("utf-16be").decode(buf.slice(2));
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      return new TextDecoder("utf-16le").decode(buf.slice(2));
+    }
+    return new TextDecoder("utf-8").decode(buf);
   }
 
   const fields = [
