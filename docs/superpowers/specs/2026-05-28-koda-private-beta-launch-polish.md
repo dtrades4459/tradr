@@ -64,17 +64,23 @@ This eliminates the CRLF warnings that appear on every Windows commit.
 
 ---
 
-## Batch 2 — TRADR brand sweep
+## Batch 2 — Brand sweep + domain migration
 
 **Branch:** `feat/batch2-brand-sweep`  
-**Est. time:** 20 min  
-**Risk:** Low — string replacements only. No logic changes.
+**Est. time:** 40 min  
+**Risk:** Low — string replacements only. No logic changes.  
+**New domain:** `kodatrade.co.uk` (confirmed 2026-05-28)
 
-> **Already done from previous sessions** (skip these): export filenames (`koda-export-`, `koda-trades-`), CSS class (`koda-app`), BetaGate MONO/BODY import, `@tradrjournal` in share text (was never there — share text correctly uses `#Kōda https://tradrjournal.xyz`).
+> **Already done** (skip): export filenames, CSS class, BetaGate MONO/BODY import.
+
+> **Vercel dashboard — Dylon must do before merging this PR:**
+> 1. Add `kodatrade.co.uk` and `www.kodatrade.co.uk` as custom domains in Vercel project settings
+> 2. Set `APP_URL=https://kodatrade.co.uk` in Vercel env vars (Production + Preview)
+> 3. Add `KODA_ENCRYPTION_KEY` with the same value as the existing `TRADR_ENCRYPTION_KEY`
 
 ### 2.1 — BetaGate SVG mark (`src/BetaGate.tsx`)
 
-- `KodaMarkFilled` local component (L40–47) renders `"kd"` text in SVG. Replace with the 4-chevron `<polyline>` mark:
+`KodaMarkFilled` (L40–47) renders `"kd"` text. Replace with 4-chevron mark:
 ```tsx
 function KodaMarkFilled({ size = 28 }: { size?: number }) {
   return (
@@ -90,25 +96,37 @@ function KodaMarkFilled({ size = 28 }: { size?: number }) {
 
 ### 2.2 — USERNAME_DOMAIN (`src/KodaAuth.tsx`)
 
-- L44: `USERNAME_DOMAIN = "users.tradr.app"` → `"users.koda.app"`
+- L44: `USERNAME_DOMAIN = "users.tradr.app"` → `"users.kodatrade.co.uk"`
 
-### 2.3 — Hardcoded CORS origins in API files
+### 2.3 — Hardcoded CORS origins in 5 API files
 
 Files: `api/broker/[action].ts`, `api/feedback.ts`, `api/cron/complete-challenges.ts`, `api/cron/sync.ts`, `api/reset-password.ts`
-
-Each has `ALLOWED_ORIGINS` or equivalent with hardcoded `tradrjournal.xyz`. Replace with:
 ```ts
 const ALLOWED_ORIGINS = [
-  process.env.APP_URL ?? "https://tradrjournal.xyz",
-  "https://www.tradrjournal.xyz",
+  process.env.APP_URL ?? "https://kodatrade.co.uk",
+  "https://www.kodatrade.co.uk",
 ].filter(Boolean);
 ```
 
-### 2.4 — Koda.tsx join code comment
+### 2.4 — All `tradrjournal.xyz` domain references
 
-- L366: Comment example `tradrjournal.xyz/?join=TRADR-ABCD-EFGH` → update to `koda.app/?join=KODA-XXXX` (comment only, no runtime impact).
+- `src/SettingsScreen.tsx` L311: profile URL → `kodatrade.co.uk/@${handle}`
+- `src/TradingCircles.tsx` L365, L1078: circle join URLs → `kodatrade.co.uk/?join=`
+- `src/Koda.tsx` L1318 (PDF footer): → `kodatrade.co.uk`
+- `src/Koda.tsx` L3104 (share button): → `https://kodatrade.co.uk`
+- `src/FriendsFeed.tsx` L424 (share): → `https://kodatrade.co.uk`
+- `src/Koda.tsx` L366 (comment): update example URL
 
-> **Domain-blocked** (skip for now): Settings profile URL, circle join URLs, PDF footer URL, `api/lib/email.ts` FROM address, `TRADR_ENCRYPTION_KEY` rename — all stay as `tradrjournal.xyz` until new domain confirmed. Add TODO comments where applicable.
+### 2.5 — Email FROM address (`api/lib/email.ts`)
+
+- `FROM = "Kōda <noreply@tradrjournal.xyz>"` → `"Kōda <noreply@kodatrade.co.uk>"`
+- All `tradrjournal.xyz` links inside HTML templates → `kodatrade.co.uk`
+
+### 2.6 — Encryption key rename (`api/lib/cryptoUtils.ts`)
+
+- Replace `TRADR_ENCRYPTION_KEY` with `KODA_ENCRYPTION_KEY` everywhere in the file (3 occurrences)
+- `.env.example`: rename `TRADR_ENCRYPTION_KEY` → `KODA_ENCRYPTION_KEY`
+- `.env.example`: update `APP_URL` default → `https://kodatrade.co.uk`
 
 Verification: `npm run build` — no new errors.
 
