@@ -396,16 +396,28 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   // Load my follow lists from shared_kv and refresh periodically so counts
 
 
-  // Load draft trade count for inbox badge
-  useEffect(() => {
-    if (loading || !profile.uid) return;
+  // Load draft trade count for inbox badge.
+  // Refetches on initial load and whenever the user navigates to log or inbox
+  // so the badge stays current as the broker-sync cron deposits new drafts.
+  const refreshDraftCount = useCallback(() => {
+    if (!profile.uid) return;
     supabase
       .from("trades")
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.uid)
       .eq("review_status", "draft")
       .then(({ count }) => setDraftCount(count ?? 0), () => {});
-  }, [loading, profile.uid]);
+  }, [profile.uid]);
+
+  useEffect(() => {
+    if (loading) return;
+    refreshDraftCount();
+  }, [loading, refreshDraftCount]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (view === "log" || view === "inbox") refreshDraftCount();
+  }, [view, loading, refreshDraftCount]);
 
   async function loadAll() {
     const store = storage;

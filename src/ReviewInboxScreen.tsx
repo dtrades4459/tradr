@@ -81,6 +81,12 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
   const [acting, setActing]               = useState<Set<string>>(new Set());
   const [publishingAll, setPublishingAll] = useState(false);
 
+  // Any in-flight publish/skip — used to mutex actions across rows.
+  // Per-row `acting` checks alone don't prevent concurrent publishes from
+  // overwriting each other in saveTrades (each call reads stale `trades` from
+  // closure and setTrades(u) is not a functional setter).
+  const globalBusy = acting.size > 0 || publishingAll;
+
   const orb1 = C.orb1 ?? "oklch(0.55 0.22 252)";
   const cardBg = `color-mix(in srgb, ${C.text} 3%, transparent)`;
   const mintColor = C.live ?? "oklch(0.84 0.14 175)";
@@ -113,7 +119,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
   // ── Actions ────────────────────────────────────────────────────────────────
 
   async function publishOne(row: DraftRow) {
-    if (acting.has(row.id)) return;
+    if (globalBusy) return;
     setActing(prev => new Set(prev).add(row.id));
     try {
       const { error } = await supabase
@@ -140,7 +146,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
   }
 
   async function skipOne(row: DraftRow) {
-    if (acting.has(row.id)) return;
+    if (globalBusy) return;
     setActing(prev => new Set(prev).add(row.id));
     try {
       const { error } = await supabase
@@ -163,7 +169,7 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
   }
 
   async function publishAll() {
-    if (publishingAll || drafts.length === 0) return;
+    if (globalBusy || drafts.length === 0) return;
     setPublishingAll(true);
     try {
       const ids = drafts.map(d => d.id);
@@ -227,15 +233,15 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
           <div style={{ marginBottom: "20px" }}>
             <button
               onClick={publishAll}
-              disabled={publishingAll}
+              disabled={globalBusy}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
                 width: "100%", padding: "14px 22px", borderRadius: "999px",
                 background: C.green ?? "oklch(0.78 0.18 152)", color: "#0A0A0A",
-                border: "none", cursor: "pointer",
+                border: "none", cursor: globalBusy ? "not-allowed" : "pointer",
                 fontFamily: MONO, fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em",
                 textTransform: "uppercase" as const,
-                opacity: publishingAll ? 0.55 : 1,
+                opacity: globalBusy ? 0.55 : 1,
               }}>
               {publishingAll ? "Publishing…" : `Publish all ${drafts.length} trades`}
               {!publishingAll && (
@@ -276,6 +282,9 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
             const pnl    = parseFloat(String(row.pnl ?? 0));
             const pnlPos = pnl >= 0;
             const busy   = acting.has(row.id);
+            // Disable buttons globally while any action is in flight so racing
+            // clicks across rows can't both compute the same maxId in saveTrades.
+            const disabled = busy || globalBusy;
             const isWin  = row.outcome === "win";
             const isLoss = row.outcome === "loss";
             const outClr = outcomeColor(row.outcome, C);
@@ -366,14 +375,14 @@ export function ReviewInboxScreen({ userId, trades, saveTrades, onCountChange, C
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     onClick={() => publishOne(row)}
-                    disabled={busy}
-                    style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: "pointer", padding: "8px 16px", fontWeight: 600, opacity: busy ? 0.5 : 1 }}>
+                    disabled={disabled}
+                    style={{ background: C.text, color: C.bg, border: "none", borderRadius: "999px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: disabled ? "not-allowed" : "pointer", padding: "8px 16px", fontWeight: 600, opacity: disabled ? 0.5 : 1 }}>
                     {busy ? "…" : "Publish"}
                   </button>
                   <button
                     onClick={() => skipOne(row)}
-                    disabled={busy}
-                    style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: "pointer", padding: "8px 16px", fontWeight: 600, opacity: busy ? 0.5 : 1 }}>
+                    disabled={disabled}
+                    style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border2}`, borderRadius: "999px", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: disabled ? "not-allowed" : "pointer", padding: "8px 16px", fontWeight: 600, opacity: disabled ? 0.5 : 1 }}>
                     Skip
                   </button>
                 </div>
