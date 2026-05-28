@@ -35,6 +35,7 @@ import { UpgradeModal } from "./UpgradeModal";
 import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import EvalAccountScreen from "./EvalAccountScreen";
+import WeeklyReportCard from "./WeeklyReportCard";
 import { DARK, LIGHT, makeStyles } from "./theme";
 import { useIsDesktop, useViewport } from "./hooks/useViewport";
 import { EditInline } from "./components/EditInline";
@@ -1275,6 +1276,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     { id: "performance", label: "Performance" },
     { id: "strategies", label: "Strategies" },
     { id: "calendar", label: "Calendar" },
+    { id: "weekly", label: "Weekly" },
     { id: "psychology", label: "Psychology" },
     { id: "heatmap", label: "Heatmap" },
     { id: "maemfe", label: "MAE/MFE" },
@@ -3219,6 +3221,10 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                     </div>
                   )}
                 </section>
+              )}
+
+              {statsTab === "weekly" && (
+                <WeeklyReportCard trades={trades} C={C} userHandle={profile.handle ? `@${profile.handle.replace(/^@/, "")}` : undefined} />
               )}
 
               {statsTab === "psychology" && (

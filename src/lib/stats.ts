@@ -87,3 +87,118 @@ export function calcWeeklyPnL(trades: Pick<Trade, "date" | "pnl">[]): number {
 export function calcTotalPnL(trades: Pick<Trade, "pnl">[]): number {
   return trades.reduce((sum, t) => sum + (parseFloat(t.pnl as string) || 0), 0);
 }
+
+// ── Weekly recap ──────────────────────────────────────────────────────────────
+
+/** Returns the Monday at 00:00 of the ISO week containing `d` (in local time). */
+export function isoWeekStart(d: Date): Date {
+  const out = new Date(d);
+  const dow = out.getDay(); // 0 = Sun
+  out.setDate(out.getDate() - ((dow + 6) % 7));
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export interface WeeklyRecap {
+  weekStart: string;       // YYYY-MM-DD (Mon)
+  weekEnd: string;         // YYYY-MM-DD (Sun)
+  count: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;  // 0–100, null if count === 0
+  netR: number;
+  netDollar: number;
+  bestSetup: { name: string; netR: number } | null;
+  worstSetup: { name: string; netR: number } | null;
+  bestDay: { label: string; date: string; netDollar: number } | null;
+  worstDay: { label: string; date: string; netDollar: number } | null;
+  ruleAdherencePct: number | null;  // null if no trades tagged
+  taggedCount: number;     // trades with ruleAdherence !== null
+}
+
+/**
+ * Compute a weekly recap for the Mon–Sun week containing `weekStart`.
+ * `weekStart` should be a Monday at 00:00 local; if not, it's normalised.
+ */
+export function computeWeeklyRecap(
+  trades: Pick<Trade, "date" | "pnl" | "pnlDollar" | "outcome" | "setup" | "ruleAdherence">[],
+  weekStart: Date,
+): WeeklyRecap {
+  const start = isoWeekStart(weekStart);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const startStr = fmt(start);
+  const endStr = fmt(end);
+
+  const inWeek = trades.filter(t => t.date && t.date >= startStr && t.date <= endStr);
+
+  const wins = inWeek.filter(t => t.outcome === "Win").length;
+  const losses = inWeek.filter(t => t.outcome === "Loss").length;
+  const winRate = wins + losses > 0 ? parseFloat(((wins / (wins + losses)) * 100).toFixed(1)) : null;
+
+  const netR = inWeek.reduce((s, t) => s + (parseFloat(t.pnl as string) || 0), 0);
+  const netDollar = inWeek.reduce((s, t) => s + (parseFloat(t.pnlDollar as string) || 0), 0);
+
+  // Setup grouping — skip empty setups
+  const bySetup: Record<string, number> = {};
+  for (const t of inWeek) {
+    const s = (t.setup ?? "").trim();
+    if (!s) continue;
+    bySetup[s] = (bySetup[s] ?? 0) + (parseFloat(t.pnl as string) || 0);
+  }
+  const setupEntries = Object.entries(bySetup).sort((a, b) => b[1] - a[1]);
+  const bestSetup = setupEntries.length ? { name: setupEntries[0][0], netR: setupEntries[0][1] } : null;
+  const worstSetup =
+    setupEntries.length > 1 && setupEntries[setupEntries.length - 1][1] < setupEntries[0][1]
+      ? { name: setupEntries[setupEntries.length - 1][0], netR: setupEntries[setupEntries.length - 1][1] }
+      : null;
+
+  // Day-of-week grouping
+  const byDay: Record<string, number> = {};
+  for (const t of inWeek) {
+    if (!t.date) continue;
+    byDay[t.date] = (byDay[t.date] ?? 0) + (parseFloat(t.pnlDollar as string) || 0);
+  }
+  const dayEntries = Object.entries(byDay).sort((a, b) => b[1] - a[1]);
+  const dayToObj = (e: [string, number]) => {
+    const d = new Date(e[0] + "T12:00:00");
+    return { label: DOW_LABELS[d.getDay()], date: e[0], netDollar: e[1] };
+  };
+  const bestDay = dayEntries.length ? dayToObj(dayEntries[0]) : null;
+  const worstDay =
+    dayEntries.length > 1 && dayEntries[dayEntries.length - 1][1] < dayEntries[0][1]
+      ? dayToObj(dayEntries[dayEntries.length - 1])
+      : null;
+
+  // Rule adherence
+  const tagged = inWeek.filter(t => t.ruleAdherence === true || t.ruleAdherence === false);
+  const followed = tagged.filter(t => t.ruleAdherence === true).length;
+  const ruleAdherencePct = tagged.length ? Math.round((followed / tagged.length) * 100) : null;
+
+  return {
+    weekStart: startStr,
+    weekEnd: endStr,
+    count: inWeek.length,
+    wins,
+    losses,
+    winRate,
+    netR,
+    netDollar,
+    bestSetup,
+    worstSetup,
+    bestDay,
+    worstDay,
+    ruleAdherencePct,
+    taggedCount: tagged.length,
+  };
+}
