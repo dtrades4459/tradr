@@ -349,15 +349,19 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   }, [fontScale]);
 
   const _stripeHandledRef = useRef(false);
+  const _upgradedRef = useRef(false);
   useEffect(() => {
     if (_stripeHandledRef.current) return;
     _stripeHandledRef.current = true;
     const params = new URLSearchParams(window.location.search);
     if (params.get("upgraded") === "1") {
+      _upgradedRef.current = true;
       const cid = params.get("cid") ?? "";
       setProfile(p => ({ ...p, plan: "pro" as const, ...(cid ? { stripeCustomerId: cid } : {}) }));
       setCelebration({ kind: "pro" });
       window.history.replaceState({}, "", window.location.pathname);
+      // Refresh JWT after 2s so the webhook's app_metadata update is reflected immediately
+      setTimeout(() => supabase.auth.refreshSession(), 2000);
     }
     if (params.get("cancelled") === "1") {
       showToast("No worries — you're still on the free plan.");
@@ -511,12 +515,14 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         try { await store.set("koda_profile", JSON.stringify(p)); }
         catch (e) { log.error("loadAll.profile.uidStamp", e); }
       }
-      // Always trust the JWT plan claim over whatever is stored in the KV blob.
-      // The JWT is signed by Supabase and set server-side by the Stripe webhook —
-      // it cannot be forged by the client. The KV value is synced on the next
-      // saveProfile() call so they converge quickly.
-      if (jwtPlan && jwtPlan !== "free") {
-        p = { ...p, plan: jwtPlan } as Profile;
+      // Take the highest-tier plan from: KV blob, JWT claim, and the ?upgraded=1
+      // signal (covers the window between checkout redirect and webhook settling).
+      // JWT is signed server-side and cannot be forged; KV converges on next save.
+      const _planPriority: Record<string, number> = { elite: 3, pro: 2, free: 1 };
+      const _bestPlan = [p.plan ?? "free", jwtPlan ?? "free", _upgradedRef.current ? "pro" : "free"]
+        .reduce((best, curr) => (_planPriority[curr] ?? 0) > (_planPriority[best] ?? 0) ? curr : best);
+      if (_bestPlan !== "free") {
+        p = { ...p, plan: _bestPlan as "pro" | "elite" } as Profile;
       }
       setProfile(p); setProfileDraft(p);
       // Identify user in PostHog so all events link to their account
@@ -1159,9 +1165,13 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     if (!feedbackText.trim() || feedbackSending || feedbackSent) return;
     setFeedbackSending(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ feedback: feedbackText.trim(), name: profile.name, handle: profile.handle }),
       });
       if (res.ok) {
@@ -3957,7 +3967,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               onClick={e => e.stopPropagation()}>
               <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 24px" }} />
               <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, marginBottom: "6px" }}>Send feedback</div>
-              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginBottom: "20px" }}>Found a bug? Got an idea? Dylon reads every message.</div>
+              <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted, marginBottom: "20px" }}>Found a bug? Got an idea? Goes straight to Kōda Support.</div>
               <textarea
                 value={feedbackText}
                 onChange={e => setFeedbackText(e.target.value)}
@@ -3973,7 +3983,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                 <button onClick={submitFeedback}
                   disabled={!feedbackText.trim() || feedbackSending || feedbackSent}
                   style={{ flex: 2, padding: "12px", border: "none", borderRadius: "8px", background: feedbackSent ? C.green : feedbackText.trim() && !feedbackSending ? C.text : C.border2, color: feedbackSent ? C.bg : feedbackText.trim() && !feedbackSending ? C.bg : C.muted, cursor: feedbackText.trim() && !feedbackSending && !feedbackSent ? "pointer" : "not-allowed", fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", transition: "background 0.2s, color 0.2s" }}>
-                  {feedbackSent ? "Sent! ✓" : feedbackSending ? "Sending…" : "Send to Dylon"}
+                  {feedbackSent ? "Sent! ✓" : feedbackSending ? "Sending…" : "Send to Kōda Support"}
                 </button>
               </div>
             </div>
