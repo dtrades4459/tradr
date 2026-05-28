@@ -402,8 +402,10 @@ function fmtMonth(y: number, m: number) { return new Date(y, m, 1).toLocaleStrin
 export function CalendarView({ trades, C, onDayClick }: ChartProps & { onDayClick?: (key: string) => void }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
-  const dayPnL: Record<string, { pnl: number; count: number }> = {};
-  trades.forEach(t => { if (t.date) { if (!dayPnL[t.date]) dayPnL[t.date] = { pnl: 0, count: 0 }; dayPnL[t.date].pnl += parseFloat(t.pnl) || 0; dayPnL[t.date].count++; } });
+  const hasDollar = trades.some(t => t.pnlDollar && t.pnlDollar !== "");
+  const [showDollar, setShowDollar] = useState(false);
+  const dayPnL: Record<string, { pnl: number; pnlDollar: number; count: number }> = {};
+  trades.forEach(t => { if (t.date) { if (!dayPnL[t.date]) dayPnL[t.date] = { pnl: 0, pnlDollar: 0, count: 0 }; dayPnL[t.date].pnl += parseFloat(t.pnl) || 0; dayPnL[t.date].pnlDollar += parseFloat(t.pnlDollar as string) || 0; dayPnL[t.date].count++; } });
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [];
@@ -413,6 +415,18 @@ export function CalendarView({ trades, C, onDayClick }: ChartProps & { onDayClic
   const navBtn: React.CSSProperties = { background: "none", border: "none", color: C.text, padding: "6px 10px", cursor: "pointer", fontFamily: MONO, fontSize: "12px", letterSpacing: "0.06em" };
   return (
     <div>
+      {hasDollar && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+          <div style={{ display: "flex", background: C.panel, borderRadius: "999px", border: `1px solid ${C.border2}`, padding: "2px" }}>
+            {(["R", "$"] as const).map(mode => (
+              <button key={mode} onClick={() => setShowDollar(mode === "$")}
+                style={{ padding: "4px 12px", borderRadius: "999px", background: (mode === "$") === showDollar ? C.text : "transparent", color: (mode === "$") === showDollar ? C.bg : C.muted, border: "none", cursor: "pointer", fontFamily: MONO, fontSize: "9px", fontWeight: 600, letterSpacing: "0.1em", transition: "all 0.15s" }}>
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: `1px solid ${C.border}`, paddingBottom: "10px" }}>
         <button onClick={() => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); }} style={navBtn}>‹</button>
         <span style={{ fontSize: "11px", color: C.text, fontFamily: MONO, letterSpacing: "0.12em", textTransform: "uppercase" }}>{fmtMonth(year, month)}</span>
@@ -428,11 +442,15 @@ export function CalendarView({ trades, C, onDayClick }: ChartProps & { onDayClic
           const data = dayPnL[key];
           const isToday = key === new Date().toISOString().split("T")[0];
           const textCol = data ? (data.pnl > 0 ? C.green : data.pnl < 0 ? C.red : C.muted) : C.muted;
+          const displayVal = showDollar && hasDollar ? data?.pnlDollar : data?.pnl;
+          const displayStr = data ? (showDollar && hasDollar
+            ? `${displayVal >= 0 ? "+" : ""}$${Math.abs(displayVal).toFixed(0)}`
+            : `${displayVal >= 0 ? "+" : ""}${displayVal.toFixed(1)}`) : "";
           return (
             <div key={i} onClick={() => data && onDayClick(key)}
               style={{ border: `1px solid ${isToday ? C.text : C.border}`, padding: "6px 3px", textAlign: "center", cursor: data ? "pointer" : "default", minHeight: "44px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: "2px", background: "transparent" }}>
               <div style={{ fontSize: "11px", color: isToday ? C.text : C.text2, fontFamily: MONO }}>{d}</div>
-              {data && <div style={{ fontSize: "10px", color: textCol, fontFamily: MONO, letterSpacing: "0.04em" }}>{data.pnl >= 0 ? "+" : ""}{data.pnl.toFixed(1)}</div>}
+              {data && <div style={{ fontSize: "10px", color: textCol, fontFamily: MONO, letterSpacing: "0.04em" }}>{displayStr}</div>}
             </div>
           );
         })}
