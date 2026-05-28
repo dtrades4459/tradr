@@ -40,6 +40,7 @@ export interface LeaderboardEntry {
   avgRR: number;
   streak: { type: string; count: number } | null;
   topStrategy: string | null;
+  pnlPercent?: number | null;
   updatedAt: string | null;
 }
 

@@ -45,7 +45,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
   // Returns the primary metric label + formatted value for a leaderboard entry
   function metricDisplay(entry: any, circle: any): { val: string; raw: number; label: string } {
     const m = circle?.metric || "dollar";
-    if (m === "dollar") { const v = entry.totalPnLDollar || 0; const pct = (entry as any).pnlPercent; const val = pct !== null && pct !== undefined ? `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)` : `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)}`; return { val, raw: v, label: "$ P&L" }; }
+    if (m === "dollar") { const v = entry.totalPnLDollar || 0; const pct = entry.pnlPercent; const val = pct !== null && pct !== undefined ? `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)` : `${v >= 0 ? "+" : ""}$${Math.abs(v).toFixed(0)}`; return { val, raw: v, label: "$ P&L" }; }
     if (m === "r")       { const v = entry.totalPnL || 0; return { val: `${v >= 0 ? "+" : ""}${v.toFixed(1)}R`, raw: v, label: "R P&L" }; }
     if (m === "winrate") { const v = entry.winRate || 0; return { val: `${v.toFixed(0)}%`, raw: v, label: "WIN RATE" }; }
     if (m === "trades")  { const v = entry.total || 0; return { val: `${v}`, raw: v, label: "TRADES" }; }
