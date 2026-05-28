@@ -449,6 +449,10 @@ export function useCircles({
     const myCode = getMyCodeRef.current();
     const s = statsRef.current;
     const p = profileRef.current;
+    const accountSize = parseFloat((p as any).fundedAmount || (p as any).accountBalance || "0") || 0;
+    const pnlPercent = accountSize > 0 && s.totalPnlDollar !== 0
+      ? (s.totalPnlDollar / accountSize) * 100
+      : null;
     const entry = {
       memberCode: myCode,
       name: p.name || "Trader",
@@ -469,6 +473,7 @@ export function useCircles({
           (b[1] as { w: number; count: number }).w / Math.max((b[1] as { w: number; count: number }).count, 1) -
           (a[1] as { w: number; count: number }).w / Math.max((a[1] as { w: number; count: number }).count, 1)
         )[0]?.[0] || null,
+      pnlPercent,
       updatedAt: new Date().toISOString(),
     };
     try {
