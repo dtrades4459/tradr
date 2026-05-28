@@ -400,7 +400,7 @@ export function SettingsScreen({
                   userVisibleOnly: true,
                   applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
                 });
-                await fetch("/api/push/subscribe", {
+                await fetch("/api/push?action=subscribe", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
                   body: JSON.stringify(sub.toJSON()),
