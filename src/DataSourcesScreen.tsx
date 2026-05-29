@@ -18,6 +18,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Kicker, MONO, BODY, DISPLAY } from "./shared";
 import { CsvImportPanel } from "./CsvImportPanel";
+import { isFlagOn } from "./lib/flags";
 import type { Trade } from "./types";
 import type { Theme } from "./theme";
 
@@ -307,85 +308,36 @@ export function DataSourcesScreen({
             Live sync and CSV imports
           </div>
         </div>
-        {/* Sync Now button — re-enable when live sync ships */}
-        {/* false && connections.length > 0 && (
-          <button style={btn("primary")} onClick={handleManualSync} disabled={syncing}>
-            {syncing ? "Syncing…" : "↺ Sync Now"}
-          </button>
-        ) */}
       </div>
 
-      {/* ── LIVE CONNECTIONS — COMING SOON ── */}
-      <div style={{ marginBottom: 10 }}><Kicker C={C as any}>Live Connections</Kicker></div>
-
-      <div style={{ position: "relative", marginBottom: 24 }}>
-        {/* Blurred preview of what the section will look like */}
-        <div style={{ filter: "blur(3px)", pointerEvents: "none", userSelect: "none", opacity: 0.45 }}>
+      {/* ── LIVE CONNECTIONS — gated until isFlagOn("liveBrokerSync"). */}
+      {!isFlagOn("liveBrokerSync") && (
+        <>
+          <div style={{ marginBottom: 10 }}><Kicker C={C as any}>Live Connections</Kicker></div>
           <div style={{
-            borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`,
-            background: C.panel ?? "#131317", padding: "16px 18px",
-            display: "flex", alignItems: "center", gap: 14, marginBottom: 10,
+            marginBottom: 24, borderRadius: 14,
+            border: `1px solid ${C.border ?? "#333"}`,
+            background: "linear-gradient(135deg, rgba(124,58,237,0.10) 0%, rgba(16,16,32,0.45) 100%)",
+            padding: "28px 20px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
           }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Tradovate — Live</div>
-              <div style={{ fontSize: 12, color: C.muted ?? "#888", fontFamily: MONO, marginTop: 2 }}>Last sync: just now · 3 new trades</div>
+            <div style={{
+              fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
+              textTransform: "uppercase", color: C.accent ?? "#7c3aed",
+              background: `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 12%, transparent)`,
+              padding: "4px 10px", borderRadius: 6,
+            }}>
+              Coming Soon
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text ?? "#e2e8f0", textAlign: "center" }}>
+              Live Broker Sync
+            </div>
+            <div style={{ fontSize: 12, color: C.muted ?? "#888", textAlign: "center", maxWidth: 280, lineHeight: 1.5 }}>
+              Auto-import trades every 5 minutes from Tradovate and Rithmic. Use CSV import in the meantime.
             </div>
           </div>
-          <div style={{
-            borderRadius: 18, border: `1px solid ${C.border2 ?? "#2a2a3e"}`,
-            background: C.panel ?? "#131317", padding: "16px 18px",
-            display: "flex", alignItems: "center", gap: 14, marginBottom: 10,
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15, color: C.text ?? "#e2e8f0" }}>Rithmic — Demo</div>
-              <div style={{ fontSize: 12, color: C.muted ?? "#888", fontFamily: MONO, marginTop: 2 }}>Last sync: 5m ago · syncing…</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Coming soon overlay */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          borderRadius: 14,
-          background: "linear-gradient(135deg, rgba(124,58,237,0.13) 0%, rgba(16,16,32,0.7) 100%)",
-          backdropFilter: "blur(1px)",
-          border: `1px solid ${C.border ?? "#333"}`,
-          gap: 8, padding: 20,
-        }}>
-          <div style={{
-            fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
-            textTransform: "uppercase", color: C.accent ?? "#7c3aed",
-            background: `color-mix(in oklch, ${C.accent ?? "oklch(0.74 0.16 250)"} 12%, transparent)`, padding: "4px 10px", borderRadius: 6,
-          }}>
-            Coming Soon
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.text ?? "#e2e8f0", textAlign: "center" }}>
-            Live Broker Sync
-          </div>
-          <div style={{ fontSize: 12, color: C.muted ?? "#888", textAlign: "center", maxWidth: 280, lineHeight: 1.5 }}>
-            Auto-import trades every 5 minutes from Tradovate and Rithmic. Launching soon — use CSV import in the meantime.
-          </div>
-        </div>
-      </div>
-
-      {/* ── DUMMY SECTION BELOW (hidden — preserved for when live sync ships) ── */}
-      {/* Connections list hidden until live sync ships — kept for reference:
-      connections.length === 0 ? (
-        <div style={{ ...card, color: C.muted ?? "#888", fontSize: 14, textAlign: "center", padding: "22px 16px" }}>
-          No broker connected yet.
-          Trades will auto-import every 5 minutes once connected.
-        </div>
-      ) : (
-        connections.map(conn => (
-          ...conn cards...
-        ))
-      ) */}
-
-      {/* ── ADD BROKER BUTTON — hidden until live sync ships ── */}
-      {/* Connect button hidden until live sync ships */}
+        </>
+      )}
 
       {/* ── CSV IMPORT ── */}
       <div style={{ marginBottom: 10 }}><Kicker C={C as any}>Sync from CSV</Kicker></div>
