@@ -22,7 +22,7 @@ jobs:
       - name: Trigger broker sync
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X GET "https://tradrjournal.xyz/api/cron/sync" \
+            -X GET "https://kodatrade.co.uk/api/cron/sync" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             --max-time 180)
           echo "Response status: $STATUS"

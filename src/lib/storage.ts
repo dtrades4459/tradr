@@ -59,6 +59,24 @@ function writeCache(key: string, value: string, shared: boolean): void {
   }
 }
 
+async function remoteBatchGet(keys: string[]): Promise<Map<string, StorageRow>> {
+  const result = new Map<string, StorageRow>();
+  if (!currentUserId || keys.length === 0) return result;
+  try {
+    const { data, error } = await supabase
+      .from("user_kv")
+      .select("key, value")
+      .eq("user_id", currentUserId)
+      .in("key", keys);
+    if (!error && data) {
+      for (const row of data as Array<{ key: string; value: unknown }>) {
+        result.set(row.key, { value: JSON.stringify(row.value) });
+      }
+    }
+  } catch { /* ignore */ }
+  return result;
+}
+
 async function remoteGet(key: string, shared: boolean): Promise<StorageRow> {
   try {
     if (shared) {
@@ -169,6 +187,31 @@ const storage = {
       });
     }
     return cached;
+  },
+
+  async getMany(keys: string[]): Promise<Map<string, StorageRow>> {
+    const result = new Map<string, StorageRow>();
+    const misses: string[] = [];
+    for (const key of keys) {
+      const cached = readCache(key, false);
+      if (cached != null) {
+        result.set(key, cached);
+        remoteGet(key, false).then(remote => {
+          if (remote && remote.value !== cached.value) writeCache(key, remote.value, false);
+        });
+      } else {
+        misses.push(key);
+      }
+    }
+    if (misses.length > 0) {
+      const remote = await remoteBatchGet(misses);
+      for (const key of misses) {
+        const val = remote.get(key) ?? null;
+        result.set(key, val);
+        if (val) writeCache(key, val.value, false);
+      }
+    }
+    return result;
   },
 
   async set(key: string, value: string, shared: boolean = false): Promise<boolean> {

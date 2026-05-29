@@ -477,19 +477,14 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
 
   async function loadAll() {
     const store = storage;
-    const [t, pr, sc, sr, dm, ci, st, cs, v2ProfileRes] = await Promise.all([
-      store.get("koda_trades").catch(() => null),
-      store.get("koda_profile").catch(() => null),
-      store.get("koda_checklists").catch(() => null),
-      store.get("koda_rules").catch(() => null),
-      store.get("koda_dark").catch(() => null),
-      store.get("koda_circles").catch(() => null),
-      store.get("koda_thresholds").catch(() => null),
-      store.get("koda_custom_strategies").catch(() => null),
+    const LOAD_KEYS = ["koda_trades","koda_profile","koda_checklists","koda_rules","koda_dark","koda_circles","koda_thresholds","koda_custom_strategies"] as const;
+    const [kv, v2ProfileRes] = await Promise.all([
+      store.getMany([...LOAD_KEYS]).catch(() => new Map()),
       (isFlagOn("newProfile") && user?.id)
         ? getProfile(user.id).catch(() => null)
         : Promise.resolve(null),
     ]);
+    const [t, pr, sc, sr, dm, ci, st, cs] = LOAD_KEYS.map(k => kv.get(k) ?? null);
 
     // Trades
     try {
