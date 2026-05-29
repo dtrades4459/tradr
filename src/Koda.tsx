@@ -34,6 +34,7 @@ import type { OnboardingData } from "./OnboardingFlow";
 import { UpgradeModal } from "./UpgradeModal";
 import { LotSizeCalculator } from "./LotSizeCalculator";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
+import { readUtm } from "./lib/utm";
 import EvalAccountScreen from "./EvalAccountScreen";
 import WeeklyReportCard from "./WeeklyReportCard";
 import NotificationsDrawer from "./NotificationsDrawer";
@@ -342,6 +343,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [mandatoryUpgrade, setMandatoryUpgrade] = useState(false);
   const [showCalc,    setShowCalc]    = useState(false);
+  const [showFirstSessionSurvey, setShowFirstSessionSurvey] = useState(false);
 
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [fontScale, setFontScale] = useState<number>(() => {
@@ -569,8 +571,16 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         p = { ...p, plan: _bestPlan as "pro" | "elite" } as Profile;
       }
       setProfile(p); setProfileDraft(p);
-      // Identify user in PostHog so all events link to their account
-      if (p.uid) phIdentify(p.uid, { handle: p.handle, plan: p.plan ?? "free" });
+      // Identify user in PostHog so all events link to their account.
+      // UTM params are stored in sessionStorage by main.tsx on first load and
+      // attached here so they're associated with the user even after the OAuth redirect.
+      if (p.uid) phIdentify(p.uid, {
+        handle: p.handle,
+        plan: p.plan ?? "free",
+        prior_tool: p.priorTool,
+        almost_stopped_reason: p.almostStoppedReason,
+        ...readUtm(),
+      });
     } catch (e) { log.error("loadAll.profile", e); }
 
     try { if (sc) setStratChecklists(JSON.parse(sc.value)); }
@@ -776,6 +786,13 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     statsFingerprint,
     showToast,
   });
+
+  // Show first-session survey once after onboarding — captures priorTool and
+  // almostStoppedReason for PostHog segmentation.
+  useEffect(() => {
+    if (loading || !profile.uid) return;
+    if (profile.onboarded && !profile.priorTool) setShowFirstSessionSurvey(true);
+  }, [loading, profile.uid, profile.onboarded, profile.priorTool]);
 
   // Backfill: every user gets auto-joined to Kōda Global. The onboarding flow
   // already does this for new users; this effect covers existing users who
@@ -4117,6 +4134,19 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         {/* ── First-run tour ── */}
         {showTour && <TourOverlay C={C} onDone={() => setShowTour(false)} />}
 
+        {/* ── First-session survey: prior tool + almost-stopped reason ── */}
+        {showFirstSessionSurvey && (
+          <FirstSessionSurvey
+            C={C}
+            onSave={async (priorTool, almostStoppedReason) => {
+              const updated = { ...profile, priorTool, almostStoppedReason };
+              await saveProfile(updated);
+              phIdentify(profile.uid!, { prior_tool: priorTool, almost_stopped_reason: almostStoppedReason });
+              setShowFirstSessionSurvey(false);
+            }}
+          />
+        )}
+
         {/* ── Feedback modal ── */}
         {feedbackOpen && (
           <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
@@ -4396,6 +4426,67 @@ function ConfluenceTracker({ checkItems, checkedCount, totalItems, isChecked, ac
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── First-session survey ─────────────────────────────────────────────────────
+
+const PRIOR_TOOL_OPTIONS = [
+  "TradesViz", "Edgewonk", "Excel / Google Sheets",
+  "Notion / Obsidian", "Nothing (paper/memory)", "Other",
+];
+
+function FirstSessionSurvey({
+  C,
+  onSave,
+}: {
+  C: ReturnType<typeof makeStyles>;
+  onSave: (priorTool: string, almostStoppedReason: string) => Promise<void>;
+}) {
+  const [priorTool, setPriorTool] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!priorTool) return;
+    setSaving(true);
+    await onSave(priorTool, reason.trim());
+    setSaving(false);
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9990, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div style={{ background: C.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: "clamp(0px,100%,min(560px,92vw))", padding: "10px 24px 40px" }}>
+        <div style={{ width: "36px", height: "4px", background: C.border2, borderRadius: "2px", margin: "14px auto 24px" }} />
+        <div style={{ fontFamily: DISPLAY, fontSize: "20px", fontWeight: 500, color: C.text, marginBottom: "4px" }}>Quick question</div>
+        <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text2, marginBottom: "24px" }}>Help us understand your background — takes 20 seconds.</div>
+
+        <div style={{ fontFamily: BODY, fontSize: "12px", color: C.text2, marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>What were you using before Kōda?</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "24px" }}>
+          {PRIOR_TOOL_OPTIONS.map(opt => (
+            <button key={opt} onClick={() => setPriorTool(opt)}
+              style={{ fontFamily: BODY, fontSize: "13px", padding: "7px 14px", borderRadius: "999px", border: `1px solid ${priorTool === opt ? C.text : C.border2}`, background: priorTool === opt ? C.text : "transparent", color: priorTool === opt ? C.bg : C.text2, cursor: "pointer", transition: "all 0.15s" }}>
+              {opt}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontFamily: BODY, fontSize: "12px", color: C.text2, marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>What almost stopped you signing up? <span style={{ color: C.muted }}>(optional)</span></div>
+        <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder="Price, not sure if I'd use it, already have a system…"
+          style={{ width: "100%", boxSizing: "border-box", background: C.panel, border: `1px solid ${C.border2}`, borderRadius: "10px", padding: "12px", fontFamily: BODY, fontSize: "13px", color: C.text, resize: "none", outline: "none", marginBottom: "20px" }} />
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={handleSave} disabled={!priorTool || saving}
+            style={{ flex: 1, padding: "13px", borderRadius: "12px", border: "none", background: priorTool ? C.text : C.border2, color: priorTool ? C.bg : C.muted, fontFamily: BODY, fontSize: "14px", fontWeight: 600, cursor: priorTool ? "pointer" : "default" }}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button onClick={() => onSave("skipped", "")}
+            style={{ padding: "13px 20px", borderRadius: "12px", border: `1px solid ${C.border2}`, background: "transparent", color: C.text2, fontFamily: BODY, fontSize: "14px", cursor: "pointer" }}>
+            Skip
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

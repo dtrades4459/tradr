@@ -72,6 +72,9 @@ export interface Profile {
   propFirmProfitTarget?: number;  // Profit target ($)
   propFirmDailyLossLimit?: number; // Max daily loss ($)
   propFirmMaxDrawdown?: number;   // Max total drawdown ($)
+  // First-session survey fields
+  priorTool?: string;
+  almostStoppedReason?: string;
 }
 
 export interface CircleMember {

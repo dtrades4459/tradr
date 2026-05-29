@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { installStorage } from "./lib/storage";
 import { initSentry } from "./lib/sentry";
 import { initPostHog } from "./lib/posthog";
+import { captureUtm } from "./lib/utm";
 import "./lib/flags"; // side-effect: exposes window.kodaFlags
 import "./index.css";
 
@@ -18,6 +19,9 @@ initSentry();
 
 // Boot PostHog if a key is configured. No-op otherwise — safe to leave on.
 initPostHog();
+
+// Capture UTM params before auth redirect so they survive the OAuth round-trip.
+captureUtm();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
