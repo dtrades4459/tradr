@@ -20,7 +20,7 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 //
 // IMPORTANT: Add this endpoint in Stripe Dashboard → Webhooks:
-//   URL: https://tradrjournal.xyz/api/stripe-webhook
+//   URL: https://kodatrade.co.uk/api/stripe-webhook
 //   Events: checkout.session.completed, customer.subscription.updated,
 //           customer.subscription.deleted, invoice.paid, invoice.payment_failed
 // ═══════════════════════════════════════════════════════════════════════════════

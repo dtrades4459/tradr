@@ -16,7 +16,7 @@
 // ENV VARS (Vercel):
 //   CRON_SECRET              — random secret, set in vercel.json cron headers too
 //   TRADOVATE_APP_ID/VERSION/CID/SEC
-//   TRADR_ENCRYPTION_KEY
+//   KODA_ENCRYPTION_KEY
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -13,7 +13,7 @@
 //   STRIPE_SECRET_KEY
 //   SUPABASE_URL               same value as VITE_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY  Supabase → Settings → API → service_role key
-//   APP_URL                    https://tradrjournal.xyz
+//   APP_URL                    https://kodatrade.co.uk
 //
 // IMPORTANT: Enable the Customer Portal in Stripe Dashboard → Billing → Portal.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -23,19 +23,19 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
-  "https://tradrjournal.xyz",
-  "https://www.tradrjournal.xyz",
+  "https://kodatrade.co.uk",
+  "https://www.kodatrade.co.uk",
   "http://localhost:5173",
   "http://localhost:4173",
 ]);
 
 function cors(req: any, res: any) {
   const origin = req.headers["origin"] ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://kodatrade.co.uk";
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");

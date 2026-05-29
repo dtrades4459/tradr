@@ -7,7 +7,7 @@
 //   const plain   = decrypt(stored);        // → original string
 //
 // ENV VAR REQUIRED
-//   TRADR_ENCRYPTION_KEY — 64 hex characters (32 bytes).
+//   KODA_ENCRYPTION_KEY — 64 hex characters (32 bytes).
 //   Generate once with:  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 //   Store in Vercel dashboard → Settings → Environment Variables.
 //   NEVER commit this value to git.
@@ -20,10 +20,10 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 
 function getKey(): Buffer {
-  const hex = process.env.TRADR_ENCRYPTION_KEY;
+  const hex = process.env.KODA_ENCRYPTION_KEY;
   if (!hex || hex.length !== 64) {
     throw new Error(
-      "TRADR_ENCRYPTION_KEY env var is missing or wrong length. " +
+      "KODA_ENCRYPTION_KEY env var is missing or wrong length. " +
       "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
     );
   }
