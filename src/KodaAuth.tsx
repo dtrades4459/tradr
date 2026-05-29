@@ -231,7 +231,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
         {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
         {msg   && <div style={{ fontSize: 13, color: C.green, marginTop: 4, fontFamily: BODY }}>{msg}</div>}
 
-        <button onClick={handleSubmit} disabled={loading} style={{
+        <button data-testid="auth-submit" onClick={handleSubmit} disabled={loading} style={{
           background: C.text, color: C.bg, border: "none", borderRadius: 999,
           padding: "14px 20px", fontSize: 13, fontWeight: 500, fontFamily: BODY,
           cursor: "pointer", width: "100%", marginTop: 8,

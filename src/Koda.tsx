@@ -1530,7 +1530,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   const sn = subNavFor(tab.id); const ia = view === tab.id;
                   return (
                     <div key={tab.id}>
-                      <button onClick={()=>primaryNav(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                      <button data-testid={`nav-${tab.id}`} onClick={()=>primaryNav(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ opacity: ia ? 1 : 0.55, flexShrink: 0 }}>
                           <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
@@ -3722,7 +3722,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {NAV_TABS.map(tab => {
                 const active = view === tab.id;
                 return (
-                  <button key={tab.id} onClick={() => primaryNav(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
+                  <button key={tab.id} data-testid={`nav-${tab.id}`} onClick={() => primaryNav(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <svg width="17" height="17" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
                         <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>

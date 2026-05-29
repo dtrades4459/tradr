@@ -159,56 +159,38 @@ test.describe("authenticated flow", () => {
     await dismissCookieBanner(page, "accept");
 
     // ── Auth ──────────────────────────────────────────────────────────────
-    const usernameInput = page.locator('input[type="text"]').first();
-    await expect(usernameInput).toBeVisible({ timeout: 10_000 });
-
-    await usernameInput.fill(EMAIL);
+    // Username + password are FloatingInput-wrapped, so we target them by
+    // input type. The submit button has a stable data-testid.
+    await page.locator('input[type="text"]').first().fill(EMAIL);
     await page.locator('input[type="password"]').fill(PASSWORD);
-    await page.locator("button").filter({ hasText: /sign in/i }).first().click();
+    await page.getByTestId("auth-submit").click();
 
-    // Wait for the main app to load
-    const logTab = page.locator('button, [role="tab"]').filter({ hasText: /^log$/i });
-    await expect(logTab.first()).toBeVisible({ timeout: 15_000 });
+    // ── Navigate to LOG ───────────────────────────────────────────────────
+    const navLog = page.getByTestId("nav-log");
+    await expect(navLog).toBeVisible({ timeout: 15_000 });
+    await navLog.click();
 
-    // ── Open the trade log form ───────────────────────────────────────────
-    await logTab.first().click();
+    // ── Fill the minimal viable trade ─────────────────────────────────────
+    // The pair field is the canonical "trade form is ready" marker.
+    const pairInput = page.getByTestId("trade-pair");
+    await expect(pairInput).toBeVisible({ timeout: 10_000 });
+    await pairInput.fill("NQ");
 
-    const addButton = page
-      .locator("button")
-      .filter({ hasText: /log trade|add trade|\+/i })
-      .first();
-    await expect(addButton).toBeVisible({ timeout: 8_000 });
-    await addButton.click();
+    // Outcome is a SegBtn group rendered as buttons labelled Win / Loss / BE.
+    await page.getByRole("button", { name: /^win$/i }).first().click();
 
-    // ── Fill in minimal trade fields ──────────────────────────────────────
-    const pairInput = page
-      .locator('input[placeholder*="pair" i], input[placeholder*="symbol" i], input[placeholder*="instrument" i]')
-      .first();
-    if (await pairInput.isVisible()) {
-      await pairInput.fill("NQ");
-    }
-
-    const winButton = page.locator("button, label").filter({ hasText: /^win$/i }).first();
-    if (await winButton.isVisible()) {
-      await winButton.click();
-    }
-
-    const pnlInput = page
-      .locator('input[placeholder*="p&l" i], input[placeholder*="pnl" i], input[placeholder*="profit" i]')
-      .first();
-    if (await pnlInput.isVisible()) {
-      await pnlInput.fill("100");
-    }
+    await page.getByTestId("trade-pnl-dollar").fill("100");
 
     // ── Save ──────────────────────────────────────────────────────────────
-    const saveButton = page
-      .locator("button")
-      .filter({ hasText: /save|add trade|log trade/i })
-      .last();
+    const saveButton = page.getByTestId("trade-save");
+    await expect(saveButton).toBeEnabled();
     await saveButton.click();
 
     // ── Verify trade appears ──────────────────────────────────────────────
-    const tradeEntry = page.locator("text=NQ").or(page.locator("text=100")).first();
-    await expect(tradeEntry).toBeVisible({ timeout: 10_000 });
+    // The freshly-saved trade lands on the history list. We accept either
+    // the symbol or the P&L value as visible evidence.
+    await expect(
+      page.locator("text=NQ").or(page.locator("text=100")).first()
+    ).toBeVisible({ timeout: 10_000 });
   });
 });

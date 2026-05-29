@@ -139,7 +139,7 @@ export function LogTradeScreen({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 10 }}>
           <div>
             <label style={lbl}>Pair / Instrument</label>
-            <input name="pair" value={form.pair} onChange={handleChange} placeholder="ES" style={inp} />
+            <input data-testid="trade-pair" name="pair" value={form.pair} onChange={handleChange} placeholder="ES" style={inp} />
           </div>
           <div>
             <label style={lbl}>Direction</label>
@@ -209,7 +209,7 @@ export function LogTradeScreen({
         </Card>
         <Card C={T} pad={16}>
           <Kicker C={T}>Net P&L</Kicker>
-          <input type="number" inputMode="decimal" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="$485"
+          <input data-testid="trade-pnl-dollar" type="number" inputMode="decimal" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="$485"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", borderBottom: "none", padding: "8px 0 0" }} />
         </Card>
       </div>
@@ -396,7 +396,7 @@ export function LogTradeScreen({
       </Card>
 
       {/* ── Save button (design-spec: teal arrow CTA) ── */}
-      <button onClick={submitTrade} disabled={savingTrade || !(form.pair && form.date && form.outcome)}
+      <button data-testid="trade-save" onClick={submitTrade} disabled={savingTrade || !(form.pair && form.date && form.outcome)}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           background: enabled ? C.text : (C as any).panel2 ?? C.panel,
