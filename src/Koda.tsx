@@ -2284,7 +2284,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                             <div style={{ fontSize: "11px", color: C.muted, marginTop: "1px", fontFamily: MONO }}>Unlimited imports · Advanced analytics</div>
                           </div>
                         </div>
-                        <span style={{ fontFamily: MONO, fontSize: "11px", color: C.live }}>$24.99/mo →</span>
+                        <span style={{ fontFamily: MONO, fontSize: "11px", color: C.live }}>£24.99/mo →</span>
                       </button>
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0" }}>

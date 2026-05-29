@@ -120,7 +120,7 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
 
         {/* Price */}
         <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "baseline", gap: "6px" }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: "42px", fontWeight: 700, color: C.text ?? "#F2F2EE", lineHeight: 1, letterSpacing: "-0.03em" }}>$24.99</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: "42px", fontWeight: 700, color: C.text ?? "#F2F2EE", lineHeight: 1, letterSpacing: "-0.03em" }}>£24.99</span>
           <span style={{ fontFamily: MONO, fontSize: "12px", color: C.muted ?? "#65655F" }}>/mo · cancel any time</span>
         </div>
 
@@ -157,7 +157,7 @@ export function UpgradeModal({ C, userId, userEmail, stripeCustomerId, onCustome
               fontFamily: BODY, opacity: loading ? 0.7 : 1, transition: "opacity 0.2s",
             }}
           >
-            <span>{loading ? "Redirecting…" : "Upgrade Now — $24.99/mo"}</span>
+            <span>{loading ? "Redirecting…" : "Upgrade Now — £24.99/mo"}</span>
             {!loading && (
               <span style={{ width: "36px", height: "36px", borderRadius: "999px", background: "#0A0A0A", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

@@ -165,7 +165,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <FloatingInput C={C} label="New password" placeholder="min. 6 characters" value={newPassword}
-            onChange={v => setNewPassword(v)} />
+            onChange={v => setNewPassword(v)} type="password" />
           {error && <div style={{ fontSize: 13, color: C.red, fontFamily: BODY }}>{error}</div>}
           <button onClick={handleNewPassword} disabled={loading} style={{
             background: C.text, color: C.bg, border: "none", borderRadius: 999,
@@ -226,7 +226,7 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
           onChange={v => setUsername(v.toLowerCase())} />
 
         <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
-          onChange={v => setPassword(v)} />
+          onChange={v => setPassword(v)} type="password" />
 
         {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
         {msg   && <div style={{ fontSize: 13, color: C.green, marginTop: 4, fontFamily: BODY }}>{msg}</div>}

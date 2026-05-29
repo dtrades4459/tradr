@@ -17,7 +17,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
 
   use: {
-    baseURL: process.env.BASE_URL ?? "https://tradrjournal.xyz",
+    baseURL: process.env.BASE_URL ?? "https://kodatrade.co.uk",
     headless: true,
     viewport: { width: 390, height: 844 }, // iPhone 14 — TRADR is mobile-first
     video: "retain-on-failure",

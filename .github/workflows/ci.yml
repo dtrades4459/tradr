@@ -82,7 +82,7 @@ jobs:
         env:
           TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
-          BASE_URL: https://tradrjournal.xyz
+          BASE_URL: https://kodatrade.co.uk
 
       - name: Upload test report
         if: always()
