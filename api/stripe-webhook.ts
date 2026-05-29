@@ -195,7 +195,7 @@ export default async function handler(req: any, res: any) {
 
         const profile = profileRow?.value as { email?: string; name?: string; plan?: string } | undefined;
         if (profile?.email) {
-          const amount = `$${(invoice.amount_paid / 100).toFixed(2)}`;
+          const amount = `£${(invoice.amount_paid / 100).toFixed(2)}`;
           const date = new Date(invoice.created * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
           const plan = profile.plan === "elite" ? "Elite" : "Pro";
           await sendEmail({

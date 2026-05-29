@@ -673,7 +673,11 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   // Convert app Trade (strings, single screenshot) → v2 upsert shape
   function appTradeToV2Payload(t: Trade, uid: string) {
     const parseNum = (v: string | undefined) => { const n = parseFloat(v ?? ""); return isFinite(n) ? n : undefined; };
-    const outcome = t.outcome === "win" || t.outcome === "loss" || t.outcome === "be" ? t.outcome : "be";
+    const outcome: "win" | "loss" | "be" =
+      t.outcome === "Win" ? "win" :
+      t.outcome === "Loss" ? "loss" :
+      t.outcome === "Breakeven" ? "be" :
+      (() => { throw new Error(`appTradeToV2Payload: unknown outcome ${JSON.stringify(t.outcome)}`); })();
     return {
       userId: uid,
       clientId: String(t.id),

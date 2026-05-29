@@ -435,6 +435,10 @@ export function useCircles({
 
   /** Member leaves a circle they joined. Deletes their own member + entry rows. */
   async function leaveCircle(circleCode: string) {
+    if (circleCode === KODA_GLOBAL_CODE) {
+      showToast("You can't leave the Kōda community.");
+      return;
+    }
     const myCode = getMyCodeRef.current();
     try {
       await Promise.all([

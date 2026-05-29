@@ -411,7 +411,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
                 background: C.text, color: C.bg,
                 fontFamily: BODY, fontSize: 14, fontWeight: 600, cursor: "pointer",
               }}>
-                Start free trial
+                Get started free
                 <span style={{
                   width: 32, height: 32, borderRadius: 999, background: C.live,
                   display: "flex", alignItems: "center", justifyContent: "center",
