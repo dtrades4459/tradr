@@ -298,6 +298,9 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const [addingRule, setAddingRule] = useState(false);
   const [calDayTrades, setCalDayTrades] = useState<Trade[] | null>(null);
   const [statsTab, setStatsTab] = useState("overview");
+  const [setupPeriod, setSetupPeriod] = useState<"month" | "all">("month");
+  const [setupMetric, setSetupMetric] = useState<"pnl" | "winrate" | "trades">("pnl");
+  const [setupDollar, setSetupDollar] = useState(false);
   const [perfPnlMode, setPerfPnlMode] = useState<"r" | "$">("$");
   const [savingTrade, setSavingTrade] = useState(false);
 
@@ -1376,6 +1379,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     { id: "feed", label: "Overview" },
     { id: "circles", label: "Circles" },
     { id: "ai", label: "Execution" },
+    { id: "analytics", label: "Analytics" },
     { id: "rules", label: "Rules" },
     { id: "checklist", label: "Checklist" },
     { id: "sync", label: "Sync" },
@@ -2336,6 +2340,98 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {/* ANALYTICS */}
               {homeSection === "analytics" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "clamp(40px, 6vw, 56px)", marginTop: "clamp(24px, 5vw, 40px)" }}>
+                  {/* P&L BY SETUP */}
+                  <section>
+                    <SectionKicker label="P&L BY SETUP" C={C} />
+                    {(() => {
+                      const now = new Date();
+                      const filtered = setupPeriod === "month"
+                        ? trades.filter((t: Trade) => { const d = new Date(t.date + "T12:00:00"); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); })
+                        : trades;
+                      const stats: Record<string, { pnl: number; dollar: number; wins: number; total: number }> = {};
+                      filtered.forEach((t: Trade) => {
+                        if (!t.strategy) return;
+                        if (!stats[t.strategy]) stats[t.strategy] = { pnl: 0, dollar: 0, wins: 0, total: 0 };
+                        stats[t.strategy].pnl += parseFloat(t.pnl) || 0;
+                        stats[t.strategy].dollar += parseFloat(t.pnlDollar) || 0;
+                        stats[t.strategy].wins += t.outcome === "Win" ? 1 : 0;
+                        stats[t.strategy].total++;
+                      });
+                      const rows = Object.entries(stats).map(([name, s]) => ({
+                        name,
+                        pnl: s.pnl,
+                        dollar: s.dollar,
+                        winRate: s.total > 0 ? (s.wins / s.total) * 100 : 0,
+                        trades: s.total,
+                      })).sort((a, b) => {
+                        if (setupMetric === "pnl") return (setupDollar ? b.dollar : b.pnl) - (setupDollar ? a.dollar : a.pnl);
+                        if (setupMetric === "winrate") return b.winRate - a.winRate;
+                        return b.trades - a.trades;
+                      });
+                      const maxAbs = Math.max(...rows.map(r => {
+                        if (setupMetric === "pnl") return Math.abs(setupDollar ? r.dollar : r.pnl);
+                        if (setupMetric === "winrate") return r.winRate;
+                        return r.trades;
+                      }), 1);
+                      return (
+                        <div style={{ marginTop: "16px" }}>
+                          {/* Controls */}
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" as const, marginBottom: "20px" }}>
+                            {/* Period toggle */}
+                            {(["month", "all"] as const).map(p => (
+                              <button key={p} onClick={() => setSetupPeriod(p)} style={{ fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", padding: "5px 12px", borderRadius: "999px", border: `1px solid ${setupPeriod === p ? C.text : C.border}`, background: setupPeriod === p ? C.text : "transparent", color: setupPeriod === p ? C.bg : C.muted, cursor: "pointer" }}>
+                                {p === "month" ? "THIS MONTH" : "ALL TIME"}
+                              </button>
+                            ))}
+                            <div style={{ width: "1px", background: C.border, margin: "0 2px" }} />
+                            {/* Metric toggle */}
+                            {(["pnl", "winrate", "trades"] as const).map(m => (
+                              <button key={m} onClick={() => setSetupMetric(m)} style={{ fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", padding: "5px 12px", borderRadius: "999px", border: `1px solid ${setupMetric === m ? C.text : C.border}`, background: setupMetric === m ? C.text : "transparent", color: setupMetric === m ? C.bg : C.muted, cursor: "pointer" }}>
+                                {m === "pnl" ? "P&L" : m === "winrate" ? "WIN RATE" : "TRADES"}
+                              </button>
+                            ))}
+                            {/* R/$ toggle — only when metric = P&L and dollar data exists */}
+                            {setupMetric === "pnl" && hasDollarData && (
+                              <>
+                                <div style={{ width: "1px", background: C.border, margin: "0 2px" }} />
+                                {(["R", "$"] as const).map(unit => (
+                                  <button key={unit} onClick={() => setSetupDollar(unit === "$")} style={{ fontFamily: MONO, fontSize: "10px", letterSpacing: "0.08em", padding: "5px 12px", borderRadius: "999px", border: `1px solid ${(unit === "$") === setupDollar ? C.text : C.border}`, background: (unit === "$") === setupDollar ? C.text : "transparent", color: (unit === "$") === setupDollar ? C.bg : C.muted, cursor: "pointer" }}>
+                                    {unit}
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                          {/* Bar chart */}
+                          {rows.length === 0
+                            ? <div style={{ fontFamily: BODY, fontSize: "13px", color: C.muted }}>No trades with a strategy tagged in this period.</div>
+                            : <div style={{ display: "flex", flexDirection: "column" as const, gap: "14px" }}>
+                                {rows.map(r => {
+                                  const val = setupMetric === "pnl" ? (setupDollar ? r.dollar : r.pnl) : setupMetric === "winrate" ? r.winRate : r.trades;
+                                  const isPos = setupMetric !== "pnl" || val >= 0;
+                                  const barPct = (Math.abs(val) / maxAbs) * 100;
+                                  const label = setupMetric === "pnl"
+                                    ? (setupDollar ? `${val >= 0 ? "+" : ""}$${Math.abs(val).toFixed(0)}` : `${val >= 0 ? "+" : ""}${val.toFixed(1)}R`)
+                                    : setupMetric === "winrate" ? `${val.toFixed(0)}%`
+                                    : `${val}`;
+                                  return (
+                                    <div key={r.name}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "5px" }}>
+                                        <span style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{r.name}</span>
+                                        <span style={{ fontFamily: MONO, fontSize: "11px", color: isPos ? C.green : C.red, letterSpacing: "0.04em" }}>{label}</span>
+                                      </div>
+                                      <div style={{ background: C.panel2, borderRadius: "3px", height: "6px" }}>
+                                        <div style={{ width: `${barPct}%`, height: "100%", borderRadius: "3px", background: isPos ? C.green : C.red, transition: "width 0.3s ease" }} />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                          }
+                        </div>
+                      );
+                    })()}
+                  </section>
                   <section>
                     <SectionKicker label="WIN RATE BY STRATEGY" C={C} />
                     <div style={{ marginTop: "20px" }}><WinRateChart trades={trades} C={C} /></div>
