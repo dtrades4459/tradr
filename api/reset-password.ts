@@ -11,7 +11,7 @@
 // Required Vercel environment variables:
 //   SUPABASE_URL               same value as VITE_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY  Supabase → Settings → API → service_role key
-//   APP_URL                    https://tradrjournal.xyz
+//   APP_URL                    https://kodatrade.co.uk
 //   RESEND_API_KEY             from resend.com — free tier is plenty for beta
 //   TELEGRAM_BOT_TOKEN         fallback for users without a recovery email
 //   TELEGRAM_CHAT_ID           same
@@ -23,7 +23,7 @@ import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
 export const config = { runtime: "nodejs" };
 
 const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
-const USERNAME_DOMAIN = "users.tradr.app";
+const USERNAME_DOMAIN = "users.kodatrade.co.uk";
 
 // ── CORS ────────────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([

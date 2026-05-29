@@ -51,7 +51,7 @@ function shareText(recap: WeeklyRecap, handle?: string): string {
     lines.push(`Rules followed: ${recap.ruleAdherencePct}% (${recap.taggedCount} tagged)`);
   }
   lines.push("");
-  lines.push("tradrjournal.xyz");
+  lines.push("kodatrade.co.uk");
   return lines.join("\n");
 }
 

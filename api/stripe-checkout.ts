@@ -16,7 +16,7 @@
 //   STRIPE_PROMO_CODE_ID_BETA       promo_... (beta lifetime code — 100% off forever)
 //   SUPABASE_URL                    same value as VITE_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY       Supabase → Settings → API → service_role key
-//   APP_URL                         https://tradrjournal.xyz
+//   APP_URL                         https://kodatrade.co.uk
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import Stripe from "stripe";
@@ -28,7 +28,7 @@ export const config = { runtime: "nodejs" };
 type Req = { method?: string; headers: Record<string, string | string[] | undefined>; body: Record<string, unknown>; query: Record<string, string | string[] | undefined> };
 type Res = { status(n: number): Res; json(d: unknown): Res; end(): void; setHeader(k: string, v: string): void };
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 
 // Known promo codes — validated server-side before applying Stripe discount.
 // Key = human-readable code (uppercase), value = env var that holds the Stripe promo_xxx ID.

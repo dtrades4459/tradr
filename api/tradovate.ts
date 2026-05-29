@@ -25,15 +25,15 @@ function base(env: string) {
 }
 
 const ALLOWED_ORIGINS = new Set([
-  "https://tradrjournal.xyz",
-  "https://www.tradrjournal.xyz",
+  "https://kodatrade.co.uk",
+  "https://www.kodatrade.co.uk",
   "http://localhost:5173",
   "http://localhost:4173",
 ]);
 
 function cors(req: any, res: any) {
   const origin = req.headers["origin"] ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://tradrjournal.xyz";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://kodatrade.co.uk";
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");

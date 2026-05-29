@@ -42,7 +42,7 @@ type Res = {
   setHeader(k: string, v: string): void;
 };
 
-const APP_URL = process.env.APP_URL ?? "https://tradrjournal.xyz";
+const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const ALLOWED_ORIGINS = new Set([
   APP_URL,
   APP_URL.replace("://", "://www."),

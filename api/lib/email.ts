@@ -2,7 +2,7 @@
 // Resend-based email helper for Kōda transactional emails.
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
-const FROM = "Kōda <noreply@tradrjournal.xyz>";
+const FROM = "Kōda <noreply@kodatrade.co.uk>";
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
   if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not set");
@@ -48,8 +48,8 @@ export function weeklyRecapHtml({
         </tr>
       </table>
       ${bestSetup ? `<p style="font-size:13px;color:#A6A6A2;margin:0 0 32px">Best setup this week: <strong style="color:#F2F2EE">${bestSetup}</strong></p>` : ""}
-      <a href="https://tradrjournal.xyz" style="display:inline-block;padding:12px 26px;border-radius:999px;background:#F2F2EE;color:#0A0A0B;font-family:monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none">Open Kōda →</a>
-      <p style="font-size:11px;color:#45453F;margin-top:40px">You're receiving this because weekly recaps are on in your settings. <a href="https://tradrjournal.xyz" style="color:#65655F">Unsubscribe</a></p>
+      <a href="https://kodatrade.co.uk" style="display:inline-block;padding:12px 26px;border-radius:999px;background:#F2F2EE;color:#0A0A0B;font-family:monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none">Open Kōda →</a>
+      <p style="font-size:11px;color:#45453F;margin-top:40px">You're receiving this because weekly recaps are on in your settings. <a href="https://kodatrade.co.uk" style="color:#65655F">Unsubscribe</a></p>
     </td></tr>
   </table>
 </body></html>`;
@@ -68,7 +68,7 @@ export function receiptHtml({ name, plan, amount, date }: { name: string; plan: 
         <tr><td style="font-size:13px;color:#A6A6A2;border-bottom:1px solid rgba(255,255,255,0.07)">Amount</td><td style="font-size:13px;color:#F2F2EE;text-align:right;border-bottom:1px solid rgba(255,255,255,0.07)">${amount}</td></tr>
         <tr><td style="font-size:13px;color:#A6A6A2">Date</td><td style="font-size:13px;color:#F2F2EE;text-align:right">${date}</td></tr>
       </table>
-      <a href="https://tradrjournal.xyz" style="display:inline-block;padding:12px 26px;border-radius:999px;background:#F2F2EE;color:#0A0A0B;font-family:monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none">Open Kōda →</a>
+      <a href="https://kodatrade.co.uk" style="display:inline-block;padding:12px 26px;border-radius:999px;background:#F2F2EE;color:#0A0A0B;font-family:monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none">Open Kōda →</a>
     </td></tr>
   </table>
 </body></html>`;
