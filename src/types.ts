@@ -42,6 +42,8 @@ export interface Trade {
   mistake?: string | null;
   source?: string;
   accountType?: "personal" | "funded" | "demo";
+  /** Broker-supplied unique trade/order ID — preferred dedup key when present. */
+  brokerId?: string;
 }
 
 export interface Profile {

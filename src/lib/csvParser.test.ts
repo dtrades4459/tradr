@@ -16,6 +16,8 @@ import {
   detectSessionFromDateStr,
   tradeKey,
   computePnlDollar,
+  decimalSeparatorForDelimiter,
+  inferBiasFromTimes,
 } from "./csvParser";
 
 // ── detectDelimiter ───────────────────────────────────────────────────────────
@@ -244,6 +246,82 @@ describe("parseNum", () => {
     expect(parseNum("abc")).toBeNull();
     expect(parseNum("---")).toBeNull();
   });
+
+  // ── EU decimal handling (CSV_IMPORT_AUDIT critical risk) ─────────────────
+  // Without this, "27,50" silently became 2750 — a 100× error.
+  describe("EU decimal handling", () => {
+    it("auto: treats single comma + 1-2 digits after as decimal", () => {
+      expect(parseNum("27,50")).toBe(27.5);
+      expect(parseNum("27,5")).toBe(27.5);
+      expect(parseNum("-27,50")).toBe(-27.5);
+    });
+
+    it("auto: treats single comma + exactly 3 digits as thousands", () => {
+      expect(parseNum("1,234")).toBe(1234);
+      expect(parseNum("27,500")).toBe(27500);
+    });
+
+    it("auto: treats multiple commas as thousands separators", () => {
+      expect(parseNum("1,234,567")).toBe(1234567);
+      expect(parseNum("1,234,567.89")).toBe(1234567.89);
+    });
+
+    it("auto: picks rightmost separator as decimal when both present", () => {
+      expect(parseNum("1,234.56")).toBe(1234.56);     // US
+      expect(parseNum("1.234,56")).toBe(1234.56);     // EU
+      expect(parseNum("$1.234,56")).toBe(1234.56);    // EU with currency
+    });
+
+    it("auto: handles whitespace as a thousands separator", () => {
+      expect(parseNum("1 234,56")).toBe(1234.56);     // EU with space
+      expect(parseNum("1 234.56")).toBe(1234.56);     // US with space
+    });
+
+    it("explicit decimalSeparator ',' forces EU interpretation", () => {
+      expect(parseNum("1,234", { decimalSeparator: "," })).toBe(1.234);
+      expect(parseNum("27,500", { decimalSeparator: "," })).toBe(27.5);
+    });
+
+    it("explicit decimalSeparator '.' forces US interpretation", () => {
+      expect(parseNum("27,50", { decimalSeparator: "." })).toBe(2750);
+      expect(parseNum("1,234", { decimalSeparator: "." })).toBe(1234);
+    });
+  });
+});
+
+// ── decimalSeparatorForDelimiter ─────────────────────────────────────────────
+
+describe("decimalSeparatorForDelimiter", () => {
+  it("maps ';' to ',' (EU exports)", () => {
+    expect(decimalSeparatorForDelimiter(";")).toBe(",");
+  });
+
+  it("leaves comma and tab files on 'auto'", () => {
+    expect(decimalSeparatorForDelimiter(",")).toBe("auto");
+    expect(decimalSeparatorForDelimiter("\t")).toBe("auto");
+  });
+});
+
+// ── inferBiasFromTimes (Rithmic/Apex side inference) ─────────────────────────
+
+describe("inferBiasFromTimes", () => {
+  it("buy before sell → Bullish (long)", () => {
+    expect(inferBiasFromTimes("2024-11-18 09:35:00", "2024-11-18 09:52:00")).toBe("Bullish");
+  });
+
+  it("sell before buy → Bearish (short)", () => {
+    expect(inferBiasFromTimes("2024-11-18 10:30:00", "2024-11-18 10:10:00")).toBe("Bearish");
+  });
+
+  it("simultaneous → empty (cannot decide)", () => {
+    expect(inferBiasFromTimes("2024-11-18 10:00:00", "2024-11-18 10:00:00")).toBe("");
+  });
+
+  it("missing or unparseable input → empty", () => {
+    expect(inferBiasFromTimes("", "2024-11-18 10:30:00")).toBe("");
+    expect(inferBiasFromTimes("2024-11-18 10:30:00", "")).toBe("");
+    expect(inferBiasFromTimes("nope", "also nope")).toBe("");
+  });
 });
 
 // ── normalizeDate ─────────────────────────────────────────────────────────────
@@ -345,6 +423,32 @@ describe("tradeKey", () => {
       keys.add(tradeKey({ date: "2024-03-15", pair: "NQ", entryPrice: String(18250 + i), pnl: "100" }));
     }
     expect(keys.size).toBe(1000);
+  });
+
+  // ── brokerId preference (Batch 4a) ───────────────────────────────────────
+  describe("brokerId preference", () => {
+    it("uses brokerId alone when present (other fields irrelevant)", () => {
+      const a = tradeKey({ ...base, brokerId: "TIK-42" });
+      const b = tradeKey({ ...base, pair: "ES", entryPrice: "99", pnl: "0", brokerId: "TIK-42" });
+      expect(a).toBe(b);
+    });
+
+    it("different brokerId produces a different key", () => {
+      const a = tradeKey({ ...base, brokerId: "TIK-42" });
+      const b = tradeKey({ ...base, brokerId: "TIK-43" });
+      expect(a).not.toBe(b);
+    });
+
+    it("brokerId-keyed differs from composite-keyed even on identical fields", () => {
+      // Guards against accidental overlap between hash families.
+      const withId = tradeKey({ ...base, brokerId: "TIK-42" });
+      const withoutId = tradeKey(base);
+      expect(withId).not.toBe(withoutId);
+    });
+
+    it("whitespace-only brokerId is treated as absent", () => {
+      expect(tradeKey({ ...base, brokerId: "   " })).toBe(tradeKey(base));
+    });
   });
 });
 

@@ -17,8 +17,19 @@ import {
   isSummarySymbol,
   tradeKey,
   computePnlDollar,
+  decimalSeparatorForDelimiter,
+  inferBiasFromTimes,
 } from "./lib/csvParser";
 import { calcRR } from "./lib/stats";
+
+interface RowContext {
+  /** Decimal separator hint derived from the file's column delimiter. */
+  decimalSeparator: "," | "." | "auto";
+  /** Columns used to infer Bullish/Bearish from buy/sell timestamps when no Side column exists. */
+  biasInferenceColumns?: { buyTime: string; sellTime: string };
+  /** Column holding a broker-supplied unique trade/order ID (used as the preferred dedup key). */
+  brokerIdColumn?: string;
+}
 
 function rowToTrade(
   row: Record<string, string>,
@@ -26,7 +37,9 @@ function rowToTrade(
   defaultStrategy: string,
   dateLocale: "us" | "eu",
   defaultAccountType: Trade["accountType"],
+  ctx: RowContext,
 ): Trade | null {
+  const sepOpts = { decimalSeparator: ctx.decimalSeparator } as const;
   const get = (f: string) => mapping[f] ? row[mapping[f]] : "";
   const rawDate = get("date");
   const date = normalizeDate(rawDate, dateLocale);
@@ -35,20 +48,47 @@ function rowToTrade(
   // Reject rows with no parseable date or no symbol — they're summary/header rows
   if (!date || !pair) return null;
 
-  const pnl = parseNum(get("pnl"));
-  const qty = parseNum(get("qty"));
+  const pnl = parseNum(get("pnl"), sepOpts);
+  const qty = parseNum(get("qty"), sepOpts);
   const session = get("session") || detectSessionFromDateStr(rawDate);
   const entryPrice = get("entryPrice");
   const exitPrice = get("exitPrice");
   const slPrice = get("slPrice");
   const tpPrice = get("tpPrice");
 
+  // Direction: prefer explicit Side/B-S column when mapped. For broker formats
+  // that omit it (Rithmic / Apex web export) fall back to comparing buy/sell
+  // timestamps so shorts aren't silently logged as longs.
+  let bias = normalizeBias(get("bias"));
+  if (!bias && ctx.biasInferenceColumns) {
+    const buyRaw = row[ctx.biasInferenceColumns.buyTime] ?? "";
+    const sellRaw = row[ctx.biasInferenceColumns.sellTime] ?? "";
+    bias = inferBiasFromTimes(buyRaw, sellRaw);
+  }
+
+  // Trust the broker's net P&L when it provided one — it bakes in commissions,
+  // partial fills, and tick rounding. Only recompute from entry × exit × tick
+  // value when the broker omitted P&L entirely.
+  const pnlDollarStr = (() => {
+    if (pnl !== null) return pnl.toFixed(2);
+    const dollars = computePnlDollar({
+      symbol: pair,
+      entryPrice: parseNum(entryPrice, sepOpts),
+      exitPrice: parseNum(exitPrice, sepOpts),
+      qty,
+      bias,
+    });
+    return dollars === null ? "" : dollars.toFixed(2);
+  })();
+
+  const brokerId = ctx.brokerIdColumn ? (row[ctx.brokerIdColumn] ?? "").trim() : "";
+
   const trade: Trade = {
     id: Date.now() * 1000 + Math.floor(Math.random() * 999),
     date,
     pair,
     session,
-    bias: normalizeBias(get("bias")),
+    bias,
     strategy: defaultStrategy || "",
     setup: "",
     entryPrice,
@@ -60,20 +100,12 @@ function rowToTrade(
     notes: get("notes"),
     emotions: "",
     screenshot: "",
-    pnlDollar: (() => {
-      const dollars = computePnlDollar({
-        symbol: pair,
-        entryPrice: parseNum(entryPrice),
-        exitPrice: parseNum(exitPrice),
-        qty,
-        bias: normalizeBias(get("bias")),
-      });
-      return dollars === null ? "" : dollars.toFixed(2);
-    })(),
+    pnlDollar: pnlDollarStr,
     comments: [],
     reactions: {},
     source: "csv_import",
     accountType: defaultAccountType,
+    ...(brokerId ? { brokerId } : {}),
   };
   return trade;
 }
@@ -142,6 +174,11 @@ const CSV_PRESETS: Record<string, {
   mapping: Record<string, string>;
   fallbacks?: Record<string, string[]>;
   dateLocale?: "us" | "eu";
+  /** When no explicit Side column maps, infer direction from these timestamp columns. */
+  biasInferenceColumns?: { buyTime: string; sellTime: string };
+  /** Header(s) holding the broker's unique trade/order ID — preferred dedup key. */
+  brokerIdColumn?: string;
+  brokerIdFallbacks?: string[];
 }> = {
   tradovate: {
     label: "Tradovate",
@@ -161,6 +198,11 @@ const CSV_PRESETS: Record<string, {
       qty:        ["Quantity", "Size", "Contracts"],
     },
     dateLocale: "us",
+    // Rithmic Trade Route exports omit an explicit Side column — fall back to
+    // timestamp ordering so shorts aren't silently logged as longs.
+    biasInferenceColumns: { buyTime: "Buy Fill Time", sellTime: "Sell Fill Time" },
+    brokerIdColumn: "Order Number",
+    brokerIdFallbacks: ["Order ID", "Order #", "Account Order #", "Trade ID"],
   },
   tradingview: {
     label: "TradingView",
@@ -173,6 +215,8 @@ const CSV_PRESETS: Record<string, {
     hint: "MetaTrader account history export",
     mapping: { pair: "Symbol", date: "Open Time", bias: "Type", pnl: "Profit", entryPrice: "Open Price", slPrice: "S / L", tpPrice: "T / P", notes: "Comment" },
     dateLocale: "eu",
+    brokerIdColumn: "Ticket",
+    brokerIdFallbacks: ["Order", "Position", "Deal", "Ticket #"],
   },
   ninjatrader8: {
     label: "NinjaTrader 8",
@@ -249,6 +293,8 @@ const CSV_PRESETS: Record<string, {
       notes:      ["comment", "Memo"],
     },
     dateLocale: "eu",
+    brokerIdColumn: "Ticket",
+    brokerIdFallbacks: ["Order", "Position", "Deal", "Ticket #"],
   },
 };
 
@@ -268,6 +314,7 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [csvDelimiter, setCsvDelimiter] = useState<"," | "\t" | ";">(",");
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [defaultStrategy, setDefaultStrategy] = useState("");
   const [error, setError] = useState("");
@@ -327,7 +374,7 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
 
   function processText(text: string) {
     try {
-      const { headers: h, rows: r } = parseCSV(text);
+      const { headers: h, rows: r, delimiter: d } = parseCSV(text);
       if (!h.length) {
         setError("No column headers found. Make sure you're exporting a trade history CSV, not an account statement PDF.");
         return;
@@ -345,6 +392,7 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
       }
       setHeaders(h);
       setRows(r);
+      setCsvDelimiter(d);
       const autoMap = autoDetectMapping(h);
       const broker = detectBroker(h);
       if (broker) {
@@ -464,7 +512,27 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
       })
     : cappedRows;
 
-  const allParsed = filteredRows.map(r => rowToTrade(r, mapping, defaultStrategy, dateLocale, accountType));
+  // Resolve broker-specific hints (Side inference + broker trade ID column)
+  // against the actual headers present in the uploaded file.
+  const preset = activePreset ? CSV_PRESETS[activePreset] : null;
+  const rowCtx: RowContext = (() => {
+    const ctx: RowContext = { decimalSeparator: decimalSeparatorForDelimiter(csvDelimiter) };
+    if (preset?.biasInferenceColumns) {
+      const buyTime  = headers.find(h => h.toLowerCase() === preset.biasInferenceColumns!.buyTime.toLowerCase());
+      const sellTime = headers.find(h => h.toLowerCase() === preset.biasInferenceColumns!.sellTime.toLowerCase());
+      if (buyTime && sellTime) ctx.biasInferenceColumns = { buyTime, sellTime };
+    }
+    if (preset?.brokerIdColumn) {
+      const candidates = [preset.brokerIdColumn, ...(preset.brokerIdFallbacks ?? [])];
+      for (const cand of candidates) {
+        const hit = headers.find(h => h.toLowerCase() === cand.toLowerCase());
+        if (hit) { ctx.brokerIdColumn = hit; break; }
+      }
+    }
+    return ctx;
+  })();
+
+  const allParsed = filteredRows.map(r => rowToTrade(r, mapping, defaultStrategy, dateLocale, accountType, rowCtx));
   const previewTrades = allParsed.filter((t): t is Trade => t !== null);
   const invalidCount = allParsed.length - previewTrades.length;
   const uniquePreview = previewTrades.filter(t => !existingKeys.has(tradeKey(t)));

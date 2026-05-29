@@ -80,7 +80,7 @@ export function findHeaderRowIndex(lines: string[][]): number {
  *   - Tab-separated files auto-detected by delimiter sniffing
  *   - Preamble rows before the real header (broker report titles, account info)
  */
-export function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
+export function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[]; delimiter: "," | "\t" | ";" } {
   // Strip UTF-8 BOM (U+FEFF) — Excel prepends it to every CSV it exports
   const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
 
@@ -106,13 +106,13 @@ export function parseCSV(text: string): { headers: string[]; rows: Record<string
     }
   }
   if (cell !== "" || row.length) { row.push(cell); if (row.some(v => v.trim() !== "")) lines.push(row); }
-  if (!lines.length) return { headers: [], rows: [] };
+  if (!lines.length) return { headers: [], rows: [], delimiter };
 
   // CRIT-6: skip preamble rows (report titles, account info) before the real header
   const headerIdx = findHeaderRowIndex(lines);
   const headers = lines[headerIdx].map(h => h.trim());
   const rows = lines.slice(headerIdx + 1).map(l => Object.fromEntries(headers.map((h, i) => [h, (l[i] ?? "").trim()])));
-  return { headers, rows };
+  return { headers, rows, delimiter };
 }
 
 export function autoDetectMapping(headers: string[]): Record<string, string> {
@@ -174,15 +174,107 @@ export function normalizeOutcome(raw: string, pnl: number): string {
 
 /**
  * Parse a CSV number cell into a number, or null for empty/unparseable input.
- * Strips currency symbols and commas; converts parenthetical negatives like
- * "(125.00)" → -125. Returns null (not NaN) so callers can use simple
- * null-checks instead of isNaN guards.
+ *
+ * Strips currency symbols, whitespace thousands separators, and converts
+ * parenthetical negatives like "(125.00)" → -125. Returns null (not NaN) so
+ * callers can use simple null-checks instead of isNaN guards.
+ *
+ * Decimal separator handling:
+ *   - "." (US/UK default): dot = decimal, comma = thousands.
+ *   - "," (EU): comma = decimal, dot = thousands. Pass when the file delimiter
+ *     was detected as ";" (most European broker exports use ";" precisely so
+ *     "," can remain the decimal separator).
+ *   - "auto" (default): per-value heuristic. Rightmost separator is the
+ *     decimal. Single comma followed by exactly 3 digits is a thousands
+ *     separator ("1,234"); single comma followed by 1, 2, or 4+ digits is a
+ *     decimal ("27,5", "27,50"). Multiple commas → thousands ("1,234,567").
+ *
+ * Without the "auto" heuristic, EU exports like "27,50" silently became 2750
+ * (100× error). See FUNNEL_AUDIT and CSV_IMPORT_AUDIT.
  */
-export function parseNum(s: string): number | null {
+export function parseNum(
+  s: string,
+  opts?: { decimalSeparator?: "," | "." | "auto" },
+): number | null {
   if (!s) return null;
-  const n = s.replace(/[^0-9.\-()/]/g, "").replace(/\((.*)\)/, "-$1");
-  const parsed = parseFloat(n);
+  const sep = opts?.decimalSeparator ?? "auto";
+
+  // Strip currency symbols + leading/trailing whitespace.
+  let v = s.trim().replace(/[$£€¥₹₩]/g, "").trim();
+  if (!v) return null;
+
+  // Parenthesised negatives: "(125.00)" → "-125.00".
+  v = v.replace(/^\((.*)\)$/, "-$1");
+
+  // Internal whitespace is a thousands separator (e.g. "1 234,56"). Remove it.
+  v = v.replace(/\s/g, "");
+
+  let normalised: string;
+
+  if (sep === ",") {
+    // EU mode: comma is decimal, dot is thousands.
+    normalised = v.replace(/\./g, "").replace(",", ".");
+  } else if (sep === ".") {
+    // US mode: dot is decimal, comma is thousands.
+    normalised = v.replace(/,/g, "");
+  } else {
+    // Auto-detect per value.
+    const lastDot = v.lastIndexOf(".");
+    const lastComma = v.lastIndexOf(",");
+    if (lastDot >= 0 && lastComma >= 0) {
+      // Both present — the rightmost is the decimal.
+      if (lastDot > lastComma) {
+        normalised = v.replace(/,/g, ""); // US: "1,234.56"
+      } else {
+        normalised = v.replace(/\./g, "").replace(",", "."); // EU: "1.234,56"
+      }
+    } else if (lastComma >= 0) {
+      const commaCount = (v.match(/,/g) ?? []).length;
+      const digitsAfter = v.length - lastComma - 1;
+      if (commaCount > 1) {
+        normalised = v.replace(/,/g, ""); // "1,234,567" thousands
+      } else if (digitsAfter === 3) {
+        normalised = v.replace(",", ""); // "1,234" or "27,500" — assume thousands
+      } else {
+        normalised = v.replace(",", "."); // "27,5" or "27,50" — decimal
+      }
+    } else {
+      normalised = v; // Only dot or no separator.
+    }
+  }
+
+  const parsed = parseFloat(normalised);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Decide the decimal separator to use given the detected CSV delimiter.
+ * Semicolon-delimited files almost always come from EU/locale-Excel where
+ * comma is the decimal. Comma/tab files use the auto heuristic.
+ */
+export function decimalSeparatorForDelimiter(
+  delimiter: "," | "\t" | ";",
+): "," | "auto" {
+  return delimiter === ";" ? "," : "auto";
+}
+
+/**
+ * Infer trade direction from a pair of buy/sell timestamps. Used for broker
+ * exports (Rithmic, Apex web export) that have separate "Buy Fill Time" and
+ * "Sell Fill Time" columns but no explicit Buy/Sell flag.
+ *
+ *   buy fills first   → long  (entered with Buy, exited with Sell)
+ *   sell fills first  → short (entered with Sell, exited with Buy)
+ *   equal / empty     → empty string (caller treats as "unknown")
+ */
+export function inferBiasFromTimes(buyRaw: string, sellRaw: string): string {
+  if (!buyRaw || !sellRaw) return "";
+  const buyMs = Date.parse(buyRaw);
+  const sellMs = Date.parse(sellRaw);
+  if (!Number.isFinite(buyMs) || !Number.isFinite(sellMs)) return "";
+  if (buyMs < sellMs) return "Bullish";
+  if (sellMs < buyMs) return "Bearish";
+  return "";
 }
 
 /**
@@ -357,11 +449,18 @@ function _djb2(s: string): string {
 
 /**
  * Stable hash for deduping imported trades against the existing journal.
- * Uses only the four fields that are reliably present across every broker
- * export: date, pair (uppercased), entryPrice, pnl. Adding fields that some
- * brokers omit (slPrice, tpPrice, session) caused false positives in day 1.
+ *
+ * When a broker emits a unique trade identifier (MT4/MT5 Ticket, Tradovate
+ * Order ID, Rithmic Account+OrderRef) we use that alone — it is the only
+ * collision-free option and is robust to commission/half-tick rounding.
+ *
+ * Otherwise we fall back to the four fields reliably present across every
+ * broker export: date, pair (uppercased), entryPrice, pnl. Adding fields that
+ * some brokers omit (slPrice, tpPrice, session) caused false positives.
  */
 export function tradeKey(t: Partial<Trade>): string {
+  const brokerId = (t.brokerId ?? "").trim();
+  if (brokerId) return _djb2(`bid:${brokerId}`);
   const content = [
     t.date ?? "",
     (t.pair ?? "").toUpperCase(),
