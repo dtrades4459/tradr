@@ -256,6 +256,15 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const [toastsV2, setToastsV2] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
   const [celebration, setCelebration] = useState<{ kind: "trade" | "streak" | "pro" | "loss" | "streak-loss"; streakCount?: number; tradeStats?: { winRate: number; avgR: number; streak: number } } | null>(null);
+  const STREAK_MILESTONES = [3, 7, 14, 30, 100];
+  const STREAK_FLAVOUR: Record<number, string> = {
+    3: "Three days of discipline.",
+    7: "One week of consistent execution.",
+    14: "Two weeks in. The habit is forming.",
+    30: "A full month. This is who you are now.",
+    100: "One hundred days. Exceptional.",
+  };
+  const [streakBanner, setStreakBanner] = useState<{ streakCount: number } | null>(null);
   const showToastV2 = useCallback((kind: ToastKind, title: string, body?: string) => {
     const id = ++toastIdRef.current;
     setToastsV2(prev => [...prev, { id, kind, title, body, ts: Date.now() }]);
@@ -910,8 +919,18 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     if (base.outcome === "Loss") {
       setCelebration({ kind: newLossStreak >= 3 ? "streak-loss" : "loss", streakCount: newLossStreak, tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
     } else {
-      // TODO: streak celebration — fire when streakCount hits 3/7/14/30/100 milestone (needs user_kv dedup)
-      setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: calcStreak(u).count } });
+      const newStreak = calcStreak(u).count;
+      // Check for milestone (3/7/14/30/100) — deduplicated via user_kv
+      const hitMilestone = STREAK_MILESTONES.find(m => m === newStreak);
+      if (hitMilestone) {
+        const raw = await (window as any).storage.get("koda_streak_milestones");
+        const shown: number[] = raw ? JSON.parse(raw) : [];
+        if (!shown.includes(hitMilestone)) {
+          await (window as any).storage.set("koda_streak_milestones", JSON.stringify([...shown, hitMilestone]));
+          setStreakBanner({ streakCount: hitMilestone });
+        }
+      }
+      setCelebration({ kind: "trade", tradeStats: { winRate: wrSaved, avgR: avgRSaved, streak: newStreak } });
     }
     setTimeout(() => setSavingTrade(false), 1500);
     // Go back if we have history, otherwise land on journal
@@ -1634,6 +1653,16 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {/* FEED */}
               {homeSection === "feed" && (
                 <div>
+                  {streakBanner && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", background: C.panel, border: `1px solid ${C.green}44`, borderLeft: `3px solid ${C.green}`, borderRadius: "12px", padding: "12px 14px", marginBottom: "20px" }}>
+                      <span style={{ fontSize: "20px" }}>🔥</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.14em", textTransform: "uppercase" as const, marginBottom: "2px" }}>{streakBanner.streakCount}-Day Streak Milestone</div>
+                        <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text }}>{STREAK_FLAVOUR[streakBanner.streakCount] ?? "Keep going."}</div>
+                      </div>
+                      <button onClick={() => setStreakBanner(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: "16px", padding: "4px", lineHeight: 1 }}>×</button>
+                    </div>
+                  )}
                   {/* Glass hero card */}
                   {(() => {
                     const isWeek = timeMode === "week";
