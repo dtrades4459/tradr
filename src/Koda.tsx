@@ -140,7 +140,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   // not forgeable from the client. Use it as the authoritative starting plan so
   // the paywall check is correct before loadAll() finishes.
   const [profile, setProfile] = useState<Profile>({ ...DEF_PROFILE, plan: jwtPlan ?? "free" });
-  const isPro = profile.plan === "pro" || profile.plan === "elite";
+  const isPro = !isFlagOn("paywall") || profile.plan === "pro" || profile.plan === "elite";
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState<Profile>(DEF_PROFILE);
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({});
