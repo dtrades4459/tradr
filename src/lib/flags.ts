@@ -26,7 +26,7 @@ const STORAGE_KEY_OFF = "koda_flags_off";
 const DEFAULT_ON: ReadonlySet<string> = new Set([
   "newProfile",  // dual-write + read from public.profiles (v2 schema)
   "newTrades",   // dual-write to public.trades (KV remains the read source for 2 weeks)
-  "paywall",     // enforce 20-trade cap + Pro feature gates for free users
+  // "paywall" removed for beta — all users get full access
 ]);
 
 let cache: Set<string> | null = null;

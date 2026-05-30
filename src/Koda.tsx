@@ -71,7 +71,7 @@ const DEF_PROFILE: Profile = {
 };
 const OUTCOMES = ["Win","Loss","Breakeven"];
 const REACTIONS = ["FIRE","GEM","UP","TARGET","PAIN","MIND"];
-const TABS = ["home","log","stats","history","circles"];
+const TABS = ["home","stats","circles"];
 const STREAK_MILESTONES = [3, 7, 14, 30, 100];
 const STREAK_FLAVOUR: Record<number, string> = {
   3: "Three days of discipline.",
@@ -113,6 +113,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   function primaryNav(v: string) {
     setViewHistory([]);
     setView(v);
+    if (v === "home") setHomeSection("feed");
   }
   // ── Circles state + actions managed by useCircles (wired below after stats) ─
   const [darkMode, setDarkMode] = useState(true);
@@ -1300,22 +1301,17 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
 
   const NAV_TABS = [
     { id: "home",    label: "Home",    path: "M3 10l7-7 7 7v8a1 1 0 01-1 1H4a1 1 0 01-1-1z" },
-    { id: "log",     label: "Log",     path: "M5 4h10v12H5zM7 7h6M7 10.5h6M7 14h4" },
     { id: "stats",   label: "Stats",   path: "M3 16V9M9 16V3M15 16v-5M18 16H2" },
-    { id: "history", label: "Journal", path: "M4 4h12v12H4zM7 8h6M7 11h6M7 14h3" },
     { id: "circles", label: "Circles", path: "M5 8a3 3 0 1 1 6 0 3 3 0 0 1-6 0zM12.5 11a3 3 0 0 1 4.5 2.5M3 17c0-2.5 2-3.8 5-3.8s5 1.3 5 3.8" },
   ];
 
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
   // main-nav + sub-nav fit on one row instead of stacking into two.
   const HOME_SECTIONS = [
-    { id: "feed", label: "Overview" },
-    { id: "circles", label: "Circles" },
-    { id: "ai", label: "Execution" },
     { id: "analytics", label: "Analytics" },
-    { id: "rules", label: "Rules" },
-    { id: "checklist", label: "Checklist" },
-    { id: "sync", label: "Sync" },
+    { id: "rules", label: "Rules & Checklist" },
+    { id: "sync", label: "Sync & Log" },
+    { id: "journal", label: "Journal" },
     ...(profile.propFirmMode ? [{ id: "eval", label: "Eval" }] : []),
   ];
   const STATS_SECTIONS = [
@@ -1327,6 +1323,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     { id: "psychology", label: "Psychology" },
     { id: "heatmap", label: "Heatmap" },
     { id: "maemfe", label: "MAE/MFE" },
+    { id: "insights", label: "Insights" },
   ];
 
   const openExportPdf = () => {
@@ -1374,7 +1371,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     { id: "rules", label: "Rules" },
   ];
   const subNavFor = (v: string) => {
-    if (v === "home") return { sections: HOME_SECTIONS, value: homeSection, onChange: (s: string) => { if (s === "checklist") navigateTo("checklist"); else setHomeSection(s); } };
+    if (v === "home") return { sections: HOME_SECTIONS, value: homeSection, onChange: (s: string) => { if (s === "rules") navigateTo("checklist"); else if (s === "journal") navigateTo("history"); else setHomeSection(s); } };
     if (v === "stats") return { sections: STATS_SECTIONS, value: statsTab, onChange: setStatsTab };
     if (v === "checklist") return { sections: CHECKLIST_SECTIONS, value: checklistTab, onChange: setChecklistTab };
     return null;
@@ -1530,7 +1527,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   const sn = subNavFor(tab.id); const ia = view === tab.id;
                   return (
                     <div key={tab.id}>
-                      <button data-testid={`nav-${tab.id}`} onClick={()=>primaryNav(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                      <button data-testid={`nav-${tab.id}`} onClick={()=> ia && tab.id !== "home" ? primaryNav("home") : primaryNav(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ opacity: ia ? 1 : 0.55, flexShrink: 0 }}>
                           <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
@@ -1694,12 +1691,12 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                         {/* QuickAction card row (design: 4 vertical cards) */}
                         <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
                           {[
-                            { label: "Log", icon: "M5 4h10v12H5zM7 7h6M7 10h6M7 13h4", action: () => navigateTo("log"), primary: true },
-                            { label: "Import", icon: "M10 3v10M6 9l4 4 4-4M3 16h14", action: () => { setView("home"); setHomeSection("sync"); }, primary: false },
-                            { label: "Insights", icon: "M5 4l1.5 3L10 8l-3.5 1L5 12l-1.5-3L0 8l3.5-1zM14 9l1 2 2 1-2 1-1 2-1-2-2-1 2-1z", action: () => { setView("home"); setHomeSection("ai"); }, primary: false },
-                            { label: "Rules", icon: "M4 4h12v12H4zM7 8h6M7 11h6M7 14h3", action: () => { setView("home"); setHomeSection("rules"); }, primary: false },
+                            { label: "Log", icon: "M5 4h10v12H5zM7 7h6M7 10h6M7 13h4", action: () => navigateTo("log"), primary: true, testId: "nav-log" },
+                            { label: "Import", icon: "M10 3v10M6 9l4 4 4-4M3 16h14", action: () => { setView("home"); setHomeSection("sync"); }, primary: false, testId: undefined },
+                            { label: "Insights", icon: "M5 4l1.5 3L10 8l-3.5 1L5 12l-1.5-3L0 8l3.5-1zM14 9l1 2 2 1-2 1-1 2-1-2-2-1 2-1z", action: () => { primaryNav("stats"); setStatsTab("insights"); }, primary: false, testId: undefined },
+                            { label: "Rules", icon: "M4 4h12v12H4zM7 8h6M7 11h6M7 14h3", action: () => navigateTo("checklist"), primary: false, testId: undefined },
                           ].map(chip => (
-                            <button key={chip.label} onClick={chip.action} style={{
+                            <button key={chip.label} data-testid={chip.testId} onClick={chip.action} style={{
                               position: "relative", flex: 1,
                               display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
                               background: chip.primary ? C.text : C.panel,
@@ -3495,8 +3492,6 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   })()}
                 </section> : <ProLock C={C} label="Psychology Stats" description="Rule adherence tracking, emotional tagging, and discipline scoring." onUpgrade={() => setShowUpgrade(true)} />
               )}
-            </div>
-          )}
 
               {statsTab === "heatmap" && (
                 isPro ? (
@@ -3537,6 +3532,32 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   <ProLock C={C} label="MAE / MFE Analysis" description="Max adverse excursion, max favorable excursion, and capture efficiency per trade." onUpgrade={() => setShowUpgrade(true)} />
                 )
               )}
+
+              {statsTab === "insights" && (
+                isPro ? (
+                  <div style={{ marginTop: "clamp(24px, 5vw, 40px)" }}>
+                    <div style={{ fontFamily: MONO, fontSize: "10px", color: C.muted, letterSpacing: "0.1em", marginBottom: "24px" }}>
+                      INSIGHTS — PATTERN-BASED ANALYSIS.
+                    </div>
+                    <div style={{ borderTop: `1px solid ${C.border}` }}>
+                      {insights.map((ins: Insight, i: number) => {
+                        const col = ins.type === "positive" ? C.green : ins.type === "warning" ? C.text2 : ins.type === "danger" ? C.red : C.muted;
+                        return (
+                          <div key={i} style={{ padding: "20px 0", borderBottom: `1px solid ${C.border}`, display: "flex", gap: "16px", alignItems: "baseline" }}>
+                            <span style={{ fontFamily: MONO, fontSize: "11px", color: col, letterSpacing: "0.1em", minWidth: "48px" }}>{ins.kicker}</span>
+                            <span style={{ fontFamily: BODY, fontSize: "14px", color: C.text, lineHeight: 1.55, flex: 1 }}>{ins.text}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <ProLock C={C} label="Insights — Pro Feature" description="Pattern detection, edge analysis, and discipline scoring." onUpgrade={() => setShowUpgrade(true)} />
+                )
+              )}
+
+            </div>
+          )}
 
           {/* ══════════════════════════ CHECKLIST ══════════════════════════ */}
           {view === "checklist" && (
@@ -3722,7 +3743,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {NAV_TABS.map(tab => {
                 const active = view === tab.id;
                 return (
-                  <button key={tab.id} data-testid={`nav-${tab.id}`} onClick={() => primaryNav(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
+                  <button key={tab.id} data-testid={`nav-${tab.id}`} onClick={() => active && tab.id !== "home" ? primaryNav("home") : primaryNav(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <svg width="17" height="17" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
                         <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>

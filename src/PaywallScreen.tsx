@@ -8,7 +8,7 @@ const ACCENT = "#89CFF0";
 
 // Client-side known promo codes for instant feedback.
 // Server validates independently before applying the Stripe discount.
-const VALID_PROMO_CODES = new Set(["K0DA", "FOUNDERS", "BETA26", "BETA_26"]);
+const VALID_PROMO_CODES = new Set(["K0DA", "FOUNDERS", "BETA_26"]);
 
 const FEATURES = [
   { label: "Prop Firm Mode", detail: "eval dashboard & risk tracker" },

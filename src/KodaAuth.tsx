@@ -133,7 +133,10 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   async function signInWithOAuth(provider: "google" | "twitter" | "apple") {
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
+      },
     });
   }
 

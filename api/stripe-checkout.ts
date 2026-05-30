@@ -35,7 +35,7 @@ const APP_URL = process.env.APP_URL ?? "https://kodatrade.co.uk";
 const PROMO_CODE_MAP: Record<string, string | undefined> = {
   K0DA:     process.env.STRIPE_PROMO_CODE_ID_K0DA,
   FOUNDERS: process.env.STRIPE_PROMO_CODE_ID_FOUNDERS,
-  BETA:     process.env.STRIPE_PROMO_CODE_ID_BETA,
+  BETA_26:  process.env.STRIPE_PROMO_CODE_ID_BETA,
 };
 
 const ALLOWED_ORIGINS = new Set([
