@@ -45,7 +45,10 @@ const USERNAME_DOMAIN = "users.kodatrade.co.uk";
 const usernameToEmail = (u: string) => `${u.toLowerCase().trim()}@${USERNAME_DOMAIN}`;
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; initialError?: string }) {
+function AuthForm({ onSuccess, initialError = "", onModeChange }: {
+  onSuccess: () => void; initialError?: string;
+  onModeChange?: (m: "signin" | "signup") => void;
+}) {
   const [mode,          setMode]          = useState<AuthMode>("signin");
   const [username,      setUsername]      = useState("");
   const [password,      setPassword]      = useState("");
@@ -208,10 +211,24 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
   /* â”€â”€ Main sign-in / sign-up â”€â”€ */
   return (
     <div style={{ position: "relative", zIndex: 1 }}>
+      {/* OAuth first — frictionless one-tap path for both modes */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+        <OAuthBtn label="Continue with Google" provider="google" onClick={() => signInWithOAuth("google")} />
+        <OAuthBtn label="Continue with X" provider="x" onClick={() => signInWithOAuth("twitter")} />
+        <OAuthBtn label="Continue with Apple" provider="apple" onClick={() => signInWithOAuth("apple")} />
+      </div>
+
+      {/* OR divider */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <div style={{ flex: 1, height: 1, background: C.border2 }} />
+        <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", color: C.muted }}>OR</span>
+        <div style={{ flex: 1, height: 1, background: C.border2 }} />
+      </div>
+
       {/* Mode tabs */}
       <div style={{ display: "flex", gap: 20, marginBottom: 22 }}>
         {(["signin", "signup"] as AuthMode[]).map(m => (
-          <button key={m} onClick={() => { setMode(m); setError(""); setMsg(""); }}
+          <button key={m} onClick={() => { setMode(m); setError(""); setMsg(""); onModeChange?.(m as "signin" | "signup"); }}
             style={{
               background: "none", border: "none", padding: 0,
               color: mode === m ? C.text : C.muted,
@@ -224,56 +241,45 @@ function AuthForm({ onSuccess, initialError = "" }: { onSuccess: () => void; ini
         ))}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <FloatingInput C={C} label="Username" value={username} placeholder={mode === "signup" ? "pick a handle" : "yourname"}
-          onChange={v => setUsername(v.toLowerCase())} />
+      {/* Enter key submits via form onSubmit */}
+      <form onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <FloatingInput C={C} label="Username" value={username} placeholder={mode === "signup" ? "pick a handle" : "yourname"}
+            onChange={v => setUsername(v.toLowerCase())} />
 
-        <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
-          onChange={v => setPassword(v)} type="password" />
+          <FloatingInput C={C} label="Password" value={password} placeholder={mode === "signup" ? "min. 6 characters" : "••••••••"}
+            onChange={v => setPassword(v)} type="password" />
 
-        {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
-        {msg   && <div style={{ fontSize: 13, color: C.green, marginTop: 4, fontFamily: BODY }}>{msg}</div>}
+          {error && <div style={{ fontSize: 13, color: C.red, marginTop: 4, fontFamily: BODY }}>{error}</div>}
+          {msg   && <div style={{ fontSize: 13, color: C.green, marginTop: 4, fontFamily: BODY }}>{msg}</div>}
 
-        <button data-testid="auth-submit" onClick={handleSubmit} disabled={loading} style={{
-          background: C.text, color: C.bg, border: "none", borderRadius: 999,
-          padding: "14px 20px", fontSize: 13, fontWeight: 500, fontFamily: BODY,
-          cursor: "pointer", width: "100%", marginTop: 8,
-          opacity: loading ? 0.6 : 1, transition: "opacity 0.15s, transform 0.15s",
-        }}>
-          {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
-        </button>
+          <button type="submit" data-testid="auth-submit" disabled={loading} style={{
+            background: C.text, color: C.bg, border: "none", borderRadius: 999,
+            padding: "14px 20px", fontSize: 13, fontWeight: 500, fontFamily: BODY,
+            cursor: "pointer", width: "100%", marginTop: 8,
+            opacity: loading ? 0.6 : 1, transition: "opacity 0.15s, transform 0.15s",
+          }}>
+            {loading ? "…" : mode === "signin" ? "Sign in →" : "Create account →"}
+          </button>
 
-        {mode === "signin" && (
-          <>
-            {/* OR divider */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0" }}>
-              <div style={{ flex: 1, height: 1, background: C.border2 }} />
-              <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", color: C.muted }}>OR</span>
-              <div style={{ flex: 1, height: 1, background: C.border2 }} />
+          {mode === "signup" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <FloatingInput C={C} label="Recovery email (optional)" value={recoveryEmail}
+                placeholder="you@example.com" onChange={v => setRecoveryEmail(v)} />
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: BODY, lineHeight: 1.5 }}>
+                Add this now — it's the only way to recover your account if you forget your password.
+              </div>
             </div>
+          )}
 
-            {/* OAuth buttons */}
-            <OAuthBtn label="Continue with Google" provider="google" onClick={() => signInWithOAuth("google")} />
-            <OAuthBtn label="Continue with X" provider="x" onClick={() => signInWithOAuth("twitter")} />
-            <OAuthBtn label="Continue with Apple" provider="apple" onClick={() => signInWithOAuth("apple")} />
-
-            <button onClick={() => { setMode("reset"); setError(""); }} style={{
+          {mode === "signin" && (
+            <button type="button" onClick={() => { setMode("reset"); setError(""); }} style={{
               background: "none", border: "none", color: C.muted, fontSize: 12,
               cursor: "pointer", fontFamily: BODY, textAlign: "left", padding: 0, marginTop: 2,
             }}>Forgot password?</button>
-          </>
-        )}
-
-        {mode === "signup" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <FloatingInput C={C} label="Recovery email (optional)" value={recoveryEmail}
-              placeholder="you@example.com" onChange={v => setRecoveryEmail(v)} />
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 2, fontFamily: BODY }}>
-              We never show this publicly. Used for password reset only.
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </form>
     </div>
   );
 }
@@ -296,6 +302,7 @@ function parseOAuthError(): string {
 // â”€â”€â”€ LANDING PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LandingPage({ onSuccess }: { onSuccess: () => void }) {
   const [oauthError] = useState(() => parseOAuthError());
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   return (
     <div className="koda-landing" style={{
       minHeight: "100dvh", background: C.bg, color: C.text, fontFamily: BODY,
@@ -485,7 +492,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
 
             {/* Kicker */}
             <div style={{ position: "relative", zIndex: 1, textAlign: "center", marginBottom: 6 }}>
-              <Kicker C={C}>Sign in to Kōda</Kicker>
+              <Kicker C={C}>{authMode === "signin" ? "Sign in to Kōda" : "Create account"}</Kicker>
             </div>
 
             {/* Heading */}
@@ -493,10 +500,12 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               <h2 style={{
                 fontFamily: DISPLAY, fontSize: 32, fontWeight: 600,
                 letterSpacing: "-0.02em", color: C.text, margin: 0,
-              }}>Welcome back</h2>
+              }}>{authMode === "signin" ? "Welcome back" : "Join Kōda"}</h2>
             </div>
             <div style={{ position: "relative", zIndex: 1, textAlign: "center", marginBottom: 22 }}>
-              <span style={{ fontFamily: BODY, fontSize: 13, color: C.text2 }}>Sign in to your journal</span>
+              <span style={{ fontFamily: BODY, fontSize: 13, color: C.text2 }}>
+                {authMode === "signin" ? "Sign in to your journal" : "Your trading edge, tracked."}
+              </span>
             </div>
 
             {oauthError && (
@@ -508,7 +517,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
               }}>{oauthError}</div>
             )}
 
-            <AuthForm onSuccess={onSuccess} initialError="" />
+            <AuthForm onSuccess={onSuccess} initialError="" onModeChange={setAuthMode} />
           </aside>
         </div>
 
