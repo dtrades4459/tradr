@@ -111,7 +111,6 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   const [step, setStep] = useState<OnboardingStep>("welcome");
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
-  const [handleEdited, setHandleEdited] = useState(false);
   const [avatar, setAvatar] = useState("");
   const [saving, setSaving] = useState(false);
   const [nameErr, setNameErr] = useState("");
@@ -121,14 +120,9 @@ export function OnboardingFlow({ C, allStrategyNames, onComplete }: {
   function onNameChange(v: string) {
     setName(v);
     setNameErr("");
-    if (!handleEdited) {
-      const slug = v.trim().toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9_]/g, "");
-      setHandle(slug ? `@${slug}` : "");
-    }
   }
 
   function onHandleChange(v: string) {
-    setHandleEdited(true);
     const raw = v.startsWith("@") ? v.slice(1) : v;
     const clean = raw.replace(/[^a-z0-9_.]/gi, "").toLowerCase();
     setHandle(clean ? `@${clean}` : "");
