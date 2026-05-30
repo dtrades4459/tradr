@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { SectionKicker, StrategyPill, Toast, stratCode, KodaMark, MONO, BODY, DISPLAY, EmptyCirclesState, CornerGlow } from "./shared";
 import { KODA_GLOBAL_CODE } from "./hooks/useCircles";
@@ -1048,7 +1048,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
             {circleTab === "trophies" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
                 {trophiesLoading && (
-                  <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, textAlign: "center", padding: 24 }}>Loading\u2026</div>
+                  <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, textAlign: "center", padding: 24 }}>Loading…</div>
                 )}
 
                 {/* Start Challenge \u2014 Pro owners only, no active challenge running */}
@@ -1059,9 +1059,9 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                   >
                     <div style={{ textAlign: "left" }}>
                       <div style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.text }}>Start New Challenge</div>
-                      <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Pro \u00b7 Owner Only</div>
+                      <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Pro · Owner Only</div>
                     </div>
-                    <div style={{ color: C.muted, fontSize: 14 }}>\u2192</div>
+                    <div style={{ color: C.muted, fontSize: 14 }}>→</div>
                   </button>
                 )}
 
@@ -1125,18 +1125,18 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                 style={{ ...pillPrimary(true), width: "auto", padding: "8px 16px" }}>SHARE</button>
             </div>
             <div style={{ fontFamily: BODY, fontSize: "12px", color: C.muted, lineHeight: 1.5 }}>
-              LINK copies a join URL \u00b7 SHARE sends a ready-made invite.
+              LINK copies a join URL · SHARE sends a ready-made invite.
             </div>
           </section>
 
           {/* Compose bar \u2014 fixed bottom, feed tab only */}
           {circleTab === "feed" && (
-            <div style={{ position: "fixed" as const, bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, padding: "10px 16px calc(22px + env(safe-area-inset-bottom))", background: `linear-gradient(to top, ${C.bg} 70%, transparent)`, display: "flex", alignItems: "center", gap: 7, zIndex: 40 }}>
+            <div style={{ position: "fixed" as const, bottom: "calc(80px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, padding: "10px 16px", background: `linear-gradient(to top, ${C.bg} 80%, transparent)`, display: "flex", alignItems: "center", gap: 7, zIndex: 40 }}>
               <input
                 value={composeText}
                 onChange={e => setComposeText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFeedMessage(); } }}
-                placeholder="Message the circle\u2026"
+                placeholder="Message the circle…"
                 style={{ flex: 1, background: C.panel, border: `1px solid ${C.border2}`, borderRadius: 999, padding: "9px 15px", fontSize: 13, color: C.text, outline: "none", fontFamily: BODY }}
               />
               <button
@@ -1144,7 +1144,7 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                 disabled={!composeText.trim() || composeSending}
                 style={{ width: 36, height: 36, borderRadius: "50%", background: C.text, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, opacity: (!composeText.trim() || composeSending) ? 0.4 : 1 }}
               >
-                <span style={{ fontSize: 14, color: C.bg }}>\u2192</span>
+                <span style={{ fontSize: 14, color: C.bg }}>→</span>
               </button>
             </div>
           )}
