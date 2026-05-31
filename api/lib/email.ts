@@ -82,3 +82,20 @@ export function receiptHtml({ name, plan, amount, date }: { name: string; plan: 
   </table>
 </body></html>`;
 }
+
+export function waitlistConfirmHtml({ position }: { position: number }) {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>You're on the Kōda waitlist</title></head>
+<body style="margin:0;padding:0;background:#0A0A0B;font-family:system-ui,sans-serif;color:#F2F2EE">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;padding:40px 24px">
+    <tr><td>
+      <p style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#65655F;margin:0 0 8px">Kōda · Waitlist</p>
+      <p style="font-size:48px;font-weight:700;letter-spacing:-0.04em;color:oklch(0.84 0.14 175);margin:0 0 16px;line-height:1">You're #${position}.</p>
+      <p style="font-size:15px;color:#A6A6A2;line-height:1.7;margin:0 0 32px">Kōda is in closed beta. You're on the list — we'll reach out when access opens.</p>
+      <a href="https://kodatrade.co.uk" style="display:inline-block;padding:12px 26px;border-radius:999px;background:#F2F2EE;color:#0A0A0B;font-family:monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none">Open kodatrade.co.uk →</a>
+      <p style="font-size:11px;color:#45453F;margin-top:40px;line-height:1.6">You're receiving this because you joined the Kōda waitlist.</p>
+    </td></tr>
+  </table>
+</body></html>`;
+}
