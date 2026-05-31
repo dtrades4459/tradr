@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type React from "react";
-import { read as xlsxRead, utils as xlsxUtils } from "xlsx";
+import readXlsxFile from "read-excel-file";
 import { MONO, BODY } from "./shared";
 import type { Trade } from "./types";
 import type { Theme } from "./theme";
@@ -434,19 +434,21 @@ export function CsvImportPanel({ existingTrades, onImport, onClose, allStrategyN
     const isExcel = /\.(xlsx|xls)$/i.test(file.name);
 
     if (isExcel) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const wb = xlsxRead(reader.result, { type: "array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const csv = xlsxUtils.sheet_to_csv(ws);
-          processText(csv);
-        } catch (err: unknown) {
-          setError("Couldn't parse Excel file: " + (err instanceof Error ? err.message : "unknown error"));
-        }
-      };
-      reader.onerror = () => setError("Couldn't read the file.");
-      reader.readAsArrayBuffer(file);
+      readXlsxFile(file).then(rows => {
+        const csv = rows.map(row =>
+          row.map(cell => {
+            if (cell === null || cell === undefined) return "";
+            const s = cell instanceof Date
+              ? cell.toISOString().slice(0, 10)
+              : String(cell);
+            return s.includes(",") || s.includes('"') || s.includes("\n")
+              ? `"${s.replace(/"/g, '""')}"` : s;
+          }).join(",")
+        ).join("\n");
+        processText(csv);
+      }).catch((err: unknown) => {
+        setError("Couldn't parse Excel file: " + (err instanceof Error ? err.message : "unknown error"));
+      });
     } else {
       // Read as ArrayBuffer so we can sniff the byte-order mark and pick the
       // right encoding. Excel sometimes exports CSVs as UTF-16 LE; readAsText
