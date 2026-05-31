@@ -194,7 +194,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const [addingCheck, setAddingCheck] = useState(false);
   const [addingRule, setAddingRule] = useState(false);
   const [calDayTrades, setCalDayTrades] = useState<Trade[] | null>(null);
-  const [statsTab, setStatsTab] = useState("overview");
+  const [statsTab, setStatsTab] = useState("performance");
   const [setupPeriod, setSetupPeriod] = useState<"month" | "all">("month");
   const [setupMetric, setSetupMetric] = useState<"pnl" | "winrate" | "trades">("pnl");
   const [setupDollar, setSetupDollar] = useState(false);
@@ -1316,7 +1316,6 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     ...(profile.propFirmMode ? [{ id: "eval", label: "Eval" }] : []),
   ];
   const STATS_SECTIONS = [
-    { id: "overview", label: "Overview" },
     { id: "performance", label: "Performance" },
     { id: "strategies", label: "Strategies" },
     { id: "calendar", label: "Calendar" },
@@ -2995,9 +2994,9 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   <GearButton onClick={() => { setView("home"); setHomeSection("settings"); }} active={false} C={C} />
               </>)}
 
-              {statsTab === "overview" && total === 0 && <EmptyState C={C} icon="&#128202;" headline="Your stats live here." body="Log your first trade and watch your edge emerge — win rate, R-multiples, streaks, and more." cta="Log a trade →" onCta={() => navigateTo("log")} />}
+              {statsTab === "performance" && total === 0 && <EmptyState C={C} icon="&#128202;" headline="Your stats live here." body="Log your first trade and watch your edge emerge — win rate, R-multiples, streaks, and more." cta="Log a trade →" onCta={() => navigateTo("log")} />}
 
-              {statsTab === "overview" && total > 0 && (
+              {statsTab === "performance" && total > 0 && (
                 <>
                   {/* ── Win Rate Ring card ── */}
                   <div style={{ borderRadius: "22px", padding: "22px", background: C.surfaceGlass, backdropFilter: "blur(20px) saturate(140%)", WebkitBackdropFilter: "blur(20px) saturate(140%)", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
