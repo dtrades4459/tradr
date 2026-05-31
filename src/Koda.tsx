@@ -1303,7 +1303,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const NAV_TABS = [
     { id: "home",    label: "Home",    path: "M3 10l7-7 7 7v8a1 1 0 01-1 1H4a1 1 0 01-1-1z" },
     { id: "stats",   label: "Stats",   path: "M3 16V9M9 16V3M15 16v-5M18 16H2" },
-    { id: "circles", label: "Circles", path: "M5 8a3 3 0 1 1 6 0 3 3 0 0 1-6 0zM12.5 11a3 3 0 0 1 4.5 2.5M3 17c0-2.5 2-3.8 5-3.8s5 1.3 5 3.8" },
+    { id: "circles", label: "Chat", path: "M5 8a3 3 0 1 1 6 0 3 3 0 0 1-6 0zM12.5 11a3 3 0 0 1 4.5 2.5M3 17c0-2.5 2-3.8 5-3.8s5 1.3 5 3.8" },
   ];
 
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
@@ -1527,7 +1527,12 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   const sn = subNavFor(tab.id); const ia = view === tab.id;
                   return (
                     <div key={tab.id}>
-                      <button data-testid={`nav-${tab.id}`} onClick={()=> ia && tab.id !== "home" ? primaryNav("home") : primaryNav(tab.id)} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
+                      <button data-testid={`nav-${tab.id}`} onClick={() => {
+                        if (!ia) { primaryNav(tab.id); return; }
+                        if (tab.id === "stats") { setStatsTab("performance"); return; }
+                        if (tab.id === "home") { setHomeSection("feed"); return; }
+                        primaryNav("home");
+                      }} style={{ display:"flex", alignItems:"center", gap:"10px", width:"100%", background:ia?C.panel:"transparent", border:"none", borderLeft:ia?`2px solid ${C.text}`:"2px solid transparent", padding:"10px 22px", cursor:"pointer", fontFamily:MONO, fontSize:"11px", letterSpacing:"0.1em", textTransform:"uppercase", color:ia?C.text:C.dim, textAlign:"left", transition:"all 0.12s ease" }}>
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ opacity: ia ? 1 : 0.55, flexShrink: 0 }}>
                           <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
@@ -3745,7 +3750,12 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {NAV_TABS.map(tab => {
                 const active = view === tab.id;
                 return (
-                  <button key={tab.id} data-testid={`nav-${tab.id}`} onClick={() => active && tab.id !== "home" ? primaryNav("home") : primaryNav(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
+                  <button key={tab.id} data-testid={`nav-${tab.id}`} onClick={() => {
+                    if (!active) { primaryNav(tab.id); return; }
+                    if (tab.id === "stats") { setStatsTab("performance"); return; }
+                    if (tab.id === "home") { setHomeSection("feed"); return; }
+                    primaryNav("home");
+                  }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", padding: "8px 2px", borderRadius: "999px", background: active ? C.text : "transparent", color: active ? C.bg : C.text2, border: "none", cursor: "pointer", transition: "background 0.2s, color 0.2s", minHeight: "48px" }}>
                     <div style={{ position: "relative", display: "flex" }}>
                       <svg width="17" height="17" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
                         <path d={(tab as any).path} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
