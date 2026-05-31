@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type React from "react";
-import readXlsxFile from "read-excel-file";
+import readXlsxFile from "read-excel-file/browser";
 import { MONO, BODY } from "./shared";
 import type { Trade } from "./types";
 import type { Theme } from "./theme";
