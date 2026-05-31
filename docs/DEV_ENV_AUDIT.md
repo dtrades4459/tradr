@@ -1,33 +1,39 @@
 # Kōda Dev Environment Audit
-_Generated 2026-05-27 — read-only inspection, no config was modified._
+_Refreshed 2026-05-29 — read-only inspection, no files modified (except this report)._
+_Previous audit: this same file, dated 2026-05-27._
 
 ---
 
 ## SECURITY
 
-> No plaintext secrets found in the current git tree. Two findings related to committed example files:
+> No hardcoded secret values detected in the working tree.
 
-**S1 — Real Supabase project URL in tracked `.env.local.example`**
-Commit `95fbe4f` added `.env.local.example` with:
-```
-VITE_SUPABASE_URL=https://vifwjwsndchnrpvfgrmg.supabase.co
-```
-The actual project reference ID is baked into the file. This URL is not a secret (it appears in the browser bundle too), but committing the real project ID to a public repo's `.env.local.example` is poor hygiene. Replace with `https://your-project.supabase.co`.
+**S1 — Real Supabase credentials in committed `.env` file**
+`.env` is tracked by git. The `.gitignore` covers `.env.local` and `.env.*.local` but **not** `.env` itself. The committed file contains:
+- `VITE_SUPABASE_URL` with the real project reference ID
+- `VITE_SUPABASE_ANON_KEY` with a full JWT token
 
-**S2 — `.gitignore` duplicate entry**
-`.gitignore` has `.claude/` listed twice (lines 30–31). Cosmetic only; no security risk.
+The anon key is technically public (it ships in the browser bundle and is safe by RLS design), but committing a `.env` file normalises the pattern and risks future accidental commits of `.env.local` or service-role keys.
+
+**Action required:** Add `.env` to `.gitignore` and run `git rm --cached .env`. Purging from git history is optional given the anon key is already public.
+
+**S2 — Personal email address in committed `.env.example`**
+`VAPID_EMAIL=mailto:dnyland420@gmail.com` is hardcoded in `.env.example` (line 71), a tracked file in a public repo. Replace with `mailto:your-email@example.com`.
+
+**S3 — Stale smoke-test domain in CI and playwright.config.ts**
+Not a secret, but operationally broken: `playwright.config.ts` and `ci.yml` both hardcode `https://tradrjournal.xyz` as the E2E test target. The live production domain is now `kodatrade.co.uk`. Smoke tests run against the old domain and may be testing a stale deployment.
 
 ---
 
-## 1 — Top 5 Quick Wins
+## 1 — Top 5 Quick Wins (under 30 minutes each)
 
-| # | Action | File | Time |
-|---|--------|------|------|
-| 1 | Add `"typecheck": "tsc --noEmit"` npm script | `package.json` | 2 min |
-| 2 | Add `api/**/*.ts` to `lint-staged` scope — API files skip pre-commit lint today | `package.json` | 3 min |
-| 3 | Add `.nvmrc` (content: `20`) + `"engines": { "node": ">=20" }` to package.json | new file + `package.json` | 5 min |
-| 4 | Rebrand `CLAUDE.md` header "TRADR →" to "Kōda", fix 3 outdated references | `CLAUDE.md` | 15 min |
-| 5 | Replace real Supabase URL in `.env.local.example` with generic placeholder | `.env.local.example` | 2 min |
+| # | Action | File(s) | Est. |
+|---|--------|---------|------|
+| 1 | **Add `.env` to `.gitignore`** — closes the gap that allowed credentials to be committed; follow with `git rm --cached .env` | `.gitignore` | 3 min |
+| 2 | **Add `--max-warnings 0` to `npm run lint`** — CI currently passes with unlimited ESLint warnings | `package.json` | 2 min |
+| 3 | **Fix smoke-test domain** — update `playwright.config.ts` and `ci.yml` `BASE_URL` from `tradrjournal.xyz` → `kodatrade.co.uk` | 2 files | 5 min |
+| 4 | **Extend `typecheck` to cover `api/`** — add `-p tsconfig.api.json` to the npm script; API code (billing, encryption, broker sync) is never type-checked in CI today | `package.json`, `ci.yml` | 5 min |
+| 5 | **Fix `index.html` canonical URL** — `<link rel="canonical">` still points to `tradrjournal.xyz` | `index.html` | 2 min |
 
 ---
 
@@ -37,209 +43,234 @@ The actual project reference ID is baked into the file. This URL is not a secret
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| Package manager | `npm` (lockfile v3, `package-lock.json`) — single lockfile, no conflicts | No change needed | ✓ | — |
-| Missing `typecheck` script | `package.json` has no `typecheck` script; CI calls `npx tsc --noEmit` directly | Add `"typecheck": "tsc --noEmit"` | Med | S |
-| Node version not pinned | No `.nvmrc`; no `engines` field; CI hardcodes `node-version: 20` in YAML | Add `.nvmrc` with `20`; add `"engines": { "node": ">=20" }` | Med | S |
-| `legacy-peer-deps=true` in `.npmrc` | Silently ignores peer dependency conflicts across all installs | Investigate root cause; remove once resolved. If still needed, add a comment explaining which conflict requires it. | Med | S |
-| `stripe` + `web-push` in `dependencies` | Both are server-only (used in `api/` functions only) | Could move to `devDependencies`; Vercel bundles them regardless, so it's cosmetic. Low priority. | Low | S |
-| `STRIPE_PRICE_ID_ANNUAL` in `.env.example` | Documented; `api/stripe-checkout.ts` reads it. But no annual pricing UI exists yet. | Keep; add a comment saying "annual pricing — not live yet". | Low | S |
+| Package manager | `npm` (lockfile v3, `package-lock.json`) — single lockfile, no mixed signals | No change needed | ✓ | — |
+| `typecheck` script | `"typecheck": "tsc --noEmit"` present ✓ | Extend to also run `tsc --noEmit -p tsconfig.api.json` | High | S |
+| `test` script | `"test": "vitest run"` present ✓ | — | ✓ | — |
+| `lint` script | `"lint": "eslint ."` present but **no `--max-warnings 0`** — passes with any number of warnings | Add `--max-warnings 0` | High | S |
+| `format` script | **Missing** — no Prettier, no `format` script | Add Prettier + `"format": "prettier --write ."` | Med | M |
+| Node version pinned | `.nvmrc` (value: `20`) + `"engines": { "node": "20.x" }` in `package.json` ✓ | — | ✓ | — |
+| `legacy-peer-deps=true` in `.npmrc` | Silently ignores peer dep conflicts; origin unknown | Investigate: `npm install` without flag; document which package requires it with a comment | Med | S |
+| `stripe` in `dependencies` | Server-only; never imported from `src/`. Belongs in `devDependencies`. | Move to `devDependencies` | Low | S |
+| `web-push` in `dependencies` | Same — only used in `api/push.ts` | Move to `devDependencies` | Low | S |
+| `workbox-*` (5 packages) in `dependencies` | Bundled by `vite-plugin-pwa`; no runtime Node process imports them | Move to `devDependencies` | Low | S |
 
 ### 2 · TypeScript Config
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| `strict: true` | Set in both `tsconfig.app.json` and `tsconfig.node.json` ✓ | — | ✓ | — |
+| `strict: true` | Set in `tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.api.json` ✓ | — | ✓ | — |
+| `noUncheckedIndexedAccess` | **Not set** in any tsconfig | Add to `tsconfig.app.json` — catches silent `undefined` from array/object indexing | Med | M |
+| `noImplicitAny` | Implied by `strict: true` ✓ | — | ✓ | — |
+| `noUnusedLocals` / `noUnusedParameters` | Set in all three tsconfigs ✓ | — | ✓ | — |
 | `noFallthroughCasesInSwitch` | Set ✓ | — | ✓ | — |
-| `noUncheckedIndexedAccess` | **Not set** in either tsconfig | Add to `tsconfig.app.json`. Catches many silent `undefined` bugs from array indexing. Will surface some existing issues — plan a fix session. | Med | M |
-| `noUnusedLocals` / `noUnusedParameters` | Only in `tsconfig.node.json` (covers `vite.config.ts` only), **not** in `tsconfig.app.json` | Add to `tsconfig.app.json`; ESLint `no-unused-vars` is only a warning today. | Med | M |
-| Build target mismatch | `tsconfig.app.json` targets ES2023 but Vite `build.target` is unset (defaults to ES2015) | Add `build: { target: 'es2022' }` to `vite.config.ts` to align with tsconfig and drop unnecessary polyfills | Low | S |
-| `tsconfig.app.json` exclude list | Excludes `src/TRADR (1-4).tsx` — suggests OneDrive backup copies exist locally | Confirm these don't exist; if they do, delete them. The exclude is correct. | Low | S |
-| `tsconfig.json` root | Is a project-references wrapper delegating to `tsconfig.app.json` + `tsconfig.node.json` ✓ | — | ✓ | — |
-| Path aliases | None defined in tsconfig or Vite | `@/` → `src/` alias is a common quality-of-life improvement; not blocking | Low | S |
+| `typecheck` covers `src/` only | `tsc --noEmit` resolves to `tsconfig.app.json` — `api/` is **never type-checked in CI** | Add `tsc --noEmit -p tsconfig.api.json` to the `typecheck` script and CI | High | S |
+| Path aliases | None in tsconfig or Vite | `@/` → `src/` alias is optional but cuts `../../../` chains in large files like `Koda.tsx` | Low | M |
+| Build target | `build.target: 'es2022'` in `vite.config.ts` ✓ | — | ✓ | — |
+| `tsconfig.app.json` exclude list | Excludes `src/TRADR (1-4).tsx` — stale OneDrive backup paths | Confirm files don't exist locally; if they do, delete them | Low | S |
 
 ### 3 · Linting and Formatting
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| ESLint config | Flat config (`eslint.config.js`), ESLint 9, typescript-eslint, react-hooks, react-refresh ✓ | — | ✓ | — |
-| All key rules set to `warn` | `no-explicit-any`, `exhaustive-deps`, all React Compiler rules — all `warn`. CI passes regardless of warning count. | Promote `no-explicit-any` → `error` (or `"warn"` with `--max-warnings 0` in CI lint script). At minimum, add `--max-warnings 0` to `npm run lint` or the CI step. | High | S |
-| No Prettier | No `.prettierrc`, no `prettier` package | Add Prettier with `@trivago/prettier-plugin-sort-imports`; wire into pre-commit. Without it, formatting is not enforced and will diverge. | Med | M |
-| `api/` not in lint-staged | `lint-staged` only runs ESLint on `src/**/*.{ts,tsx}`. API files are checked in CI but not on commit. | Add `"api/**/*.ts": "eslint"` to `lint-staged` config | Med | S |
-| React Compiler rules | 11 React Compiler-specific rules all set to `warn` | These are fine as-is while you're mid-migration. Add a comment with a target date or flag to promote them. | Low | S |
+| ESLint config | Flat config (ESLint 9), `typescript-eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh` ✓ | — | ✓ | — |
+| All key rules set to `warn` | `no-explicit-any`, `exhaustive-deps`, 13 React Compiler rules — all `warn`. CI passes regardless of warning count. | Add `--max-warnings 0` to lint script. Consider promoting `no-explicit-any` → `error` after a cleanup sprint. | High | S |
+| `api/` in lint-staged | `lint-staged` config covers both `src/**/*.{ts,tsx}` and `api/**/*.ts` ✓ | — | ✓ | — |
+| No Prettier | No `.prettierrc`, no `prettier` devDependency, no `format` script | Add Prettier; wire `prettier --write` into lint-staged; add `.vscode/settings.json` with `editor.formatOnSave: true` | Med | M |
+| ESLint–Prettier conflict prevention | No Prettier today, so no conflict. When added: install `eslint-config-prettier` to disable conflicting ESLint rules. | Plan for same session as Prettier | Med | S |
+| React Compiler rules (13) | All `warn` — acceptable during migration | Add a TODO with a target date or issue number to track promotion to `error` | Low | S |
 
 ### 4 · Git Hygiene
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| `.gitignore` | `.env`, `.env.local`, `.env.*.local`, `dist`, `node_modules`, `.vscode/*`, `.DS_Store` all covered ✓ | Remove duplicate `.claude/` entry (appears twice) | Low | S |
-| `.env.local.example` tracked with real URL | Contains `https://vifwjwsndchnrpvfgrmg.supabase.co` (actual project ID) | Replace with `https://your-project.supabase.co` | Med | S |
-| No `.gitattributes` global normalisation | Only `.husky/*` and `*.sh` get LF enforcement. No `* text=auto`. CI is seeing CRLF warnings on Windows commits. | Add `* text=auto eol=lf` as first line in `.gitattributes` to normalise all text files | Med | S |
-| Stale remote branches | 25 remote branches; many old feature branches (`feat/tradr-os-redesign`, `feat/premium-polish-v1`, `feat/analytics-desktop-social`, `refactor/split-components`, `fix/accessibility-d`, `dtrades4459-patch-1`, etc.) | Run `git remote prune origin` then delete merged stale branches from GitHub | Low | M |
-| Local `feat/koda-rename` branch | Exists locally; merged equivalent exists remotely | Delete: `git branch -d feat/koda-rename` | Low | S |
-| Commit conventions | Pattern is clear and consistent: `feat:`, `fix:`, `chore:`, `refactor:` with body on PRs ✓ | — | ✓ | — |
-| `tasks/lessons.md` | Referenced in `CLAUDE.md` Rule 3 but not in tracked files list | Create the file and commit it, or update Rule 3 if the pattern has changed | Low | S |
+| `.gitignore` — `.env` gap | `.env` is **not listed** — only `.env.local` and `.env.*.local` are covered. A `.env` file is currently committed. | Add `.env` to `.gitignore` immediately | High | S |
+| `.gitignore` — standard covers | `dist`, `node_modules`, `.vscode/*`, `.DS_Store`, `.idea`, `.claude/`, `.vercel` ✓ | — | ✓ | — |
+| `.gitignore` — Supabase artifacts | No entries for `supabase/.branches/` or `supabase/.temp/` | Add both | Low | S |
+| `.gitattributes` | Present: `* text=auto eol=lf` normalisation + `.husky/*` and `*.sh` LF enforcement ✓ | — | ✓ | — |
+| `tasks/lessons.md` | Does not exist. CLAUDE.md Rule 3 requires it. | Create and commit (even empty) or update Rule 3 to reflect the auto-memory system | Low | S |
+| Git history scan for `.env` | Could not inspect in this session (shell blocked). The committed `.env` file should be reviewed. | Run: `git log --all --oneline -- ".env"` — see System Recommendations | High | S |
+| Stale remote branches | Not inspectable without shell. Previous audit identified 25 remote branches, many stale. | `git remote prune origin`; delete merged branches from GitHub | Low | M |
+| Commit conventions | Consistent `feat:`, `fix:`, `chore:`, `refactor:` prefix pattern ✓ | — | ✓ | — |
 
 ### 5 · Pre-commit Hooks
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| Husky + lint-staged | Both present and wired ✓ | — | ✓ | — |
-| Pre-commit: runs lint-staged | `npx lint-staged` → ESLint on staged `src/**/*.{ts,tsx}` | Add `api/**/*.ts` to scope (see §3) | Med | S |
-| Pre-commit: runs tsc | `npx tsc --noEmit` — full project typecheck on every commit ✓ | Once you have a `typecheck` script, change to `npm run typecheck` | Low | S |
-| Pre-commit: pattern guards | Blocks `: any` annotations and `eslint-disable` comments (except `exhaustive-deps`) — excellent practice ✓ | — | ✓ | — |
-| No pre-push hook | Currently no pre-push checks | Could add `npm test` on pre-push for unit tests | Low | S |
+| Husky installed | `husky` v9 + `prepare` script ✓ | — | ✓ | — |
+| lint-staged scope | `src/**/*.{ts,tsx}` and `api/**/*.ts` — both covered ✓ | — | ✓ | — |
+| Pre-commit: typecheck | `npm run typecheck` on every commit ✓ — but only covers `src/`. When `typecheck` script is extended to include `api/`, the hook will automatically cover both. | No change needed beyond extending the npm script | ✓ | — |
+| Pre-commit: pattern guards | Blocks `: any` annotations and `eslint-disable` (except `exhaustive-deps`) ✓ | — | ✓ | — |
+| No pre-push hook | No `.husky/pre-push` | Optional: run `npm test` on pre-push to prevent broken unit tests reaching CI | Low | S |
+| No commit-msg hook | No conventional commit enforcement | Optional: `commitlint` — low value given consistent manual discipline | Low | M |
 
 ### 6 · Environment Variables
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| `.env.example` completeness | All `import.meta.env.*` and `process.env.*` vars used in source have entries ✓ | — | ✓ | — |
-| Missing `STRIPE_PRICE_ID_MONTHLY` in CLAUDE.md | `.env.example` and code both use it; CLAUDE.md env var table only lists `STRIPE_PRICE_ID` | Update CLAUDE.md table | Low | S |
-| CLAUDE.md env table incomplete | Missing: `STRIPE_PRICE_ID_MONTHLY`, `STRIPE_PRICE_ID_ANNUAL`, `STRIPE_PROMO_CODE_ID_*` (3 keys), `SUPABASE_ANON_KEY`, `RESEND_API_KEY`, `VAPID_*` (3 keys) | Add all missing vars to the table in CLAUDE.md | Med | S |
-| `TRADR_ENCRYPTION_KEY` rename pending | Both `.env.example` and CLAUDE.md note the rename to `KODA_ENCRYPTION_KEY` | Schedule this with the next Vercel env var update session. Requires: update `api/lib/cryptoUtils.ts`, update `.env.example`, update Vercel dashboard. | Med | M |
-| `VITE_SUPABASE_URL` used in api handler | `api/stripe-checkout.ts` reads `process.env.VITE_SUPABASE_URL` — Vite-prefixed vars are not available server-side on Vercel unless explicitly set as a server env var | Confirm this var is also set as a non-`VITE_` var in Vercel (it is — `SUPABASE_URL` is also set), then remove the `VITE_` read from the API handler | Med | S |
+| `.env` file committed | `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` are tracked in git (see SECURITY S1) | Add `.env` to `.gitignore`; run `git rm --cached .env` | High | S |
+| `.env.example` completeness | All `import.meta.env.*` and `process.env.*` keys used in source are present ✓ | — | ✓ | — |
+| `KODA_ENCRYPTION_KEY` | Correctly named in code (`api/lib/cryptoUtils.ts`) and `.env.example` ✓ | Confirm Vercel dashboard also uses the new name (not old `TRADR_ENCRYPTION_KEY`) | ✓ | — |
+| `SUPABASE_URL` fallback in `api/lib/supabaseAdmin.ts` | Falls back to `process.env.VITE_SUPABASE_URL` if `SUPABASE_URL` is not set. `VITE_*` vars are not available server-side on Vercel unless explicitly set as a server variable. | Ensure `SUPABASE_URL` is always set in Vercel; the fallback masks misconfiguration | Med | S |
+| `VAPID_EMAIL` hardcodes personal email | `mailto:dnyland420@gmail.com` in `.env.example` | Replace with `mailto:your-email@example.com` | Low | S |
+| Two `.env.example` files | Both `.env.example` (complete) and `.env.local.example` (sparse, 3 vars) exist | Delete `.env.local.example` or clearly label it "minimal quick-start" | Low | S |
+| `STRIPE_PRICE_ID_MONTHLY` missing from CLAUDE.md table | Listed in `.env.example` and code; absent from the CLAUDE.md env var table | Add to CLAUDE.md env var table | Low | S |
 
 ### 7 · Vite Config
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| Build target unset | Vite defaults to ES2015 transform. TS targets ES2023. Mismatch = unnecessary polyfills. | Add `build: { target: 'es2022' }` | Low | S |
-| Sourcemaps disabled | No `sourcemap` config; defaults to `false` in prod. Sentry is wired but will report minified stacks. | Add `build: { sourcemap: true }` (or `'hidden'` for security). This also requires configuring `vite-plugin-sentry` or uploading sourcemaps in CI. | Med | M |
-| Chunk strategy | Manual chunks for react + supabase vendors ✓ | Could also extract Stripe + posthog but current split is reasonable | Low | S |
-| PWA dev mode enabled | `devOptions.enabled: true` — service worker runs in dev. Can cause HMR confusion. | Set `devOptions.enabled: false` unless you actively need to test offline behaviour during dev | Low | S |
-| No path aliases | All imports use relative paths (`../../`) | Add `resolve: { alias: { '@': '/src' } }` and matching `tsconfig` paths | Low | M |
-| All plugins used | `@vitejs/plugin-react` + `vite-plugin-pwa` — both active and needed ✓ | — | ✓ | — |
+| Build target | `build.target: 'es2022'` ✓ | — | ✓ | — |
+| Sourcemaps | **Not configured** — defaults to `false` in prod. Sentry is wired but will receive minified stack traces. | Add `build: { sourcemap: 'hidden' }`. Configure `sentry-cli` upload in CI. | Med | M |
+| Manual chunks | React + Supabase vendor chunks ✓ | Could add Stripe + PostHog but current split is reasonable | Low | S |
+| PWA `devOptions.enabled: true` | Service worker active in dev — can interfere with HMR | Set to `false` unless actively testing offline behaviour | Low | S |
+| Path aliases | None — all imports are relative | Add `resolve: { alias: { '@': '/src' } }` + matching `tsconfig` `paths` | Low | M |
+| All plugins active and needed | `@vitejs/plugin-react` + `vite-plugin-pwa` — both used ✓ | — | ✓ | — |
 
-### 8 · CLAUDE.md
+### 8 · Claude Code Config
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| Title says "TRADR" | `# TRADR — Claude Code Operating Rules` | Change to `# Kōda — Claude Code Operating Rules` | High | S |
-| "What TRADR is" section | Still says "TRADR" throughout | Rename to "What Kōda is"; update description to reflect current branding | High | S |
-| API broker file references | Lists `api/broker/connect.ts` and `api/broker/disconnect.ts` as separate files | Update to `api/broker/[action].ts` (merged in audit Day 1) | Med | S |
-| Cron schedule mismatch | CLAUDE.md Broker Sync diagram shows "every 5 min" but `vercel.json` is now `*/15 * * * *` | Update diagram comment to "every 15 min via Vercel Cron" | Med | S |
-| `tradr-redesign.html`, `dist-verify/` in backlog | CLAUDE.md backlog item mentions deleting these | If they don't exist locally, remove the backlog item | Low | S |
-| Env var table incomplete | See §6 — missing 10+ vars | Update the table | Med | S |
-| Code pattern shows `(window as any).storage` | Legacy pattern; `window.storage` is now typed via the shim | Update example to not require the cast | Low | S |
-| Feature flag example uses `window.tradrFlags` | Should be `window.kodaFlags` per the rebrand | Update the example | Low | S |
+| `CLAUDE.md` present at repo root | ✓ Current, comprehensive, Kōda-branded throughout | — | ✓ | — |
+| TRADR → Kōda rebrand in CLAUDE.md | Complete. Remaining `TRADRG-HB1U` constant is intentional (live DB value) ✓ | — | ✓ | — |
+| `.claude/` folder | **Does not exist** at repo root | Create `.claude/settings.json` to pin allowed tools and reduce per-session permission prompts | Low | S |
+| `tasks/lessons.md` | Does not exist; Rule 3 requires it | Create empty file and commit, or update Rule 3 | Low | S |
+| `STRIPE_PRICE_ID_MONTHLY` in env table | Absent from CLAUDE.md env var table | Add | Low | S |
+| `(window as any).storage` code pattern | If `window.storage` is now declared via `declare global`, the cast is stale | Check `src/lib/storage.ts` for `declare global`; remove cast if typed | Low | S |
+| Backlog accuracy | Sprint 3 marked ✓ (2026-05-29). Sprint 4 active. Competitive pricing correct. | Keep current ✓ | ✓ | — |
 
 ### 9 · CI / Deploy
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| CI jobs | `build` (lint + tsc + build) + `test` (unit tests) + `e2e` (Playwright, non-blocking) ✓ | — | ✓ | — |
-| Lint allows warnings | `npm run lint` exits 0 with any number of warnings | Add `--max-warnings 0` to the lint script or CI lint step | High | S |
-| No `typecheck` script | CI runs `npx tsc --noEmit` directly, not via npm script | Standardise with `npm run typecheck` after adding the script | Low | S |
-| Node version not from `.nvmrc` | CI hardcodes `node-version: 20` in both jobs (duplicated). Not derived from a single source. | After adding `.nvmrc`, use `node-version-file: .nvmrc` in all CI jobs | Med | S |
-| Dual cron conflict | `sync-cron.yml` fires every **5 min** via GitHub Actions; `vercel.json` fires every **15 min** via Vercel Cron. Both are active — sync runs at 5-min intervals regardless of which triggers it. The comment says GH Actions "replaces" the Vercel Cron, but Vercel Cron was set to 15 min in the last audit session. | Decide: if GH Actions at 5 min is the intended schedule, remove the Vercel cron entry for `sync`. If 15 min is fine, disable `sync-cron.yml`. Running both is harmless but wasteful. | Med | S |
-| E2E smoke test secrets | `SMOKE_TEST_EMAIL` and `SMOKE_TEST_PASSWORD` referenced; `continue-on-error: true` | Confirm secrets are set in GitHub repo settings. If not, the job passes vacuously. | Med | S |
-| Branch protection | CLAUDE.md says "Set up branch protection on main" is a backlog item | Enable required status check for `build` job on `main` in GitHub → Settings → Branches | Med | S |
+| CI runs lint + typecheck + build on every PR | ✓ | — | ✓ | — |
+| `api/` never type-checked in CI | `npm run typecheck` only covers `src/` via `tsconfig.app.json` | Add `tsc --noEmit -p tsconfig.api.json` to CI Typecheck step | High | S |
+| Lint allows unlimited warnings | `npm run lint` exits 0 regardless of warning count | Add `--max-warnings 0` to the lint script | High | S |
+| Unit test job | Separate `test` job runs `vitest run` ✓ | — | ✓ | — |
+| Node version from `.nvmrc` | All three CI jobs use `node-version-file: .nvmrc` ✓ | — | ✓ | — |
+| Dual cron conflict | `sync-cron.yml` = GitHub Actions every 5 min. `vercel.json` = nightly `complete-challenges` only. No conflict. ✓ | — | ✓ | — |
+| E2E smoke test domain | `BASE_URL: https://tradrjournal.xyz` in `ci.yml` — stale domain | Update to `https://kodatrade.co.uk` | Med | S |
+| E2E secrets | `SMOKE_TEST_EMAIL` / `SMOKE_TEST_PASSWORD` referenced; unknown if set in GitHub secrets | Confirm in GitHub → Settings → Secrets; if unset, tests pass vacuously | Med | S |
+| `continue-on-error: true` on E2E | Prevents broken smoke tests from blocking merges | Acceptable while test account setup is in progress | ✓ | — |
+| Branch protection on `main` | Documented as backlog item — not yet enabled | Enable in GitHub → Settings → Branches: require `build` job to pass | Med | S |
+| PR preview deploys | Vercel auto-deploys on every branch push ✓ | — | ✓ | — |
 
 ### 10 · Editor Config
 
 | Area | Current state | Recommended change | Sev | Effort |
 |------|---------------|--------------------|-----|--------|
-| `.editorconfig` | **Not present** at repo root | Add `.editorconfig` with `indent_style = space`, `indent_size = 2`, `end_of_line = lf`, `charset = utf-8`, `trim_trailing_whitespace = true`, `insert_final_newline = true` | Med | S |
-| `.vscode/` directory | **Not present** — only `.vscode/extensions.json` is excluded from `.gitignore` (implying it should exist but doesn't) | Add `.vscode/extensions.json` with recommended extensions: ESLint, Prettier (once added), TypeScript, Tailwind (if used), Vite. Add `.vscode/settings.json` with `editor.formatOnSave`, `eslint.validate: ["typescript", "typescriptreact"]`. | Low | S |
+| `.editorconfig` | Present: 2-space indent, LF, UTF-8, final newline, trim trailing whitespace ✓ | — | ✓ | — |
+| `.vscode/` directory | **Does not exist** despite `.gitignore` excluding `.vscode/*` (with an exemption for `extensions.json`) | Create `.vscode/extensions.json` (ESLint, Prettier, TypeScript Hero) | Low | S |
+| `.vscode/settings.json` | Not present | Create with `eslint.validate`, `editor.formatOnSave` (once Prettier is added), `typescript.tsdk` | Low | S |
 
 ---
 
 ## 3 — Suggested Sequencing
 
-### Session A — Baseline hygiene (30 min)
-_Everything here is independent and safe to do in one pass._
+### Session A — Security + critical gaps (20 min)
+_Do first. Two of these are security hygiene; two prevent silent CI lies._
 
-1. Add `"typecheck": "tsc --noEmit"` script to `package.json`
-2. Add `api/**/*.ts` to `lint-staged` in `package.json`
-3. Add `.nvmrc` (content: `20`); add `"engines": { "node": ">=20" }` to `package.json`
-4. Add `* text=auto eol=lf` as first line of `.gitattributes`
-5. Remove duplicate `.claude/` line from `.gitignore`
-6. Replace real Supabase URL in `.env.local.example`
-7. Add `.editorconfig`
+1. Add `.env` to `.gitignore`; run `git rm --cached .env`; commit
+2. Add `--max-warnings 0` to `"lint"` script in `package.json`
+3. Update `"typecheck"` script: `"tsc --noEmit && tsc --noEmit -p tsconfig.api.json"`
+4. Update CI Typecheck step: add `tsc --noEmit -p tsconfig.api.json` after existing command
+5. Replace `mailto:dnyland420@gmail.com` in `.env.example` with `mailto:your-email@example.com`
 
-### Session B — CI hardening (20 min)
-_Depends on Session A for consistent `typecheck` script._
+### Session B — Stale domain cleanup (15 min)
+_Pure find-and-replace. No dependencies._
 
-1. Add `--max-warnings 0` to `npm run lint` (or to the CI lint command)
-2. Change CI `node-version: 20` → `node-version-file: .nvmrc` in both jobs
-3. Decide on dual-cron conflict: keep GH Actions at 5 min OR Vercel at 15 min, disable the other
-4. Confirm `SMOKE_TEST_EMAIL` / `SMOKE_TEST_PASSWORD` secrets exist in GitHub
+1. `index.html` canonical URL: `tradrjournal.xyz` → `kodatrade.co.uk`
+2. `playwright.config.ts` `baseURL` default: `tradrjournal.xyz` → `kodatrade.co.uk`
+3. `ci.yml` `BASE_URL` env var: `tradrjournal.xyz` → `kodatrade.co.uk`
+4. `public/robots.txt` sitemap URL
+5. `public/sitemap.xml` all entries
+6. `public/privacy.html` domain references
 
-### Session C — CLAUDE.md rebrand + accuracy (20 min)
-_No code dependencies._
+### Session C — TypeScript strictness (45 min)
+_May surface new TS errors. Plan for a fix pass._
 
-1. Rename "TRADR" → "Kōda" in title, "What TRADR is" section, code pattern examples
-2. Update API file references: `broker/connect.ts` + `broker/disconnect.ts` → `broker/[action].ts`
-3. Fix cron schedule in Broker Sync diagram (5 min → 15 min)
-4. Add missing env vars to the CLAUDE.md table
-5. Create and commit `tasks/lessons.md` (even if empty initially)
+1. Add `"noUncheckedIndexedAccess": true` to `tsconfig.app.json`
+2. Run `npm run typecheck` — fix any new errors (typically array index access in charts/data)
+3. Verify `tsconfig.api.json` also passes cleanly after the typecheck script extension
 
-### Session D — TypeScript strictness (45 min)
-_May surface new TS errors that need fixes._
+### Session D — Prettier + editor setup (30 min)
+_Independent. Purely additive._
 
-1. Add `"noUnusedLocals": true, "noUnusedParameters": true` to `tsconfig.app.json`
-2. Add `"noUncheckedIndexedAccess": true` to `tsconfig.app.json`
-3. Fix any new TS errors that surface (likely in chart/data access patterns)
-4. Align Vite build target: add `build: { target: 'es2022' }`
+1. `npm install -D prettier eslint-config-prettier`
+2. Add `.prettierrc` (2 spaces, double quotes, semicolons — match existing code style)
+3. Add `eslint-config-prettier` to `eslint.config.js` extends
+4. Add `"format": "prettier --write ."` to `package.json` scripts
+5. Add `prettier --write` to lint-staged for `*.{ts,tsx,json,md}`
+6. Create `.vscode/extensions.json` + `.vscode/settings.json`
 
-### Session E — Prettier + editor experience (30 min)
-_Independent; Prettier config only needs to match existing code style._
+### Session E — Git hygiene (20 min)
+_Terminal work. Can be done any time after Session A._
 
-1. `npm install -D prettier`
-2. Add `.prettierrc` (match existing style: 2 spaces, double quotes, semicolons)
-3. Add `prettier --write` to lint-staged for `*.{ts,tsx,json,md}`
-4. Add `.vscode/extensions.json` and `.vscode/settings.json`
+1. `git remote prune origin`
+2. Delete merged stale branches (see System Recommendations)
+3. Create `tasks/lessons.md` and commit it
+4. Add `supabase/.branches/` and `supabase/.temp/` to `.gitignore`
 
-### Session F — Env var cleanup (20 min)
-_Coordinate with Vercel dashboard session._
+### Session F — `.npmrc` investigation (15 min)
 
-1. Rename `TRADR_ENCRYPTION_KEY` → `KODA_ENCRYPTION_KEY` in code + Vercel + `.env.example`
-2. Remove `VITE_SUPABASE_URL` read from `api/stripe-checkout.ts` (use `SUPABASE_URL` instead)
-3. Delete stale remote branches from GitHub
-
----
-
-## 4 — Questions for Dylon
-
-1. **`legacy-peer-deps=true`** in `.npmrc` — do you know what conflict originally required this? Running `npm install` without it and seeing if it still passes would tell us if it can be removed.
-
-2. **Dual cron** — `sync-cron.yml` (GH Actions, 5 min) AND `vercel.json` (Vercel Cron, 15 min) are both active for the sync endpoint. The comment in `sync-cron.yml` says it "replaces" the Vercel Cron, but both are running. Which schedule is correct: 5 min or 15 min?
-
-3. **`src/TRADR (1-4).tsx`** — these are in the `tsconfig.app.json` exclude list, which means they exist on your local machine but aren't committed (correct, `.gitignore` has `.bak` and `.tmp` but not these). Are these safe to delete from your local disk?
-
-4. **`tasks/lessons.md`** — CLAUDE.md Rule 3 tells Claude to append lessons here, but the file doesn't exist in the repo. Should it be committed (even if empty), or has Rule 3 been superseded by the auto-memory system?
-
-5. **`SMOKE_TEST_EMAIL` and `SMOKE_TEST_PASSWORD`** — are these set as GitHub repo secrets? If not, the E2E job passes vacuously on every push to `main`.
-
-6. **Annual pricing** — `STRIPE_PRICE_ID_ANNUAL` is in `.env.example` and read in `api/stripe-checkout.ts`. Is annual pricing coming soon, or should the code path be removed to simplify?
-
-7. **Sourcemaps** — Sentry is wired but sourcemaps aren't uploaded. Error reports from production will show minified stack traces. Is this acceptable for now, or should we add sourcemap generation + upload to CI?
+1. Temporarily remove `legacy-peer-deps=true` from `.npmrc`
+2. `npm install` — observe the conflict
+3. Restore flag with a comment naming the conflicting package, or fix root cause
 
 ---
 
-## System-level Recommendations
+## 4 — System-level Recommendations
 
-These are one-off commands to run in your own terminal (not repo changes):
+Run these in your own terminal (`C:\Users\Dylon\OneDrive\Desktop\tradr-fresh`):
 
 ```powershell
-# Clean up stale remote-tracking refs
-git remote prune origin
+# ── SECURITY: untrack committed .env ──────────────────────────────────────────
+# After adding ".env" to .gitignore:
+git rm --cached .env
+git commit -m "chore: untrack .env (was accidentally committed)"
 
-# Delete merged / stale local branches (review first)
+# ── Optional: check what the .env file contained in history ───────────────────
+git log --all --oneline -- ".env"
+# Then inspect a specific commit:
+# git show <hash>:.env
+
+# ── Optional: purge .env from git history (install git-filter-repo first) ─────
+# pip install git-filter-repo
+# git filter-repo --path .env --invert-paths
+
+# ── Stale branch cleanup ──────────────────────────────────────────────────────
+git remote prune origin
 git branch --merged main | Where-Object { $_ -notmatch "^\*|main" } | ForEach-Object { git branch -d $_.Trim() }
 
-# Verify no peer-dep conflicts without the legacy flag
-# (Run once; if it errors, the flag is still needed)
-# npm install --legacy-peer-deps=false
+# ── Verify API typecheck passes before adding to CI ───────────────────────────
+npx tsc --noEmit -p tsconfig.api.json
+
+# ── Confirm lint max-warnings enforcement ─────────────────────────────────────
+# After adding --max-warnings 0:
+npm run lint
+# Should exit non-zero if any warnings remain
+
+# ── npmrc investigation ───────────────────────────────────────────────────────
+# Temporarily comment out legacy-peer-deps=true, then:
+npm install
+# If it fails, note the package name and restore the flag with a comment
 ```
 
-```bash
-# On macOS/Linux CI runner — confirm Node version alignment
-node --version  # should match .nvmrc
-```
+---
 
-```powershell
-# If you want to confirm the real Supabase project ref before replacing it in .env.local.example
-# (it's already in your browser bundle anyway, so this is safe to grep)
-grep -r "vifwjwsndchnrpvfgrmg" src/ --include="*.ts" --include="*.tsx"
-```
+## 5 — Questions for Dylon
+
+1. **Committed `.env` file** — The `.env` at repo root is tracked by git because `.gitignore` only covers `.env.local`. Is this intentional (e.g. sharing between machines), or an oversight? Should we purge it from git history, or just untrack it going forward?
+
+2. **`api/` type-check gap** — The `typecheck` script and CI only cover `src/`. The `api/` folder (billing, encryption, broker sync, auth) has `tsconfig.api.json` but it is never run in CI. Type errors in API code are only caught at Vercel build time. Should `typecheck` cover `api/` too?
+
+3. **`legacy-peer-deps=true`** — Do you know what originally required this flag? Running `npm install` without it takes 5 minutes and either works (flag removable) or names the exact conflict so we can document or fix it.
+
+4. **Sourcemaps** — Sentry is wired but `vite.config.ts` has no `sourcemap` setting (defaults to `false`). Production error reports will show minified stack traces. Should we add `sourcemap: 'hidden'` and configure sourcemap upload in CI?
+
+5. **`tasks/lessons.md`** — CLAUDE.md Rule 3 says "every lesson learned gets appended to `tasks/lessons.md`". The file does not exist in the repo. Has this been superseded by the auto-memory system, or should the file be created and committed?
+
+6. **E2E test account** — CI references GitHub secrets `SMOKE_TEST_EMAIL` and `SMOKE_TEST_PASSWORD`. Are these configured in GitHub → Settings → Secrets? If not, the smoke-test job passes vacuously on every push to `main`, giving false confidence.
+
+7. **Two `.env.example` files** — Both `.env.example` (complete, 30+ vars) and `.env.local.example` (sparse, 3 vars) exist. New contributors won't know which to copy. Should `.env.local.example` be deleted, relabelled, or consolidated into `.env.example`?
+
+8. **Annual pricing / Elite tier** — `STRIPE_PRICE_ID_ANNUAL` is in code and `.env.example`. CLAUDE.md mentions "Free / Pro / Elite" tiers but no `STRIPE_PRICE_ID_ELITE` exists anywhere. Is the Elite tier still on the roadmap? Should the annual pricing code path be kept or removed to reduce complexity?
