@@ -20,8 +20,11 @@ export function FirstSessionSurvey({ C, onSave }: FirstSessionSurveyProps) {
   async function handleSave() {
     if (!priorTool) return;
     setSaving(true);
-    await onSave(priorTool, reason.trim());
-    setSaving(false);
+    try {
+      await onSave(priorTool, reason.trim());
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

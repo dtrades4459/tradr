@@ -1303,7 +1303,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   const NAV_TABS = [
     { id: "home",    label: "Home",    path: "M3 10l7-7 7 7v8a1 1 0 01-1 1H4a1 1 0 01-1-1z" },
     { id: "stats",   label: "Stats",   path: "M3 16V9M9 16V3M15 16v-5M18 16H2" },
-    { id: "circles", label: "Chat", path: "M5 8a3 3 0 1 1 6 0 3 3 0 0 1-6 0zM12.5 11a3 3 0 0 1 4.5 2.5M3 17c0-2.5 2-3.8 5-3.8s5 1.3 5 3.8" },
+    { id: "circles", label: "Circles", path: "M5 8a3 3 0 1 1 6 0 3 3 0 0 1-6 0zM12.5 11a3 3 0 0 1 4.5 2.5M3 17c0-2.5 2-3.8 5-3.8s5 1.3 5 3.8" },
   ];
 
   // Sub-section config per main view — fed to the desktop SubNavDropdown so
@@ -3980,10 +3980,15 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
           <FirstSessionSurvey
             C={C}
             onSave={async (priorTool, almostStoppedReason) => {
-              const updated = { ...profile, priorTool, almostStoppedReason };
-              await saveProfile(updated);
-              phIdentify(profile.uid!, { prior_tool: priorTool, almost_stopped_reason: almostStoppedReason });
-              setShowFirstSessionSurvey(false);
+              try {
+                const updated = { ...profile, priorTool, almostStoppedReason };
+                await saveProfile(updated);
+                phIdentify(profile.uid!, { prior_tool: priorTool, almost_stopped_reason: almostStoppedReason });
+              } catch (e) {
+                console.error("survey save failed", e);
+              } finally {
+                setShowFirstSessionSurvey(false);
+              }
             }}
           />
         )}

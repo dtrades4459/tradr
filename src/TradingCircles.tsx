@@ -366,6 +366,13 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
     };
   }, [circlesView, activeCircle, fetchCircleLeaderboard, lbSort]);
 
+  // Poll chat every 8s when the chat tab is active — fallback while realtime warms up
+  useEffect(() => {
+    if (circleTab !== "chat" || !activeCircle) return;
+    const id = setInterval(() => loadChatMessages(activeCircle.code), 8_000);
+    return () => clearInterval(id);
+  }, [circleTab, activeCircle]);
+
   useEffect(() => {
     if (circleTab !== "trophies" || !activeCircle) return;
     let alive = true;
@@ -882,8 +889,9 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
                       const isExpanded = expandedMember === entry.memberCode;
                       const isFollowing = (following || []).includes(entry.memberCode);
                       const medal = MEDALS[i] || null;
+                      const isBlurred = i >= 5 && !isMe;
                       return (
-                        <div key={entry.memberCode} style={{ borderBottom: `1px solid ${C.border}`, background: isFirst ? `${C.green}08` : "transparent" }}>
+                        <div key={entry.memberCode} style={{ borderBottom: `1px solid ${C.border}`, background: isFirst ? `${C.green}08` : "transparent", filter: isBlurred ? "blur(4px)" : "none", userSelect: isBlurred ? "none" : "auto", pointerEvents: isBlurred ? "none" : "auto", opacity: isBlurred ? 0.6 : 1 }}>
                           <div
                             onClick={() => setExpandedMember(isExpanded ? null : entry.memberCode)}
                             style={{ padding: "16px 0", display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "14px", cursor: "pointer", paddingLeft: isExpanded ? "10px" : 0, paddingRight: isExpanded ? "10px" : 0 }}>
