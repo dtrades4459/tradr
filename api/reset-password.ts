@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "crypto";
 import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
 
 export const config = { runtime: "nodejs" };
@@ -46,6 +47,22 @@ export default async function handler(req: any, res: any) {
   cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  // ── Beta gate unlock (action=beta-unlock) ───────────────────────────────────
+  // Folded here to stay within Vercel Hobby 12-function limit.
+  if ((req.body as any)?.action === "beta-unlock") {
+    const betaPassword = process.env.BETA_PASSWORD;
+    if (!betaPassword) return res.status(200).json({ ok: true });
+    const ip2 = getClientIp(req);
+    const ok2 = await checkRateLimit("beta_unlock", ip2, { limit: 10, windowMs: 15 * 60_000 });
+    if (!ok2) return res.status(429).json({ error: "Too many attempts — try again later" });
+    const { code } = req.body as { code?: string };
+    if (!code || typeof code !== "string") return res.status(400).json({ error: "code required" });
+    const bufA = Buffer.from(code.trim().toLowerCase());
+    const bufB = Buffer.from(betaPassword.trim().toLowerCase());
+    const match = bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+    return match ? res.status(200).json({ ok: true }) : res.status(401).json({ error: "Invalid code" });
+  }
 
   // ── Rate limit: 5 requests per 10 minutes per IP ────────────────────────────
   const ip = getClientIp(req);

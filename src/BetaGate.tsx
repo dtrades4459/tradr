@@ -76,10 +76,11 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
     if (!input.trim() || loading) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/beta-unlock", {
+      const res = await fetch("/api/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: input.trim() }),
+        body: JSON.stringify({ action: "beta-unlock", code: input.trim() }),
+
       });
       if (res.ok) {
         unlock();
