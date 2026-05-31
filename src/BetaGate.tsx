@@ -14,16 +14,32 @@ import { BetaWelcome } from "./BetaWelcome";
 // VITE_BETA_ENABLED=true shows the gate UI. The actual password lives in
 // BETA_PASSWORD on the server — never in the bundle.
 const STORAGE_KEY = "koda_beta_unlocked";
+const COOKIE_KEY  = "koda_beta_unlocked";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 export const betaEnabled = import.meta.env.VITE_BETA_ENABLED === "true";
 
+function hasUnlockCookie(): boolean {
+  try { return document.cookie.split("; ").some(c => c.startsWith(`${COOKIE_KEY}=1`)); }
+  catch { return false; }
+}
+
 export function isBetaUnlocked(): boolean {
   if (!betaEnabled) return true;
-  try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch { return false; }
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === "1") return true;
+  } catch { /* ignore */ }
+  // Cookie fallback — survives localStorage flushes (iOS Safari/PWA after OAuth round-trip).
+  return hasUnlockCookie();
 }
 
 function unlock() {
   try { localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+  try {
+    document.cookie = `${COOKIE_KEY}=1; Max-Age=${COOKIE_MAX_AGE}; Path=/; SameSite=Lax${
+      location.protocol === "https:" ? "; Secure" : ""
+    }`;
+  } catch { /* ignore */ }
 }
 
 // ── Palette — matches DARK theme in Koda.tsx ─────────────────────────────────
@@ -162,18 +178,10 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
         {/* Masthead */}
         <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 64 }}>
           <KodaMarkFilled size={28} />
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{
-              fontFamily: BODY, fontSize: 16, fontWeight: 600,
-              letterSpacing: "0.20em", color: TEXT, lineHeight: 1,
-            }}>Kōda</span>
-            <span style={{
-              fontFamily: MONO, fontWeight: 500, fontSize: 10,
-              letterSpacing: "0.16em", color: TEXT,
-              padding: "2px 6px", borderRadius: 5,
-              border: `1.5px solid ${BORDER2}`, lineHeight: 1,
-            }}>OS</span>
-          </div>
+          <span style={{
+            fontFamily: BODY, fontSize: 16, fontWeight: 600,
+            letterSpacing: "0.20em", color: TEXT, lineHeight: 1,
+          }}>Kōda</span>
           <span style={{
             marginLeft: "auto",
             fontFamily: MONO, fontSize: 10, color: MUTED, letterSpacing: "0.08em",

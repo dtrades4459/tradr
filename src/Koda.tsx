@@ -1490,7 +1490,6 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                 <>
                   <KodaMark size={isDesktop ? 24 : 22} color={C.text} />
                   <span style={{ fontFamily: DISPLAY, fontSize: isDesktop ? "15px" : "14px", fontWeight: 600, letterSpacing: "0.22em", color: C.text, lineHeight: 1 }}>Kōda</span>
-                  <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: "9px", letterSpacing: "0.16em", color: C.text2, padding: "2px 5px", borderRadius: "4px", border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
                 </>
               )}
             </div>

@@ -367,10 +367,7 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <KodaMark size={26} color={C.text} />
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
-              <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1.5px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
-            </div>
+            <span style={{ fontFamily: BODY, fontSize: 15, fontWeight: 600, letterSpacing: "0.20em", color: C.text, lineHeight: 1 }}>Kōda</span>
           </div>
           <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, letterSpacing: "0.08em" }}>BETA / 2026</div>
         </header>
@@ -490,7 +487,6 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             }}>
               <KodaMark size={24} color={C.text} />
               <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14, letterSpacing: "0.22em", color: C.text }}>Kōda</span>
-              <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, letterSpacing: "0.16em", color: C.text, padding: "2px 5px", borderRadius: 4, border: `1px solid ${C.border2}`, lineHeight: 1 }}>OS</span>
             </div>
 
             {/* Kicker */}
@@ -523,6 +519,48 @@ function LandingPage({ onSuccess }: { onSuccess: () => void }) {
             <AuthForm onSuccess={onSuccess} initialError="" onModeChange={setAuthMode} />
           </aside>
         </div>
+
+        {/* ── FOUR PILLARS ── */}
+        <section style={{
+          marginTop: "clamp(56px, 7vw, 96px)",
+          display: "flex",
+          justifyContent: "center",
+        }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "clamp(18px, 3vw, 36px)",
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}>
+            {[
+              { n: "01", w: "discipline", accent: false },
+              { n: "02", w: "momentum",   accent: false },
+              { n: "03", w: "progress",   accent: false },
+              { n: "04", w: "success",    accent: true  },
+            ].map((p, i, arr) => (
+              <div key={p.n} style={{ display: "flex", alignItems: "center", gap: "clamp(18px, 3vw, 36px)" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <span style={{
+                    fontFamily: MONO, fontWeight: 500, fontSize: 11,
+                    letterSpacing: "0.18em",
+                    color: p.accent ? C.live : C.muted,
+                  }}>{p.n}</span>
+                  <span style={{
+                    fontFamily: BODY, fontStyle: "italic",
+                    fontWeight: p.accent ? 500 : 400, fontSize: 18,
+                    color: p.accent ? C.live : C.dim,
+                  }}>{p.w}</span>
+                </div>
+                {i < arr.length - 1 && (
+                  <svg width="14" height="11" viewBox="0 0 14 11" style={{ opacity: 0.4, marginTop: 10, flexShrink: 0 }}>
+                    <path d="M2 1l4 4.5-4 4.5M7 1l4 4.5-4 4.5" stroke={C.text} strokeWidth="1" fill="none" strokeLinecap="round"/>
+                  </svg>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* â”€â”€ BUILT-IN STRATEGIES â”€â”€ */}
         <section style={{ marginTop: "clamp(80px, 10vw, 128px)" }}>
@@ -621,8 +659,12 @@ export default function KodaAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (betaEnabled && !betaUnlocked) return <BetaGate onUnlocked={() => setBetaUnlocked(true)} />;
+  // Wait for the session probe to finish first. If the user already has a
+  // Supabase session, they've passed the beta gate at some prior sign-up —
+  // re-gating them after an OAuth round-trip (where iOS Safari can drop
+  // localStorage) would be a confusing loop.
   if (session === undefined) return <LoadingScreen />;
+  if (!session && betaEnabled && !betaUnlocked) return <BetaGate onUnlocked={() => setBetaUnlocked(true)} />;
   if (!session) return <LandingPage onSuccess={() => {}} />;
 
   const jwtPlan = (session.user.app_metadata?.plan ?? "free") as "free" | "pro" | "elite";
