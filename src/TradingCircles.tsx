@@ -214,8 +214,11 @@ export function TradingCircles({ myCircles, circlesView, setCirclesView, activeC
       }
     } catch (e: unknown) {
       setChatInput(text);
-      const errMsg = e instanceof Error ? e.message : "";
-      const msg = errMsg.includes("policy") ? "Permission denied — try refreshing the page" : "Message failed to send — try again";
+      const errMsg = (e instanceof Error ? e.message : (e as any)?.message) ?? "";
+      const errCode = (e as any)?.code ?? "";
+      console.error("chat send error", e);
+      const isPolicy = errMsg.includes("policy") || errMsg.includes("denied") || errCode === "42501";
+      const msg = isPolicy ? "Permission denied — try refreshing the page" : "Message failed to send — try again";
       showToast(msg);
     }
     setChatSending(false);
