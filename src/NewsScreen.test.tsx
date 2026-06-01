@@ -19,8 +19,8 @@ const calendarValue = {
       country: "USD",
       time: isoAtHour(8),
       impact: "high",
-      forecast: null,
-      previous: null,
+      forecast: "3.2%",
+      previous: "3.4%",
       actual: null,
     },
     {
@@ -108,6 +108,20 @@ describe("NewsScreen", () => {
     expect(link).toHaveAttribute("href", "https://example.com/a1");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("expands forecast/previous/actual when an event card with details is tapped", async () => {
+    render(<NewsScreen C={DARK} />);
+    // Forecast value is hidden by default
+    expect(await screen.findByText("Today AM event")).toBeInTheDocument();
+    expect(screen.queryByText("3.2%")).not.toBeInTheDocument();
+    // Tap the card → details appear
+    await userEvent.click(screen.getByText("Today AM event"));
+    expect(await screen.findByText("3.2%")).toBeInTheDocument();
+    expect(screen.getByText("3.4%")).toBeInTheDocument();
+    expect(screen.getByText("FORECAST")).toBeInTheDocument();
+    expect(screen.getByText("PREVIOUS")).toBeInTheDocument();
+    expect(screen.getByText("ACTUAL")).toBeInTheDocument();
   });
 
   it("hides medium-impact events when the MED chip is toggled off", async () => {

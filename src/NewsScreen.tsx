@@ -123,6 +123,16 @@ export function NewsScreen({ C }: Props) {
   const [impactFilter, setImpactFilter] = useState<Set<Impact>>(() => new Set(ALL_IMPACTS));
   const [tz, setTz] = useState<TzId>(loadTz);
   const [usdOnly, setUsdOnly] = useState<boolean>(loadUsdOnly);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  function toggleExpand(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     try { window.localStorage?.setItem(TZ_LS_KEY, tz); } catch { /* quota / private mode */ }
@@ -378,19 +388,30 @@ export function NewsScreen({ C }: Props) {
                 {group.events.map(ev => {
                   const c = impactColor(C, ev.impact);
                   const past = new Date(ev.time).getTime() < Date.now();
+                  const hasDetails = Boolean(ev.forecast || ev.previous || ev.actual);
+                  const isExpanded = expanded.has(ev.id);
                   return (
-                    <div
+                    <button
                       key={ev.id}
+                      type="button"
+                      onClick={hasDetails ? () => toggleExpand(ev.id) : undefined}
+                      aria-expanded={hasDetails ? isExpanded : undefined}
+                      disabled={!hasDetails}
                       style={{
+                        all: "unset",
+                        display: "block",
+                        boxSizing: "border-box",
+                        width: "100%",
                         padding: 9,
                         background: C.panel,
                         border: `1px solid ${C.border}`,
                         borderLeft: `3px solid ${c}`,
                         borderRadius: 6,
                         opacity: past ? 0.55 : 1,
+                        cursor: hasDetails ? "pointer" : "default",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, alignItems: "baseline" }}>
                         <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "baseline", gap: 6 }}>
                           <span
                             style={{
@@ -405,17 +426,37 @@ export function NewsScreen({ C }: Props) {
                           </span>
                           <span style={{ minWidth: 0 }}>{ev.title}</span>
                         </span>
-                        <span style={{ fontFamily: MONO, color: C.muted, flexShrink: 0 }}>{formatTime(ev.time, tzIana)}</span>
+                        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontFamily: MONO, color: C.muted }}>{formatTime(ev.time, tzIana)}</span>
+                          {hasDetails && (
+                            <span aria-hidden style={{ fontSize: 9, color: C.muted, width: 9, textAlign: "center" }}>
+                              {isExpanded ? "▴" : "▾"}
+                            </span>
+                          )}
+                        </span>
                       </div>
-                      {(ev.forecast || ev.previous || ev.actual) && (
-                        <div style={{ fontSize: 9, color: C.muted, marginTop: 3 }}>
-                          {ev.forecast && `Forecast: ${ev.forecast}`}
-                          {ev.forecast && ev.previous && " · "}
-                          {ev.previous && `Prev: ${ev.previous}`}
-                          {ev.actual && ` · Actual: ${ev.actual}`}
+                      {hasDetails && isExpanded && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            paddingTop: 8,
+                            borderTop: `1px dashed ${C.border}`,
+                            display: "grid",
+                            gridTemplateColumns: "auto 1fr",
+                            columnGap: 12,
+                            rowGap: 4,
+                            fontSize: 10,
+                          }}
+                        >
+                          <span style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.08em" }}>FORECAST</span>
+                          <span style={{ fontFamily: MONO, color: C.text }}>{ev.forecast ?? "—"}</span>
+                          <span style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.08em" }}>PREVIOUS</span>
+                          <span style={{ fontFamily: MONO, color: C.text }}>{ev.previous ?? "—"}</span>
+                          <span style={{ fontFamily: MONO, fontSize: 9, color: C.muted, letterSpacing: "0.08em" }}>ACTUAL</span>
+                          <span style={{ fontFamily: MONO, color: ev.actual ? C.text : C.muted }}>{ev.actual ?? "—"}</span>
                         </div>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
