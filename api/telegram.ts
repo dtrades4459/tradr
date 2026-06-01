@@ -64,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).end();
 
   const secret = req.headers["x-telegram-bot-api-secret-token"] as string | undefined;
-  if (secret !== process.env.CRON_SECRET) return res.status(401).end();
+  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) return res.status(401).end();
 
   const update = req.body as {
     message?: { from?: { id: number }; chat: { id: number }; text?: string };
