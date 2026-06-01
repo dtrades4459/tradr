@@ -27,7 +27,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 function cors(req: Req, res: Res) {
-  const origin = req.headers["origin"] ?? "";
+  const origin = (req.headers["origin"] as string | undefined) ?? "";
   const allowed = ALLOWED_ORIGINS.has(origin) ? origin : APP_URL;
   res.setHeader("Access-Control-Allow-Origin", allowed);
   res.setHeader("Vary", "Origin");
