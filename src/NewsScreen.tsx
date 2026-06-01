@@ -2,16 +2,27 @@
 // Kōda · NewsScreen
 //
 // Full News page reached via the Home subnav. Today / Week / Month filter pills,
-// calendar list, headlines feed.
+// impact filter chips, timezone picker, calendar list grouped by day, headlines.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Theme } from "./theme";
 import { MONO, BODY } from "./shared";
 import { useNews } from "./hooks/useNews";
 import type { CalendarEvent, Headline, Impact } from "./lib/news";
 
 type Range = "today" | "week" | "month";
+
+type TzId = "local" | "et" | "london" | "utc";
+
+const TZ_OPTIONS: ReadonlyArray<{ id: TzId; label: string; iana: string | undefined }> = [
+  { id: "local",  label: "LOCAL",  iana: undefined },
+  { id: "et",     label: "ET",     iana: "America/New_York" },
+  { id: "london", label: "LONDON", iana: "Europe/London" },
+  { id: "utc",    label: "UTC",    iana: "UTC" },
+];
+
+const TZ_LS_KEY = "koda_news_tz";
 
 interface Props {
   C: Theme;
@@ -59,10 +70,32 @@ function relativeAgo(iso: string): string {
   return `${day}d ago`;
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, tz: string | undefined): string {
   return new Date(iso).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: tz,
+  });
+}
+
+function formatDayLabel(iso: string, tz: string | undefined): string {
+  return new Date(iso)
+    .toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      timeZone: tz,
+    })
+    .toUpperCase();
+}
+
+function dayBucket(iso: string, tz: string | undefined): string {
+  // YYYY-MM-DD in the selected timezone, used as the group key.
+  return new Date(iso).toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: tz,
   });
 }
 
@@ -72,17 +105,32 @@ function staleHours(fetchedAtIso: string): number {
 
 const ALL_IMPACTS: ReadonlyArray<Impact> = ["high", "medium", "low", "holiday"];
 
+function loadTz(): TzId {
+  if (typeof window === "undefined") return "local";
+  const stored = window.localStorage?.getItem(TZ_LS_KEY);
+  if (stored === "local" || stored === "et" || stored === "london" || stored === "utc") {
+    return stored;
+  }
+  return "local";
+}
+
 export function NewsScreen({ C }: Props) {
   const { calendar, headlines } = useNews();
   const [range, setRange] = useState<Range>("today");
   const [impactFilter, setImpactFilter] = useState<Set<Impact>>(() => new Set(ALL_IMPACTS));
+  const [tz, setTz] = useState<TzId>(loadTz);
+
+  useEffect(() => {
+    try { window.localStorage?.setItem(TZ_LS_KEY, tz); } catch { /* quota / private mode */ }
+  }, [tz]);
+
+  const tzIana = useMemo(() => TZ_OPTIONS.find(o => o.id === tz)?.iana, [tz]);
 
   function toggleImpact(impact: Impact) {
     setImpactFilter(prev => {
       const next = new Set(prev);
       if (next.has(impact)) next.delete(impact);
       else next.add(impact);
-      // Don't allow disabling all impacts — would be confusing
       if (next.size === 0) return prev;
       return next;
     });
@@ -99,6 +147,24 @@ export function NewsScreen({ C }: Props) {
       })
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
   }, [calendar, range, impactFilter]);
+
+  // Group events by day for Week/Month views. Today view stays flat (single day).
+  const dayGroups = useMemo<Array<{ key: string; label: string; events: CalendarEvent[] }>>(() => {
+    if (range === "today") {
+      return filteredEvents.length === 0 ? [] : [{ key: "today", label: "", events: filteredEvents }];
+    }
+    const groups: Array<{ key: string; label: string; events: CalendarEvent[] }> = [];
+    for (const ev of filteredEvents) {
+      const key = dayBucket(ev.time, tzIana);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.events.push(ev);
+      } else {
+        groups.push({ key, label: formatDayLabel(ev.time, tzIana), events: [ev] });
+      }
+    }
+    return groups;
+  }, [filteredEvents, range, tzIana]);
 
   const articles = headlines?.items ?? [];
 
@@ -193,16 +259,56 @@ export function NewsScreen({ C }: Props) {
             justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 8,
+            gap: 8,
           }}
         >
           <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: C.muted }}>
             ECONOMIC CALENDAR
           </span>
-          {calendar && staleHours(calendar.fetchedAt) > 24 && (
-            <span style={{ fontFamily: MONO, fontSize: 9, color: C.warn }}>
-              Last updated {Math.round(staleHours(calendar.fetchedAt))}h ago
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {calendar && staleHours(calendar.fetchedAt) > 24 && (
+              <span style={{ fontFamily: MONO, fontSize: 9, color: C.warn }}>
+                {Math.round(staleHours(calendar.fetchedAt))}h ago
+              </span>
+            )}
+            <label style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+              <select
+                aria-label="Timezone"
+                value={tz}
+                onChange={e => setTz(e.target.value as TzId)}
+                style={{
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  padding: "5px 22px 5px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${C.border}`,
+                  background: C.panel,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 9,
+                  letterSpacing: "0.08em",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {TZ_OPTIONS.map(o => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  right: 8,
+                  pointerEvents: "none",
+                  fontSize: 8,
+                  color: C.muted,
+                }}
+              >
+                ▾
+              </span>
+            </label>
+          </div>
         </div>
 
         {filteredEvents.length === 0 ? (
@@ -221,37 +327,54 @@ export function NewsScreen({ C }: Props) {
               : "No events in this range."}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {filteredEvents.map(ev => {
-              const c = impactColor(C, ev.impact);
-              const past = new Date(ev.time).getTime() < Date.now();
-              return (
-                <div
-                  key={ev.id}
-                  style={{
-                    padding: 9,
-                    background: C.panel,
-                    border: `1px solid ${C.border}`,
-                    borderLeft: `3px solid ${c}`,
-                    borderRadius: 6,
-                    opacity: past ? 0.55 : 1,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-                    <span>{ev.title}</span>
-                    <span style={{ fontFamily: MONO, color: C.muted }}>{formatTime(ev.time)}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {dayGroups.map(group => (
+              <div key={group.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {group.label && (
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 9,
+                      letterSpacing: "0.12em",
+                      color: C.muted,
+                      padding: "4px 0 2px",
+                    }}
+                  >
+                    {group.label}
                   </div>
-                  {(ev.forecast || ev.previous || ev.actual) && (
-                    <div style={{ fontSize: 9, color: C.muted, marginTop: 3 }}>
-                      {ev.forecast && `Forecast: ${ev.forecast}`}
-                      {ev.forecast && ev.previous && " · "}
-                      {ev.previous && `Prev: ${ev.previous}`}
-                      {ev.actual && ` · Actual: ${ev.actual}`}
+                )}
+                {group.events.map(ev => {
+                  const c = impactColor(C, ev.impact);
+                  const past = new Date(ev.time).getTime() < Date.now();
+                  return (
+                    <div
+                      key={ev.id}
+                      style={{
+                        padding: 9,
+                        background: C.panel,
+                        border: `1px solid ${C.border}`,
+                        borderLeft: `3px solid ${c}`,
+                        borderRadius: 6,
+                        opacity: past ? 0.55 : 1,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                        <span>{ev.title}</span>
+                        <span style={{ fontFamily: MONO, color: C.muted }}>{formatTime(ev.time, tzIana)}</span>
+                      </div>
+                      {(ev.forecast || ev.previous || ev.actual) && (
+                        <div style={{ fontSize: 9, color: C.muted, marginTop: 3 }}>
+                          {ev.forecast && `Forecast: ${ev.forecast}`}
+                          {ev.forecast && ev.previous && " · "}
+                          {ev.previous && `Prev: ${ev.previous}`}
+                          {ev.actual && ` · Actual: ${ev.actual}`}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </section>
