@@ -74,8 +74,8 @@ export function SettingsScreen({
   const [pushLoading, setPushLoading] = React.useState(false);
   React.useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    navigator.serviceWorker.ready
-      .then(reg => reg.pushManager.getSubscription())
+    navigator.serviceWorker.getRegistration()
+      .then(reg => reg ? reg.pushManager.getSubscription() : null)
       .then(sub => setPushEnabled(!!sub))
       .catch(() => {});
   }, []);
@@ -415,7 +415,8 @@ export function SettingsScreen({
               onClick={async () => {
                 setPushLoading(true);
                 try {
-                  const reg = await navigator.serviceWorker.ready;
+                  const reg = await navigator.serviceWorker.getRegistration();
+                  if (!reg) { showToast("Service worker not found — try refreshing the page"); return; }
                   if (pushEnabled) {
                     const sub = await reg.pushManager.getSubscription();
                     if (sub) await sub.unsubscribe();
@@ -423,10 +424,8 @@ export function SettingsScreen({
                     showToast("Push notifications disabled");
                   } else {
                     const permission = await Notification.requestPermission();
-                    if (permission !== "granted") {
-                      showToast("Allow notifications in your browser/phone settings first");
-                      return;
-                    }
+                    if (permission === "denied") { showToast("Notifications blocked — allow them in your browser settings"); return; }
+                    if (permission !== "granted") { showToast("Notification permission not granted"); return; }
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session?.access_token) { showToast("Sign in required"); return; }
                     const sub = await reg.pushManager.subscribe({
@@ -443,12 +442,7 @@ export function SettingsScreen({
                     showToast("Push notifications enabled");
                   }
                 } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  if (Notification.permission === "denied") {
-                    showToast("Notifications blocked — allow them in browser/phone settings");
-                  } else {
-                    showToast(`Push failed: ${msg}`);
-                  }
+                  showToast(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
                 } finally {
                   setPushLoading(false);
                 }
