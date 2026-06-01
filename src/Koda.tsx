@@ -1142,7 +1142,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     setFeedbackSending(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/feedback", {
+      const res = await fetch("/api/account?action=feedback", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1184,7 +1184,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
       const token = session?.access_token;
       if (!token) throw new Error("Not signed in");
 
-      const res = await fetch("/api/delete-account", {
+      const res = await fetch("/api/account?action=delete", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2231,7 +2231,7 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                               try {
                                 const { data: { session: _sess } } = await supabase.auth.getSession();
                                 if (!_sess?.access_token) throw new Error("Not signed in");
-                                const r = await fetch("/api/stripe-portal", {
+                                const r = await fetch("/api/stripe?action=portal", {
                                   method: "POST",
                                   headers: {
                                     "Content-Type": "application/json",

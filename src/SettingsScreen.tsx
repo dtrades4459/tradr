@@ -103,7 +103,7 @@ export function SettingsScreen({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
-      const res = await fetch("/api/stripe-portal", {
+      const res = await fetch("/api/stripe?action=portal", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
         body: JSON.stringify({ stripeCustomerId: profile.stripeCustomerId, returnPath: "/?return=settings" }),

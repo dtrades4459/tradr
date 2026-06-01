@@ -4,11 +4,11 @@
   "framework": "vite",
   "crons": [
     {
-      "path": "/api/cron/complete-challenges",
+      "path": "/api/cron?job=complete-challenges",
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/sync",
+      "path": "/api/cron?job=sync",
       "schedule": "0 6 * * *"
     }
   ],

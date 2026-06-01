@@ -237,7 +237,7 @@ export function DataSourcesScreen({
   async function _handleManualSync() {
     setSyncing(true);
     try {
-      const r = await fetch("/api/cron/sync", {
+      const r = await fetch("/api/cron?job=sync", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       });

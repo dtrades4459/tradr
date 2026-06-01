@@ -284,7 +284,7 @@ any) {
     loadFeed(circle);
     // Client-side fallback: trigger cron if challenge already expired
     if (challenge && new Date(challenge.endsAt) < new Date()) {
-      fetch("/api/cron/complete-challenges", { method: "POST" }).catch(() => {});
+      fetch("/api/cron?job=complete-challenges", { method: "POST" }).catch(() => {});
       setTimeout(() => fetchActiveChallenge(circle.code).then(c => setActiveChallenge(c)).catch(() => {}), 2000);
     }
   }

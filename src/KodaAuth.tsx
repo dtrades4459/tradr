@@ -105,7 +105,7 @@ function AuthForm({ onSuccess, initialError = "", onModeChange }: {
     if (!USERNAME_RE.test(u)) { setError("Invalid username format."); return; }
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/reset-password", {
+      const r = await fetch("/api/account?action=reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: u }),

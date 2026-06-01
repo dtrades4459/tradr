@@ -96,11 +96,10 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
     if (!input.trim() || loading) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/reset-password", {
+      const res = await fetch("/api/account?action=beta-unlock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "beta-unlock", code: input.trim() }),
-
+        body: JSON.stringify({ code: input.trim() }),
       });
       if (res.ok) {
         unlock();
@@ -128,10 +127,10 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
     if (!wlEmail.trim() || wlLoading) return;
     setWlLoading(true);
     try {
-      const res = await fetch("/api/reset-password", {
+      const res = await fetch("/api/account?action=join-waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "join-waitlist", email: wlEmail.trim() }),
+        body: JSON.stringify({ email: wlEmail.trim() }),
       });
       const json = await res.json();
       if (res.ok || res.status === 409) {

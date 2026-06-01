@@ -72,7 +72,7 @@ export function PaywallScreen({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not signed in — please refresh and try again.");
 
-      const res = await fetch("/api/stripe-checkout", {
+      const res = await fetch("/api/stripe?action=checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
