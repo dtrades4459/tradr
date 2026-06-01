@@ -3,6 +3,7 @@ export const config = { runtime: 'nodejs' };
 type Req = { method?: string; headers: Record<string, string | string[] | undefined>; body: Record<string, unknown> };
 type Res = { status(n: number): Res; json(d: unknown): Res; end(): void };
 
+import { timingSafeEqual } from 'crypto';
 import { isAuthorized, getChatId, type TelegramUpdate } from './lib/telegram/auth.js';
 import { b } from './lib/telegram/format.js';
 
@@ -55,7 +56,11 @@ export default async function handler(req: Req, res: Res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const secret = req.headers['x-telegram-bot-api-secret-token'] as string | undefined;
-  if (secret !== SECRET) return res.status(401).end();
+  const incoming = Buffer.from(secret ?? '', 'utf8');
+  const expected = Buffer.from(SECRET, 'utf8');
+  if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
+    return res.status(401).end();
+  }
 
   const update = req.body as unknown as TelegramUpdate;
   if (!isAuthorized(update)) return res.status(200).end();

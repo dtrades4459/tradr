@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+// @vitest-environment node
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 type Update = import('../auth.js').TelegramUpdate;
 
@@ -22,6 +23,7 @@ function makeUpdate(
 // Module reads env at import time — reset module registry between tests
 describe('isAuthorized', () => {
   beforeEach(() => {
+    vi.resetModules();
     process.env.TELEGRAM_ALLOWED_USER_IDS = '100,200';
     process.env.TELEGRAM_OPS_CHAT_ID = '-9999';
   });

@@ -7,4 +7,4 @@ function esc(t: unknown): string {
 
 export const b    = (t: unknown) => `<b>${esc(t)}</b>`;
 export const code = (t: unknown) => `<code>${esc(t)}</code>`;
-export const link = (text: string, url: string) => `<a href="${url}">${esc(text)}</a>`;
+export const link = (text: string, url: string) => `<a href="${url.replace(/"/g, '&quot;')}">${esc(text)}</a>`;

@@ -27,5 +27,6 @@ export function isAuthorized(update: TelegramUpdate): boolean {
 }
 
 export function getChatId(update: TelegramUpdate): number {
-  return update.message!.chat.id;
+  if (!update.message) throw new Error('getChatId called on update without message');
+  return update.message.chat.id;
 }
