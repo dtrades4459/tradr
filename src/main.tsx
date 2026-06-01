@@ -25,6 +25,14 @@ initPostHog();
 // Capture UTM params before auth redirect so they survive the OAuth round-trip.
 captureUtm();
 
+// Register service worker explicitly. VitePWA's auto-inject handles updates,
+// but an explicit register here ensures it's active even if the inject fails.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>

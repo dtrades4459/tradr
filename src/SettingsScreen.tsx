@@ -415,8 +415,12 @@ export function SettingsScreen({
               onClick={async () => {
                 setPushLoading(true);
                 try {
-                  const reg = await navigator.serviceWorker.getRegistration();
-                  if (!reg) { showToast("Service worker not found — try refreshing the page"); return; }
+                  let reg = await navigator.serviceWorker.getRegistration();
+                  if (!reg) {
+                    const r = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+                    await navigator.serviceWorker.ready;
+                    reg = r;
+                  }
                   if (pushEnabled) {
                     const sub = await reg.pushManager.getSubscription();
                     if (sub) await sub.unsubscribe();
