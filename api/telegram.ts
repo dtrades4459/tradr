@@ -70,11 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     message?: { from?: { id: number }; chat: { id: number }; text?: string };
   };
   const msg = update.message;
-
-  // Respond immediately — Telegram retries if no 200 within a few seconds
-  res.status(200).json({ ok: true });
-
-  if (!msg?.text || msg.from?.id !== ADMIN_TELEGRAM_ID) return;
+  if (!msg?.text || msg.from?.id !== ADMIN_TELEGRAM_ID) return res.status(200).json({ ok: true });
 
   const text = msg.text.trim();
   const chatId = msg.chat.id;
@@ -83,20 +79,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const announcement = text.slice("/announce ".length).trim();
     if (!announcement) {
       await tgSend(chatId, "⚠️ Usage: /announce Your message here");
-      return;
+      return res.status(200).json({ ok: true });
     }
-    // Deactivate previous announcements and insert the new one
     await supabase.from("announcements").update({ is_active: false }).eq("is_active", true);
     await supabase.from("announcements").insert({ message: announcement, is_active: true });
     const { sent, total } = await broadcast("Kōda", announcement);
     await tgSend(chatId, `✅ Sent to ${sent}/${total} subscribers + shown in-app:\n"${announcement}"`);
-    return;
+    return res.status(200).json({ ok: true });
   }
 
   if (text === "/test") {
     const { sent, total } = await broadcast("Kōda", "Test notification from Kōda.");
     await tgSend(chatId, `✅ Test sent to ${sent}/${total} subscribers.`);
-    return;
+    return res.status(200).json({ ok: true });
   }
 
   if (text === "/help" || text.startsWith("/start")) {
@@ -106,6 +101,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "/test — send test push to all\n" +
       "/help — show this"
     );
-    return;
+    return res.status(200).json({ ok: true });
   }
+
+  return res.status(200).json({ ok: true });
 }
