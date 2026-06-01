@@ -17,7 +17,7 @@ export async function getTradeMetrics(): Promise<TradeMetrics> {
     total:         d.total as number,
     today:         d.today as number,
     last7d:        d.last_7d as number,
-    topStrategies: d.top_strategies as { strategy: string; count: number }[],
+    topStrategies: (d.top_strategies as { strategy: string; count: number }[] | null) ?? [],
   };
 }
 
