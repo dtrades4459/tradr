@@ -70,20 +70,35 @@ function staleHours(fetchedAtIso: string): number {
   return (Date.now() - new Date(fetchedAtIso).getTime()) / 3600_000;
 }
 
+const ALL_IMPACTS: ReadonlyArray<Impact> = ["high", "medium", "low", "holiday"];
+
 export function NewsScreen({ C }: Props) {
   const { calendar, headlines } = useNews();
   const [range, setRange] = useState<Range>("today");
+  const [impactFilter, setImpactFilter] = useState<Set<Impact>>(() => new Set(ALL_IMPACTS));
+
+  function toggleImpact(impact: Impact) {
+    setImpactFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(impact)) next.delete(impact);
+      else next.add(impact);
+      // Don't allow disabling all impacts — would be confusing
+      if (next.size === 0) return prev;
+      return next;
+    });
+  }
 
   const filteredEvents = useMemo<CalendarEvent[]>(() => {
     const events = calendar?.items ?? [];
     const [from, to] = rangeWindow(range);
     return events
+      .filter(e => impactFilter.has(e.impact))
       .filter(e => {
         const t = new Date(e.time).getTime();
         return t >= from.getTime() && t <= to.getTime();
       })
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-  }, [calendar, range]);
+  }, [calendar, range, impactFilter]);
 
   const articles = headlines?.items ?? [];
 
@@ -122,6 +137,49 @@ export function NewsScreen({ C }: Props) {
               }}
             >
               {r.toUpperCase()}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Impact filter chips */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {ALL_IMPACTS.map(imp => {
+          const active = impactFilter.has(imp);
+          const color = impactColor(C, imp);
+          return (
+            <button
+              key={imp}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggleImpact(imp)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 10px",
+                borderRadius: 999,
+                border: `1px solid ${active ? color : C.border}`,
+                background: C.panel,
+                color: active ? C.text : C.muted,
+                fontFamily: MONO,
+                fontSize: 9,
+                letterSpacing: "0.08em",
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: active ? 1 : 0.55,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: active ? color : C.muted,
+                  display: "inline-block",
+                }}
+              />
+              {imp.toUpperCase()}
             </button>
           );
         })}

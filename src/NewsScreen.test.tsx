@@ -107,4 +107,16 @@ describe("NewsScreen", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
+
+  it("hides medium-impact events when the MED chip is toggled off", async () => {
+    render(<NewsScreen C={DARK} />);
+    // Both today events visible initially
+    expect(await screen.findByText("Today AM event")).toBeInTheDocument();
+    expect(screen.getByText("Today PM event")).toBeInTheDocument();
+    // Toggle MED chip off
+    await userEvent.click(screen.getByRole("button", { name: /MED/i, pressed: true }));
+    // Medium event hidden; high event still visible
+    expect(screen.queryByText("Today PM event")).not.toBeInTheDocument();
+    expect(screen.getByText("Today AM event")).toBeInTheDocument();
+  });
 });
