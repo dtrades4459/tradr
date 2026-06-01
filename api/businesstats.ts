@@ -10,6 +10,7 @@ import { getUserMetrics, formatUserMetrics } from './lib/metrics/users.js';
 import { getTradeMetrics, formatTradeMetrics } from './lib/metrics/trades.js';
 import { getRevenueMetrics, formatRevenueMetrics } from './lib/metrics/revenue.js';
 import { getSentryMetrics, formatSentryMetrics } from './lib/metrics/errors.js';
+import { getPostHogMetrics, formatPostHogMetrics } from './lib/metrics/analytics.js';
 
 const TOKEN  = process.env.TELEGRAM_BUSINESSTATS_TOKEN!;
 const SECRET = process.env.TELEGRAM_BUSINESSTATS_SECRET!;
@@ -106,6 +107,16 @@ export default async function handler(req: Req, res: Res) {
           break;
         }
         await sendMessage(chatId, formatSentryMetrics(m));
+        break;
+      }
+      case '/analytics': {
+        await sendMessage(chatId, '⏳ Fetching...');
+        const m = await getPostHogMetrics();
+        if (!m) {
+          await sendMessage(chatId, '❌ PostHog unavailable — check POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID in Vercel env.');
+          break;
+        }
+        await sendMessage(chatId, formatPostHogMetrics(m));
         break;
       }
       // Further commands added in subsequent tasks
