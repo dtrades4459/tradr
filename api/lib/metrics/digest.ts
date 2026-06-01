@@ -9,16 +9,17 @@ const TOKEN    = process.env.TELEGRAM_BUSINESSTATS_TOKEN!;
 const OPS_CHAT = process.env.TELEGRAM_OPS_CHAT_ID!;
 
 async function post(text: string) {
-  await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: OPS_CHAT, text, parse_mode: 'HTML', disable_web_page_preview: true }),
   });
+  if (!res.ok) console.error('digest post failed:', res.status, await res.text());
 }
 
 export async function sendDailyDigest() {
   const date = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
-  await post(`${b(`☀️ Daily Digest — ${date}`)}`);
+  await post(b(`☀️ Daily Digest — ${date}`));
 
   const [users, revenue, trades, sentry, posthog] = await Promise.allSettled([
     getUserMetrics(),
@@ -59,6 +60,8 @@ export async function sendDailyDigest() {
       b('📈 Trades'),
       `Total: ${b(m.total)}  •  Today: ${b(m.today)}  •  Last 7d: ${b(m.last7d)}`,
     ].join('\n'));
+  } else {
+    sections.push(`${b('📈 Trades')} — ❌ ${String(trades.reason)}`);
   }
 
   if (sentry.status === 'fulfilled' && sentry.value) {
