@@ -69,12 +69,18 @@ A trading journal PWA for retail futures traders. Log trades, track stats (P&L, 
 | `src/data/profile.ts` | v2 typed CRUD against `public.profiles` (behind `newProfile` flag) |
 | `src/BetaGate.tsx` | Closed-beta password wall — shown before auth if `VITE_BETA_PASSWORD` is set |
 | `src/lib/posthog.ts` | PostHog analytics wrapper |
+| `src/NewsScreen.tsx` | News tab — economic calendar + headlines, filter chips, tz picker, expandable cards |
+| `src/components/HomeNewsWidget.tsx` | Hero countdown + week strip widget on Home feed |
+| `src/hooks/useNews.ts` | Reads `news_cache` rows via supabase, parses defensively, refetches on visibility change |
+| `src/lib/news.ts` | News types (`CalendarEvent`, `Headline`, `Impact`, `NewsCache<T>`) + defensive parsers |
 | `api/push.ts` | `?action=subscribe` (save sub), `send` (per-user), `notify-circle` (authed, sends to circle members), `broadcast` (cron-secret-gated, sends to all subs) |
 | `api/telegram.ts` | Telegram webhook — admin commands: `/announce <msg>`, `/test`, `/help`; admin ID: `7587404723`; uses `TELEGRAM_BOT_TOKEN2` + `TELEGRAM_WEBHOOK_SECRET` |
+| `api/cron.ts` | Cron router. `?job=complete-challenges` (daily), `sync` (5min via GH Action), `daily-digest` (daily), `news-calendar` (daily via Vercel cron, fetches ForexFactory), `news-headlines` (every 30min via GH Action, fetches Marketaux). All gated by `Bearer CRON_SECRET`. |
 | `api/delete-account.ts` | POST — full user data wipe (broker tokens → trades → profiles → user_kv → shared_kv → auth.users) |
 | `api/feedback.ts` | POST → Telegram bot (@Tradrfeedbackbot) |
 | `api/broker/[action].ts` | Tradovate connect/disconnect |
 | `api/cron/sync.ts` | Broker sync (every 5 min via GitHub Actions) |
+| `.github/workflows/news-cron.yml` | Triggers `?job=news-headlines` every 30min; `workflow_dispatch` also refreshes `news-calendar` |
 | `api/lib/supabaseAdmin.ts` | Service-role Supabase client + JWT verifier |
 | `vercel.json` | CSP headers + Vercel Cron config |
 | `supabase/migrations/` | All DB migrations (run manually in Supabase SQL Editor) |
@@ -93,6 +99,7 @@ A trading journal PWA for retail futures traders. Log trades, track stats (P&L, 
 - RLS: anyone can read, only `auth.uid() = owner_id` can write
 - Used for: circle metadata, member rows, leaderboard entries, public profiles
 - **`owner_id` is NOT NULL** — system keys use sentinel `'00000000-0000-0000-0000-000000000000'::uuid`
+- **Gotcha:** `owner_id` has a FK to `auth.users` and the sentinel UUID is NOT in `auth.users` — direct upserts with the sentinel return a FK violation. Rate-limit gets around this via a `SECURITY DEFINER` RPC. For new system-owned cache data, prefer a dedicated table (see `public.news_cache`).
 
 ### `public.profiles` (v2 — live but behind `newProfile` flag)
 - One row per user: `user_id`, `handle`, `name`, `avatar`, `bio`, `onboarded`, `prefs` (jsonb), etc.
@@ -114,6 +121,13 @@ A trading journal PWA for retail futures traders. Log trades, track stats (P&L, 
 - Inserted/managed by Telegram admin bot `/announce` command
 - Frontend reads latest `WHERE is_active = true`; dismissal stored in `localStorage` keyed by `id`
 - **Requires migration** — see NEXT_SESSION.md §2A if not yet created
+
+### `public.news_cache`
+- `key text primary key`, `value jsonb`, `updated_at timestamptz`
+- One row per source: `koda_news_calendar` (ForexFactory), `koda_news_headlines` (Marketaux)
+- Refreshed by `api/cron.ts` jobs `news-calendar` (Vercel daily cron) and `news-headlines` (GitHub Actions every 30min)
+- RLS: public select; writes via service role only (no insert policy needed)
+- Created via migration `20260601_news_cache.sql`
 
 ### `public.broker_connections` + `public.sync_events`
 - Broker token storage (AES-256-GCM encrypted) + sync audit log
@@ -180,12 +194,15 @@ Rollback: Vercel Dashboard → Deployments → previous green deploy → Promote
 
 ## App Screens
 
-- **Home** — dashboard, P&L, stats, streaks
+- **Home** — dashboard, P&L, stats, streaks, news widget at top
+- **News** — top-level tab; US economic calendar (Today/Week) + headlines feed; impact + USD-only + timezone filters
 - **Log** — add/view/edit trades, Review Inbox for auto-synced drafts
 - **Feed** — friend activity
 - **Circles** — Trading Circles (leaderboard, chat, challenges, join/create)
 - **Sync** — broker connections (Tradovate) + CSV import + audit log
 - **Settings** — profile, dark mode, export, delete account
+
+Bottom-nav tabs (mobile): Home / News / Stats / Circles. Sub-sections under Home accessed via the dropdown (Analytics, Rules & Checklist, Sync & Log, Journal).
 
 ---
 
@@ -210,6 +227,7 @@ Rollback: Vercel Dashboard → Deployments → previous green deploy → Promote
 - Push notifications — OS-level; Settings toggle; circle messages trigger push to all other members
 - Telegram admin bot — `/announce <msg>` broadcasts push to all subscribers + shows in-app banner; `/test`, `/help`
 - In-app announcement banner — dismissible; fetches from `announcements` table; triggered by Telegram `/announce`
+- News section — economic calendar (ForexFactory) + headlines feed (Marketaux). Free for all users. Home widget shows next high-impact event + week strip. Full page has Today/Week range pills, impact filter chips, USD-only/all-FX toggle, timezone picker (Local/ET/London/UTC), tap-to-expand cards with FORECAST/PREVIOUS/ACTUAL.
 - PWA — installable on iOS/Android
 
 ---
@@ -240,6 +258,8 @@ Rollback: Vercel Dashboard → Deployments → previous green deploy → Promote
 | Telegram webhook 307 redirect | `kodatrade.co.uk` → `www.kodatrade.co.uk` 307; Telegram doesn't follow → webhook URL must use `www.` |
 | Telegram function dying before work | `res.status(200).json()` called before awaits — Vercel terminates function after response → moved all awaits before final res.json |
 | iOS P&L minus key missing | `inputMode="decimal"` has no `−` key on iOS → `type="text"` + `+/−` toggle buttons |
+| News cron returned 500 (FK violation) | `shared_kv.owner_id` has FK to `auth.users`; sentinel UUID isn't there. Created dedicated `news_cache` table instead. |
+| GH Actions news cron hit 307 redirect | `kodatrade.co.uk` → `www.kodatrade.co.uk` 307; bare-domain curl fails. Workflow uses `www.kodatrade.co.uk/api/cron?job=...`. |
 
 ---
 
@@ -287,6 +307,7 @@ Koda.tsx is ~4100 lines. OneDrive can truncate large writes. Use Edit tool for t
 | `20260531_fix_rate_limit_owner_id.sql` | Fix rate limit to use sentinel owner_id | ✅ |
 | `20260601_notification_subscriptions.sql` | `notification_subscriptions` table (created manually in SQL Editor) | ✅ |
 | `20260601_announcements.sql` | `announcements` table + RLS (see NEXT_SESSION.md §2A — **run if not done**) | ⚠️ pending |
+| `20260601_news_cache.sql` | `news_cache` table (public read, service-role writes) for the News section | ✅ |
 
 ---
 
@@ -313,6 +334,7 @@ Koda.tsx is ~4100 lines. OneDrive can truncate large writes. Use Edit tool for t
 
 **Other**
 - [x] Push notifications for circle activity ✅ shipped 2026-06-01
+- [x] News section — economic calendar + headlines ✅ shipped 2026-06-01
 - [ ] Google OAuth (wired, not configured in Supabase — remove button or configure)
 - [ ] Multiple accounts (prop eval 1, prop eval 2, personal)
 - [ ] Rithmic / NinjaTrader 8 / TopstepX live API connections
