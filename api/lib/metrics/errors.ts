@@ -27,24 +27,29 @@ export async function getSentryMetrics(): Promise<SentryMetrics | null> {
   const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env;
   if (!SENTRY_AUTH_TOKEN || !SENTRY_ORG || !SENTRY_PROJECT) return null;
 
-  const since = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
-  const until = Math.floor(Date.now() / 1000);
+  try {
+    const since = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+    const until = Math.floor(Date.now() / 1000);
 
-  const [issues, stats] = await Promise.all([
-    sentryGet(`/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved&limit=10&sort=date`),
-    sentryGet(`/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/stats/?stat=received&since=${since}&until=${until}&resolution=1h`),
-  ]);
+    const [issues, stats] = await Promise.all([
+      sentryGet(`/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved&limit=10&sort=date`),
+      sentryGet(`/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/stats/?stat=received&since=${since}&until=${until}&resolution=1h`),
+    ]);
 
-  return {
-    issues: (issues as Record<string, unknown>[]).map(i => ({
-      id:        String(i.id),
-      title:     String(i.title),
-      count:     parseInt(String(i.count), 10),
-      lastSeen:  String(i.lastSeen),
-      permalink: String(i.permalink),
-    })),
-    errorCount24h: (stats as [number, number][]).reduce((sum, [, count]) => sum + count, 0),
-  };
+    return {
+      issues: (issues as Record<string, unknown>[]).map(i => ({
+        id:        String(i.id),
+        title:     String(i.title),
+        count:     parseInt(String(i.count), 10),
+        lastSeen:  String(i.lastSeen),
+        permalink: String(i.permalink),
+      })),
+      errorCount24h: (stats as [number, number][]).reduce((sum, [, count]) => sum + count, 0),
+    };
+  } catch (err) {
+    console.error('getSentryMetrics error:', err);
+    return null;
+  }
 }
 
 export function formatSentryMetrics(m: SentryMetrics): string {

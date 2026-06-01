@@ -7,6 +7,10 @@ vi.stubGlobal('fetch', mockFetch);
 import { getSentryMetrics } from '../errors.js';
 
 describe('getSentryMetrics', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
   it('returns null when SENTRY_AUTH_TOKEN is missing', async () => {
     delete process.env.SENTRY_AUTH_TOKEN;
     expect(await getSentryMetrics()).toBeNull();

@@ -102,7 +102,7 @@ export default async function handler(req: Req, res: Res) {
         await sendMessage(chatId, '⏳ Fetching...');
         const m = await getSentryMetrics();
         if (!m) {
-          await sendMessage(chatId, '❌ Sentry not configured — set SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT in Vercel env.');
+          await sendMessage(chatId, '❌ Sentry unavailable — check SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT in Vercel env, or Sentry may be unreachable.');
           break;
         }
         await sendMessage(chatId, formatSentryMetrics(m));
