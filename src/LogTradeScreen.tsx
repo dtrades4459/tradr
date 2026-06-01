@@ -211,13 +211,33 @@ export function LogTradeScreen({
       {/* ── R-multiple + P&L ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Card C={T} pad={16}>
-          <Kicker C={T}>P&L (R)</Kicker>
-          <input type="text" inputMode="decimal" name="pnl" value={form.pnl} onChange={handleChange} placeholder="+2.5"
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Kicker C={T}>P&L (R)</Kicker>
+            <button
+              type="button"
+              onClick={() => setForm(f => {
+                const n = parseFloat(f.pnl as string);
+                return { ...f, pnl: isNaN(n) ? "-" : String(-n) };
+              })}
+              style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 6, color: T.muted, fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 7px", cursor: "pointer", letterSpacing: "0.04em" }}
+            >+/−</button>
+          </div>
+          <input type="text" inputMode="decimal" name="pnl" value={form.pnl} onChange={handleChange} placeholder="2.5"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", borderBottom: "none", padding: "8px 0 0" }} />
         </Card>
         <Card C={T} pad={16}>
-          <Kicker C={T}>Net P&L</Kicker>
-          <input data-testid="trade-pnl-dollar" type="text" inputMode="decimal" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="$485"
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Kicker C={T}>Net P&L</Kicker>
+            <button
+              type="button"
+              onClick={() => setForm(f => {
+                const n = parseFloat(f.pnlDollar as string);
+                return { ...f, pnlDollar: isNaN(n) ? "-" : String(-n) };
+              })}
+              style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 6, color: T.muted, fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 7px", cursor: "pointer", letterSpacing: "0.04em" }}
+            >+/−</button>
+          </div>
+          <input data-testid="trade-pnl-dollar" type="text" inputMode="decimal" name="pnlDollar" value={form.pnlDollar} onChange={handleChange} placeholder="485"
             style={{ ...inp, fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", borderBottom: "none", padding: "8px 0 0" }} />
         </Card>
       </div>
