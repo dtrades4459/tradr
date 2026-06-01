@@ -61,6 +61,57 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ ok: true });
 }
 
+async function handleNotifyCircle(req: VercelRequest, res: VercelResponse) {
+  const auth = req.headers.authorization as string | undefined;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "No token" });
+
+  const { data: { user }, error: authErr } = await createClient(
+    process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!
+  ).auth.getUser(auth.slice(7));
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+
+  const { circleCode, senderName, messagePreview } = req.body as {
+    circleCode: string; senderName: string; messagePreview: string;
+  };
+  if (!circleCode || typeof circleCode !== "string" || circleCode.length > 64)
+    return res.status(400).json({ error: "Invalid circleCode" });
+
+  const prefix = `koda_circle_member_${circleCode}_`;
+  const { data: memberRows } = await supabase
+    .from("shared_kv")
+    .select("owner_id")
+    .like("key", `${prefix}%`);
+
+  if (!memberRows?.length) return res.status(200).json({ ok: true, sent: 0 });
+
+  const recipientUids = memberRows
+    .map((r: { owner_id: string }) => r.owner_id)
+    .filter((uid: string) => uid && uid !== user.id);
+
+  if (!recipientUids.length) return res.status(200).json({ ok: true, sent: 0 });
+
+  const { data: subs } = await supabase
+    .from("notification_subscriptions")
+    .select("endpoint, p256dh, auth_key")
+    .in("user_id", recipientUids);
+
+  if (!subs?.length) return res.status(200).json({ ok: true, sent: 0 });
+
+  const title = senderName || "New message";
+  const preview = messagePreview
+    ? (messagePreview.length > 80 ? messagePreview.slice(0, 77) + "…" : messagePreview)
+    : "New message in your circle";
+
+  await Promise.allSettled(subs.map((sub: { endpoint: string; p256dh: string; auth_key: string }) =>
+    webpush.sendNotification(
+      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
+      JSON.stringify({ title, body: preview, icon: "/icon-192.png" })
+    )
+  ));
+
+  return res.status(200).json({ ok: true, sent: subs.length });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -68,5 +119,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (action === "subscribe") return handleSubscribe(req, res);
   if (action === "send") return handleSend(req, res);
+  if (action === "notify-circle") return handleNotifyCircle(req, res);
   return res.status(400).json({ error: "Unknown action" });
 }

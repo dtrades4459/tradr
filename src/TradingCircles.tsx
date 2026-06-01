@@ -219,6 +219,16 @@ any) {
         text,
       });
       if (error) throw error;
+      supabase.auth.getSession().then(({ data }) => {
+        const token = data.session?.access_token;
+        if (token) {
+          fetch("/api/push?action=notify-circle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ circleCode, senderName: profile.name || "Trader", messagePreview: text }),
+          }).catch(() => {});
+        }
+      });
       try {
         await loadChatMessages(circleCode);
       } catch {
