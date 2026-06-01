@@ -20,6 +20,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "crypto";
 import { checkRateLimit, getClientIp } from "./lib/rateLimit.js";
+import { getAdminClient } from "./lib/supabaseAdmin.js";
+import { sendEmail, waitlistConfirmHtml } from "./lib/email.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -62,6 +64,62 @@ export default async function handler(req: any, res: any) {
     const bufB = Buffer.from(betaPassword.trim().toLowerCase());
     const match = bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
     return match ? res.status(200).json({ ok: true }) : res.status(401).json({ error: "Invalid code" });
+  }
+
+  // ── Waitlist join (action=join-waitlist) ────────────────────────────────────
+  // Folded here to stay within Vercel Hobby 12-function limit.
+  if ((req.body as any)?.action === "join-waitlist") {
+    const ip3 = getClientIp(req);
+    const ok3 = await checkRateLimit("waitlist", ip3, { limit: 5, windowMs: 15 * 60_000 });
+    if (!ok3) return res.status(429).json({ error: "Too many requests — try again later" });
+    const { email } = req.body as { email?: string };
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+      return res.status(400).json({ error: "Valid email required" });
+    }
+    const normalised = email.trim().toLowerCase();
+    const admin = getAdminClient();
+    const { data: inserted, error: insertErr } = await admin
+      .from("waitlist").insert({ email: normalised }).select("id").single();
+    let position: number;
+    let existing = false;
+    if (insertErr) {
+      if (insertErr.code === "23505") {
+        const { data: row, error: lookupErr } = await admin
+          .from("waitlist").select("id").eq("email", normalised).single();
+        if (lookupErr || !row) return res.status(500).json({ error: "Internal error" });
+        position = row.id;
+        existing = true;
+      } else {
+        console.error("[waitlist] insert:", insertErr);
+        return res.status(500).json({ error: "Internal error" });
+      }
+    } else {
+      position = inserted.id;
+    }
+    if (!existing) {
+      try {
+        await sendEmail({
+          to: normalised,
+          subject: "You're on the Kōda waitlist",
+          html: waitlistConfirmHtml({ position }),
+        });
+      } catch (e) { console.error("[waitlist] Resend:", e); }
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      const chatId = process.env.TELEGRAM_CHAT_ID;
+      if (token && chatId) {
+        fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `📋 *New waitlist signup*\n\n📧 ${normalised}\n🔢 Position #${position}`,
+            parse_mode: "Markdown",
+          }),
+        }).catch(e => console.error("[waitlist] Telegram:", e));
+      }
+    }
+    return res.status(existing ? 409 : 200).json({ ok: true, position, ...(existing && { existing: true }) });
   }
 
   // ── Rate limit: 5 requests per 10 minutes per IP ────────────────────────────

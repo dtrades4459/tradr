@@ -128,10 +128,10 @@ export function BetaGate({ onUnlocked }: BetaGateProps) {
     if (!wlEmail.trim() || wlLoading) return;
     setWlLoading(true);
     try {
-      const res = await fetch("/api/waitlist", {
+      const res = await fetch("/api/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: wlEmail.trim() }),
+        body: JSON.stringify({ action: "join-waitlist", email: wlEmail.trim() }),
       });
       const json = await res.json();
       if (res.ok || res.status === 409) {
