@@ -7,6 +7,7 @@ import { timingSafeEqual } from 'crypto';
 import { isAuthorized, getChatId, type TelegramUpdate } from './lib/telegram/auth.js';
 import { b } from './lib/telegram/format.js';
 import { getUserMetrics, formatUserMetrics } from './lib/metrics/users.js';
+import { getTradeMetrics, formatTradeMetrics } from './lib/metrics/trades.js';
 
 const TOKEN  = process.env.TELEGRAM_BUSINESSTATS_TOKEN!;
 const SECRET = process.env.TELEGRAM_BUSINESSTATS_SECRET!;
@@ -81,6 +82,12 @@ export default async function handler(req: Req, res: Res) {
         await sendMessage(chatId, '⏳ Fetching...');
         const m = await getUserMetrics();
         await sendMessage(chatId, formatUserMetrics(m));
+        break;
+      }
+      case '/trades': {
+        await sendMessage(chatId, '⏳ Fetching...');
+        const m = await getTradeMetrics();
+        await sendMessage(chatId, formatTradeMetrics(m));
         break;
       }
       // Further commands added in subsequent tasks
