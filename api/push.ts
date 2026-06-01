@@ -110,6 +110,43 @@ async function handleNotifyCircle(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ ok: true, sent: subs.length });
 }
 
+async function handleBroadcast(req: VercelRequest, res: VercelResponse) {
+  const secret = req.headers["x-cron-secret"] as string | undefined;
+  if (!secret || secret !== process.env.CRON_SECRET) return res.status(401).json({ error: "Unauthorized" });
+
+  const { title, body } = req.body as { title: string; body: string };
+  if (!title || !body) return res.status(400).json({ error: "Missing title or body" });
+
+  const { data: subs } = await supabase
+    .from("notification_subscriptions")
+    .select("endpoint, p256dh, auth_key");
+
+  if (!subs?.length) return res.status(200).json({ ok: true, sent: 0 });
+
+  const results = await Promise.allSettled(
+    subs.map((sub: { endpoint: string; p256dh: string; auth_key: string }) =>
+      webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
+        JSON.stringify({ title, body, icon: "/icon-192.png" })
+      )
+    )
+  );
+
+  const gone = subs.filter((_: unknown, i: number) => {
+    const r = results[i];
+    return r.status === "rejected" && [410, 404].includes((r.reason as { statusCode?: number })?.statusCode ?? 0);
+  });
+  if (gone.length) {
+    await Promise.allSettled(
+      gone.map((sub: { endpoint: string }) =>
+        supabase.from("notification_subscriptions").delete().eq("endpoint", sub.endpoint)
+      )
+    );
+  }
+
+  return res.status(200).json({ ok: true, sent: results.filter(r => r.status === "fulfilled").length, total: subs.length });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -118,5 +155,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === "subscribe") return handleSubscribe(req, res);
   if (action === "send") return handleSend(req, res);
   if (action === "notify-circle") return handleNotifyCircle(req, res);
+  if (action === "broadcast") return handleBroadcast(req, res);
   return res.status(400).json({ error: "Unknown action" });
 }
