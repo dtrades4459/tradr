@@ -7,6 +7,8 @@ type VercelResponse = { status(n: number): VercelResponse; json(d: unknown): Ver
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 
+// Service-role client — used for all DB access and JWT verification
+// (auth.getUser(token) works with the service role key)
 webpush.setVapidDetails(
   `mailto:${process.env.VAPID_EMAIL}`,
   process.env.VAPID_PUBLIC_KEY!,
@@ -19,9 +21,7 @@ async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
   const auth = req.headers.authorization as string | undefined;
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "No token" });
 
-  const { data: { user }, error: authErr } = await createClient(
-    process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!
-  ).auth.getUser(auth.slice(7));
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(auth.slice(7));
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
 
   const { endpoint, keys } = req.body as { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -65,9 +65,7 @@ async function handleNotifyCircle(req: VercelRequest, res: VercelResponse) {
   const auth = req.headers.authorization as string | undefined;
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "No token" });
 
-  const { data: { user }, error: authErr } = await createClient(
-    process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!
-  ).auth.getUser(auth.slice(7));
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(auth.slice(7));
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
 
   const { circleCode, senderName, messagePreview } = req.body as {
