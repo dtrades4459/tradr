@@ -79,6 +79,14 @@ export function SettingsScreen({
       .then(sub => setPushEnabled(!!sub))
       .catch(() => {});
   }, []);
+
+  function vapidKey(): Uint8Array {
+    const base64 = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string)
+      .replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+    const raw = atob(padded);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
   const inp: React.CSSProperties = {
     background: "transparent",
     border: "none",
@@ -418,7 +426,7 @@ export function SettingsScreen({
                     if (!session?.access_token) { showToast("Sign in required"); return; }
                     const sub = await reg.pushManager.subscribe({
                       userVisibleOnly: true,
-                      applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+                      applicationServerKey: vapidKey(),
                     });
                     await fetch("/api/push?action=subscribe", {
                       method: "POST",
