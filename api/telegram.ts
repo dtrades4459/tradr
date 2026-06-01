@@ -85,8 +85,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await tgSend(chatId, "⚠️ Usage: /announce Your message here");
       return;
     }
+    // Deactivate previous announcements and insert the new one
+    await supabase.from("announcements").update({ is_active: false }).eq("is_active", true);
+    await supabase.from("announcements").insert({ message: announcement, is_active: true });
     const { sent, total } = await broadcast("Kōda", announcement);
-    await tgSend(chatId, `✅ Sent to ${sent}/${total} subscribers:\n"${announcement}"`);
+    await tgSend(chatId, `✅ Sent to ${sent}/${total} subscribers + shown in-app:\n"${announcement}"`);
     return;
   }
 

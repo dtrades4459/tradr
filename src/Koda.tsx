@@ -91,6 +91,10 @@ const STREAK_FLAVOUR: Record<number, string> = {
 export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" | "pro" | "elite" } = {}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [draftCount, setDraftCount] = useState(0);
+  const [announcement, setAnnouncement] = useState<{ id: string; message: string } | null>(null);
+  const [announcementDismissedId, setAnnouncementDismissedId] = useState<string | null>(() => {
+    try { return localStorage.getItem("koda_announcement_dismissed") ?? null; } catch { return null; }
+  });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadMsgs, setUnreadMsgs] = useState<Record<string, number>>({});
   const [view, setView] = useState("home");
@@ -732,6 +736,13 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     kodaGlobalBackfillRef.current = profile.uid;
     joinCircleByCode(KODA_GLOBAL_CODE).catch(() => {});
   }, [loading, profile.uid, myCircles, joinCircleByCode, saveMyCircles]);
+
+  // Fetch latest active announcement for home screen banner
+  useEffect(() => {
+    supabase.from("announcements").select("id, message").eq("is_active", true)
+      .order("created_at", { ascending: false }).limit(1)
+      .then(({ data }) => { if (data?.[0]) setAnnouncement(data[0]); });
+  }, []);
 
   // Global circle-message listener — tracks unread counts across all joined
   // circles while the user is anywhere in the app, not just in the Circles tab.
@@ -1646,6 +1657,18 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
               {/* FEED */}
               {homeSection === "feed" && (
                 <div>
+                  {announcement && announcement.id !== announcementDismissedId && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", background: `color-mix(in oklch, ${C.accent ?? "#60a5fa"} 8%, ${C.panel})`, border: `1px solid color-mix(in oklch, ${C.accent ?? "#60a5fa"} 25%, transparent)`, borderRadius: "12px", padding: "14px 16px", marginBottom: "16px" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: MONO, fontSize: "9px", color: C.accent ?? "#60a5fa", letterSpacing: "0.14em", textTransform: "uppercase" as const, fontWeight: 700, marginBottom: "4px" }}>Kōda Team</div>
+                        <div style={{ fontFamily: BODY, fontSize: "13px", color: C.text, lineHeight: 1.5 }}>{announcement.message}</div>
+                      </div>
+                      <button onClick={() => {
+                        try { localStorage.setItem("koda_announcement_dismissed", announcement.id); } catch {}
+                        setAnnouncementDismissedId(announcement.id);
+                      }} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: "18px", padding: "0 0 0 4px", lineHeight: 1, flexShrink: 0 }}>×</button>
+                    </div>
+                  )}
                   {streakBanner && (
                     <div style={{ display: "flex", alignItems: "center", gap: "12px", background: C.panel, border: `1px solid ${C.green}44`, borderLeft: `3px solid ${C.green}`, borderRadius: "12px", padding: "12px 14px", marginBottom: "20px" }}>
                       <span style={{ fontSize: "20px" }}>🔥</span>
