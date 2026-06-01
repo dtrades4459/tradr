@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
 import { b } from '../telegram/format.js';
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', { apiVersion: '2025-05-28.basil' });
+
 export interface RevenueMetrics {
   mrr: number;
   currency: string;
@@ -11,19 +13,18 @@ export interface RevenueMetrics {
 }
 
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
-  const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const weekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
 
-  const [activeSubs, newSubsRes, churnEvents] = await Promise.all([
-    stripe.subscriptions.list({ status: 'active', limit: 100 }),
-    stripe.subscriptions.list({ status: 'active', created: { gte: weekAgo }, limit: 100 }),
-    stripe.events.list({ type: 'customer.subscription.deleted', created: { gte: weekAgo }, limit: 100 }),
+  const [allActiveSubs, newSubsData, churnData] = await Promise.all([
+    stripe.subscriptions.list({ status: 'active', limit: 100 }).autoPagingToArray({ limit: 10_000 }),
+    stripe.subscriptions.list({ status: 'active', created: { gte: weekAgo }, limit: 100 }).autoPagingToArray({ limit: 10_000 }),
+    stripe.events.list({ type: 'customer.subscription.deleted', created: { gte: weekAgo }, limit: 100 }).autoPagingToArray({ limit: 10_000 }),
   ]);
 
   let mrrPence = 0;
   let currency = 'gbp';
 
-  for (const sub of activeSubs.data) {
+  for (const sub of allActiveSubs) {
     currency = sub.currency;
     for (const item of sub.items.data) {
       const price = item.price as Stripe.Price;
@@ -37,13 +38,13 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
     }
   }
 
-  const newThisWeek     = newSubsRes.data.length;
-  const churnedThisWeek = churnEvents.data.length;
+  const newThisWeek     = newSubsData.length;
+  const churnedThisWeek = churnData.length;
 
   return {
     mrr:             mrrPence / 100,
     currency:        currency.toUpperCase(),
-    activeCount:     activeSubs.data.length,
+    activeCount:     allActiveSubs.length,
     newThisWeek,
     churnedThisWeek,
     wowDelta:        newThisWeek - churnedThisWeek,
