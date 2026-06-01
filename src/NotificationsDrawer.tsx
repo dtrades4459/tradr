@@ -10,7 +10,7 @@
 // activity, challenge completions.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Theme } from "./theme";
 import type { Circle } from "./types";
 import { MONO, BODY, DISPLAY, Kicker } from "./shared";
@@ -26,8 +26,18 @@ interface Props {
   C: Theme;
 }
 
+const PROFILE_FIX_KEY = "koda_notif_profile_fix_v1";
+
 export default function NotificationsDrawer({ open, onClose, draftCount, onOpenInbox, unreadMsgs, circles, onOpenCircles, C }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [profileFixDismissed, setProfileFixDismissed] = useState(() => {
+    try { return localStorage.getItem(PROFILE_FIX_KEY) === "1"; } catch { return false; }
+  });
+
+  function dismissProfileFix() {
+    try { localStorage.setItem(PROFILE_FIX_KEY, "1"); } catch {}
+    setProfileFixDismissed(true);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +64,7 @@ export default function NotificationsDrawer({ open, onClose, draftCount, onOpenI
   if (!open) return null;
 
   const unreadCircles = circles.filter(c => (unreadMsgs[c.code] || 0) > 0);
-  const total = draftCount + unreadCircles.length;
+  const total = draftCount + unreadCircles.length + (profileFixDismissed ? 0 : 1);
 
   return (
     <div
@@ -108,6 +118,27 @@ export default function NotificationsDrawer({ open, onClose, draftCount, onOpenI
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {!profileFixDismissed && (
+            <div style={{
+              padding: 14, borderRadius: 14,
+              background: `color-mix(in oklch, ${C.accent ?? "#60a5fa"} 8%, ${C.panel})`,
+              border: `1px solid color-mix(in oklch, ${C.accent ?? "#60a5fa"} 25%, transparent)`,
+            }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.accent ?? "#60a5fa", letterSpacing: "0.14em", fontWeight: 700, textTransform: "uppercase", marginBottom: 5 }}>
+                Kōda Team
+              </div>
+              <div style={{ fontFamily: BODY, fontSize: 13, color: C.text, lineHeight: 1.55, marginBottom: 10 }}>
+                We've fixed the issue where some user details didn't automatically save — this is now sorted for all new users. If you're an existing user, just head to your profile tab to update your details such as your name and handle. Thanks, Kōda Team
+              </div>
+              <button onClick={dismissProfileFix} style={{
+                background: C.accent ?? "#60a5fa", color: "#0A0A0A", border: "none",
+                borderRadius: 999, padding: "7px 14px", fontFamily: MONO, fontSize: 10,
+                letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, cursor: "pointer",
+              }}>
+                Got it
+              </button>
+            </div>
+          )}
           {unreadCircles.map(circle => {
             const count = unreadMsgs[circle.code] || 0;
             return (
