@@ -2613,6 +2613,21 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
           {/* ══════════════════════════ LOG TRADE ══════════════════════════ */}
           {view === "log" && (
             <>
+              {(profile.name === "Trader" || profile.name === "" || !profile.name) && (
+                <div style={{ margin: "16px 20px 0", background: `color-mix(in oklch, ${C.accent} 10%, ${C.panel})`, border: `1px solid color-mix(in oklch, ${C.accent} 30%, transparent)`, borderRadius: "10px", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div>
+                    <span style={{ fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: C.accent, fontWeight: 700 }}>
+                      Complete your profile
+                    </span>
+                    <p style={{ fontFamily: BODY, fontSize: "12px", color: C.text2 ?? C.muted, marginTop: "2px" }}>
+                      Add your name and handle so your circle knows who you are.
+                    </p>
+                  </div>
+                  <button onClick={() => { setView("home"); setHomeSection("settings"); }} style={{ flexShrink: 0, fontFamily: MONO, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", background: C.accent, color: "#0A0A0A", border: "none", borderRadius: "999px", padding: "8px 14px", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>
+                    Set up →
+                  </button>
+                </div>
+              )}
               {draftCount > 0 && (
                 <div style={{ margin: "16px 20px 0", background: `color-mix(in oklch, ${C.green ?? "#22c55e"} 10%, ${C.panel})`, border: `1px solid color-mix(in oklch, ${C.green ?? "#22c55e"} 30%, transparent)`, borderRadius: "10px", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                   <div>
