@@ -422,22 +422,33 @@ export function SettingsScreen({
                     setPushEnabled(false);
                     showToast("Push notifications disabled");
                   } else {
+                    const permission = await Notification.requestPermission();
+                    if (permission !== "granted") {
+                      showToast("Allow notifications in your browser/phone settings first");
+                      return;
+                    }
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session?.access_token) { showToast("Sign in required"); return; }
                     const sub = await reg.pushManager.subscribe({
                       userVisibleOnly: true,
                       applicationServerKey: vapidKey(),
                     });
-                    await fetch("/api/push?action=subscribe", {
+                    const res = await fetch("/api/push?action=subscribe", {
                       method: "POST",
                       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
                       body: JSON.stringify(sub.toJSON()),
                     });
+                    if (!res.ok) { showToast(`Server error ${res.status} — try again`); return; }
                     setPushEnabled(true);
                     showToast("Push notifications enabled");
                   }
-                } catch {
-                  showToast("Couldn't update notifications — check browser permissions");
+                } catch (err) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  if (Notification.permission === "denied") {
+                    showToast("Notifications blocked — allow them in browser/phone settings");
+                  } else {
+                    showToast(`Push failed: ${msg}`);
+                  }
                 } finally {
                   setPushLoading(false);
                 }
