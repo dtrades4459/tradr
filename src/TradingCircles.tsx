@@ -681,17 +681,27 @@ any) {
             </div>
           </section>
 
-          {/* Weekly leader callout */}
-          {leader && (
-            <div style={{ background: `${C.green}11`, border: `1px solid ${C.green}33`, borderRadius: "12px", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-              <div>
-                <div style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.14em", marginBottom: "4px" }}>🏆 {METRIC_LABELS[activeCircle?.metric || "dollar"] || "$ DOLLAR P&L"}</div>
-                <div style={{ fontFamily: DISPLAY, fontSize: "18px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{leader.name}</div>
+          {/* Top 3 mini-leaderboard */}
+          {leaderboard.length > 0 && (
+            <div style={{ background: `${C.green}08`, border: `1px solid ${C.green}22`, borderRadius: "12px", overflow: "hidden" }}>
+              <div style={{ padding: "10px 16px 8px", fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.14em" }}>
+                🏆 {METRIC_LABELS[activeCircle?.metric || "dollar"] || "$ DOLLAR P&L"}
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: DISPLAY, fontSize: "22px", fontWeight: 700, color: C.green, letterSpacing: "-0.02em" }}>{metricDisplay(leader, activeCircle).val}</div>
-                <div style={{ fontFamily: MONO, fontSize: "9px", color: C.muted, letterSpacing: "0.08em" }}>{Number(leader.winRate ?? 0).toFixed(0)}% WR · {leader.total} trades</div>
-              </div>
+              {leaderboard.slice(0, 3).map((e, i) => {
+                const isMe = e.memberCode === getMyCode();
+                const md = metricDisplay(e, activeCircle);
+                const medals = ["🥇", "🥈", "🥉"];
+                return (
+                  <div key={e.memberCode} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderTop: i === 0 ? `1px solid ${C.green}22` : `1px solid ${C.border}`, background: i === 0 ? `${C.green}08` : "transparent" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontFamily: MONO, fontSize: "13px" }}>{medals[i]}</span>
+                      <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 500, color: C.text, letterSpacing: "-0.01em" }}>{e.name}</span>
+                      {isMe && <span style={{ fontFamily: MONO, fontSize: "9px", color: C.green, letterSpacing: "0.12em" }}>YOU</span>}
+                    </div>
+                    <span style={{ fontFamily: DISPLAY, fontSize: "15px", fontWeight: 700, color: i === 0 ? C.green : C.text, letterSpacing: "-0.01em" }}>{md.val}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
 
