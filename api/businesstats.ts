@@ -6,6 +6,7 @@ type Res = { status(n: number): Res; json(d: unknown): Res; end(): void };
 import { timingSafeEqual } from 'crypto';
 import { isAuthorized, getChatId, type TelegramUpdate } from './lib/telegram/auth.js';
 import { b } from './lib/telegram/format.js';
+import { getUserMetrics, formatUserMetrics } from './lib/metrics/users.js';
 
 const TOKEN  = process.env.TELEGRAM_BUSINESSTATS_TOKEN!;
 const SECRET = process.env.TELEGRAM_BUSINESSTATS_SECRET!;
@@ -75,6 +76,13 @@ export default async function handler(req: Req, res: Res) {
       case '/help':
         await handleHelp(chatId);
         break;
+      case '/users':
+      case '/waitlist': {
+        await sendMessage(chatId, '⏳ Fetching...');
+        const m = await getUserMetrics();
+        await sendMessage(chatId, formatUserMetrics(m));
+        break;
+      }
       // Further commands added in subsequent tasks
     }
   } catch (err) {
