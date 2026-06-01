@@ -25,7 +25,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X GET "https://kodatrade.co.uk/api/cron?job=news-calendar" \
+            -X GET "https://www.kodatrade.co.uk/api/cron?job=news-calendar" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             --max-time 60)
           echo "news-calendar response: $STATUS"
@@ -37,7 +37,7 @@ jobs:
       - name: Trigger news-headlines refresh
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X GET "https://kodatrade.co.uk/api/cron?job=news-headlines" \
+            -X GET "https://www.kodatrade.co.uk/api/cron?job=news-headlines" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             --max-time 60)
           echo "news-headlines response: $STATUS"
