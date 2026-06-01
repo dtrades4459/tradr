@@ -43,6 +43,9 @@ export default defineConfig({
     exclude: ["tests/**", "node_modules/**"],
     environment: "jsdom",
     setupFiles: ["@testing-library/jest-dom/vitest"],
+    // Single-fork prevents the Windows UNKNOWN spawn error when many test files run in parallel.
+    pool: "forks",
+    forks: { singleFork: true },
   },
   build: {
     target: "es2022",

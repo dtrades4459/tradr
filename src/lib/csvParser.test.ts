@@ -18,6 +18,9 @@ import {
   computePnlDollar,
   decimalSeparatorForDelimiter,
   inferBiasFromTimes,
+  normaliseSymbol,
+  isTradingViewStrategyTester,
+  mergeTradingViewStrategyRows,
 } from "./csvParser";
 
 // ── detectDelimiter ───────────────────────────────────────────────────────────
@@ -511,5 +514,211 @@ describe("computePnlDollar", () => {
     expect(computePnlDollar({
       symbol: "NQ", entryPrice: 18250, exitPrice: 18270, qty: -1, bias: "Bullish",
     })).toBeNull();
+  });
+});
+
+// ── normaliseSymbol ───────────────────────────────────────────────────────────
+
+describe("normaliseSymbol", () => {
+  it.each([
+    ["NQZ4",          "NQ"],
+    ["ESH25",         "ES"],
+    ["MESZ4",         "MES"],
+    ["MNQZ4",         "MNQ"],
+    ["CLM4",          "CL"],
+    ["GCQ24",         "GC"],
+  ])("strips CME contract suffix: %s → %s", (input, expected) => {
+    expect(normaliseSymbol(input)).toBe(expected);
+  });
+
+  it.each([
+    ["NQ 03-25",  "NQ"],
+    ["ES 12-24",  "ES"],
+    ["MES 06-25", "MES"],
+  ])("strips NinjaTrader 8 space format: %s → %s", (input, expected) => {
+    expect(normaliseSymbol(input)).toBe(expected);
+  });
+
+  it.each([
+    ["NASDAQ:NQ1!",    "NQ"],
+    ["CME:ES1!",       "ES"],
+    ["NQ1!",           "NQ"],
+    ["FOREXCOM:EURUSD","EURUSD"],
+  ])("strips TradingView exchange prefix and continuous marker: %s → %s", (input, expected) => {
+    expect(normaliseSymbol(input)).toBe(expected);
+  });
+
+  it("leaves clean tickers unchanged", () => {
+    expect(normaliseSymbol("EURUSD")).toBe("EURUSD");
+    expect(normaliseSymbol("AAPL")).toBe("AAPL");
+    expect(normaliseSymbol("BTCUSDT")).toBe("BTCUSDT");
+  });
+
+  it("is case-insensitive", () => {
+    expect(normaliseSymbol("nqz4")).toBe("NQ");
+    expect(normaliseSymbol("esH25")).toBe("ES");
+  });
+
+  it("returns empty string for empty input", () => {
+    expect(normaliseSymbol("")).toBe("");
+  });
+});
+
+// ── isTradingViewStrategyTester ───────────────────────────────────────────────
+
+describe("isTradingViewStrategyTester", () => {
+  const ST_HEADERS = ["Trade #", "Type", "Signal", "Date/Time", "Price", "Contracts", "Profit"];
+
+  it("detects Strategy Tester headers", () => {
+    expect(isTradingViewStrategyTester(ST_HEADERS)).toBe(true);
+  });
+
+  it("rejects when Symbol column is present", () => {
+    expect(isTradingViewStrategyTester(["Symbol", ...ST_HEADERS])).toBe(false);
+  });
+
+  it("rejects when Trade # is missing", () => {
+    expect(isTradingViewStrategyTester(["Type", "Signal", "Date/Time", "Price"])).toBe(false);
+  });
+
+  it("accepts DateTime column variant", () => {
+    const variant = ST_HEADERS.map(h => h === "Date/Time" ? "DateTime" : h);
+    expect(isTradingViewStrategyTester(variant)).toBe(true);
+  });
+
+  it("is case-insensitive for header matching", () => {
+    const lower = ST_HEADERS.map(h => h.toLowerCase());
+    expect(isTradingViewStrategyTester(lower)).toBe(true);
+  });
+});
+
+// ── mergeTradingViewStrategyRows ──────────────────────────────────────────────
+
+describe("mergeTradingViewStrategyRows", () => {
+  // Mirror of the tradingview-export.csv fixture (3 round-trips, 6 rows)
+  const TV_ROWS: Record<string, string>[] = [
+    { "Trade #": "1", "Type": "Entry Long",  "Date/Time": "2024-03-15T14:31:00+00:00", "Price": "18250.50", "Contracts": "1", "Profit": "",        "Run-up": "650.00",  "Drawdown": "125.00" },
+    { "Trade #": "1", "Type": "Exit Long",   "Date/Time": "2024-03-15T14:45:00+00:00", "Price": "18283.00", "Contracts": "1", "Profit": "650.00",  "Run-up": "",        "Drawdown": "" },
+    { "Trade #": "2", "Type": "Entry Short", "Date/Time": "2024-03-15T15:10:00+00:00", "Price": "18310.00", "Contracts": "1", "Profit": "",        "Run-up": "200.00",  "Drawdown": "450.00" },
+    { "Trade #": "2", "Type": "Exit Short",  "Date/Time": "2024-03-15T15:35:00+00:00", "Price": "18287.50", "Contracts": "1", "Profit": "450.00",  "Run-up": "",        "Drawdown": "" },
+    { "Trade #": "3", "Type": "Entry Long",  "Date/Time": "2024-03-18T14:45:00+00:00", "Price": "18180.00", "Contracts": "1", "Profit": "",        "Run-up": "-300.00", "Drawdown": "600.00" },
+    { "Trade #": "3", "Type": "Exit Long",   "Date/Time": "2024-03-18T15:15:00+00:00", "Price": "18165.00", "Contracts": "1", "Profit": "-300.00", "Run-up": "",        "Drawdown": "" },
+  ];
+
+  it("merges 6 rows into 3 trades", () => {
+    expect(mergeTradingViewStrategyRows(TV_ROWS, "NQ")).toHaveLength(3);
+  });
+
+  it("injects the supplied symbol", () => {
+    const merged = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(merged.every(r => r["Symbol"] === "NQ")).toBe(true);
+  });
+
+  it("maps entry price from Entry row", () => {
+    const [t1, t2, t3] = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(t1["Entry Price"]).toBe("18250.50");
+    expect(t2["Entry Price"]).toBe("18310.00");
+    expect(t3["Entry Price"]).toBe("18180.00");
+  });
+
+  it("maps exit price from Exit row", () => {
+    const [t1, t2, t3] = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(t1["Exit Price"]).toBe("18283.00");
+    expect(t2["Exit Price"]).toBe("18287.50");
+    expect(t3["Exit Price"]).toBe("18165.00");
+  });
+
+  it("maps P&L from Exit row", () => {
+    const [t1, t2, t3] = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(t1["Profit"]).toBe("650.00");
+    expect(t2["Profit"]).toBe("450.00");
+    expect(t3["Profit"]).toBe("-300.00");
+  });
+
+  it("sets Type to Long / Short from entry row", () => {
+    const [t1, t2] = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(t1["Type"]).toBe("Long");
+    expect(t2["Type"]).toBe("Short");
+  });
+
+  it("uses entry Date/Time as the trade timestamp", () => {
+    const [t1] = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(t1["Date/Time"]).toBe("2024-03-15T14:31:00+00:00");
+  });
+
+  it("dates normalise to non-today values", () => {
+    const today = new Date().toISOString().split("T")[0];
+    const merged = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    for (const row of merged) {
+      expect(normalizeDate(row["Date/Time"])).not.toBe(today);
+    }
+  });
+
+  it("preserves insertion order (trade 1 first, 3 last)", () => {
+    const merged = mergeTradingViewStrategyRows(TV_ROWS, "NQ");
+    expect(merged[0]["Entry Price"]).toBe("18250.50");
+    expect(merged[2]["Entry Price"]).toBe("18180.00");
+  });
+
+  it("handles empty input without throwing", () => {
+    expect(mergeTradingViewStrategyRows([], "NQ")).toHaveLength(0);
+  });
+
+  it("flags open positions (entry without exit) with __openPosition marker", () => {
+    const OPEN_ROWS: Record<string, string>[] = [
+      ...TV_ROWS,
+      { "Trade #": "4", "Type": "Entry Long", "Date/Time": "2024-03-18T16:00:00+00:00", "Price": "18170.00", "Contracts": "1", "Profit": "", "Run-up": "", "Drawdown": "" },
+    ];
+    const merged = mergeTradingViewStrategyRows(OPEN_ROWS, "NQ");
+    expect(merged).toHaveLength(4);
+    const open = merged.find(r => r["__openPosition"] === "1");
+    expect(open).toBeDefined();
+    expect(open!["Entry Price"]).toBe("18170.00");
+    expect(open!["Exit Price"]).toBe("");
+    // Closed trades shouldn't carry the marker
+    expect(merged.filter(r => r["__openPosition"] === "1")).toHaveLength(1);
+  });
+
+  it("works end-to-end from parseCSV output", () => {
+    const csv = `Trade #,Type,Signal,Date/Time,Price,Contracts,Profit,Run-up,Drawdown
+1,Entry Long,Long Entry,2024-03-15T14:31:00+00:00,18250.50,1,,650.00,125.00
+1,Exit Long,Long Exit,2024-03-15T14:45:00+00:00,18283.00,1,650.00,,
+2,Entry Short,Short Entry,2024-03-15T15:10:00+00:00,18310.00,1,,200.00,450.00
+2,Exit Short,Short Exit,2024-03-15T15:35:00+00:00,18287.50,1,450.00,,`;
+    const { headers, rows } = parseCSV(csv);
+    expect(isTradingViewStrategyTester(headers)).toBe(true);
+    const merged = mergeTradingViewStrategyRows(rows, "ES");
+    expect(merged).toHaveLength(2);
+    expect(merged[0]["Symbol"]).toBe("ES");
+    expect(parseNum(merged[0]["Profit"])).toBe(650);
+    expect(parseNum(merged[1]["Profit"])).toBe(450);
+  });
+});
+
+// ── normalizeDate extended formats ────────────────────────────────────────────
+
+describe("normalizeDate extended formats", () => {
+  it("parses compact YYYYMMDD: 20240315 → 2024-03-15", () => {
+    expect(normalizeDate("20240315")).toBe("2024-03-15");
+  });
+
+  it("parses 'Mar 15, 2024'", () => {
+    expect(normalizeDate("Mar 15, 2024")).toBe("2024-03-15");
+  });
+
+  it("parses 'March 15 2024'", () => {
+    expect(normalizeDate("March 15 2024")).toBe("2024-03-15");
+  });
+
+  it("parses '15 Mar 2024'", () => {
+    expect(normalizeDate("15 Mar 2024")).toBe("2024-03-15");
+  });
+
+  it("parses ISO with timezone offset", () => {
+    expect(normalizeDate("2024-03-15T14:31:00+00:00")).toBe("2024-03-15");
+  });
+
+  it("parses dot-separated EU: 15.03.2024", () => {
+    expect(normalizeDate("15.03.2024", "eu")).toBe("2024-03-15");
   });
 });

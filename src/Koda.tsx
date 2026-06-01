@@ -33,6 +33,7 @@ import { TourOverlay, OnboardingFlow } from "./OnboardingFlow";
 import type { OnboardingData } from "./OnboardingFlow";
 import { UpgradeModal } from "./UpgradeModal";
 import { LotSizeCalculator } from "./LotSizeCalculator";
+import { TradeTagger } from "./TradeTagger";
 import { phIdentify, phCapture, phReset } from "./lib/posthog";
 import { readUtm } from "./lib/utm";
 import EvalAccountScreen from "./EvalAccountScreen";
@@ -241,6 +242,8 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
   // CSV import panel state
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [taggerTrades, setTaggerTrades] = useState<Trade[] | null>(null);
+  const [taggerMode, setTaggerMode] = useState<"fresh-import" | "resume">("fresh-import");
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [mandatoryUpgrade, setMandatoryUpgrade] = useState(false);
   const [showCalc,    setShowCalc]    = useState(false);
@@ -777,10 +780,17 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
       await saveTrades(merged);
       phCapture("csv_imported", { count: newTrades.length });
       setShowCsvImport(false);
-      showToast(`Imported ${newTrades.length} trade${newTrades.length === 1 ? "" : "s"}`);
+      // Open Tinder-style tagger so user can quick-tag the imported trades
+      setTaggerMode("fresh-import");
+      setTaggerTrades(newTrades);
     } finally {
       setIsImportingCsv(false);
     }
+  }
+
+  async function handleTaggerSave(id: number, updates: Partial<Trade>) {
+    const u = trades.map(t => t.id === id ? { ...t, ...updates } : t);
+    await saveTrades(u);
   }
   async function saveProfile(u: Profile) {
     setProfile(u);
@@ -1323,6 +1333,17 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
     if (filter.dateTo && t.date > filter.dateTo) return false;
     return true;
   }), [trades, filter]);
+
+  // CSV-imported trades that the user never finished tagging. Surfaced as a
+  // banner in the trade list so closing the tagger mid-flow doesn't strand
+  // hundreds of bare imports with no way back.
+  const untaggedImports = useMemo(() => trades.filter(t =>
+    t.source === "csv_import" &&
+    !t.setup &&
+    !t.mistake &&
+    !t.emotions &&
+    (t.ruleAdherence === null || t.ruleAdherence === undefined),
+  ), [trades]);
 
   const checkedCount = checkItems.filter((i: { id: number; text: string }) => isChecked(i.id)).length;
   const totalItems = checkItems.length;
@@ -2780,6 +2801,37 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
                   defaultAccountType={profile?.propFirmMode ? "funded" : "personal"}
                 />
               )}
+              {untaggedImports.length > 0 && !showCsvImport && (
+                <button
+                  onClick={() => { setTaggerMode("resume"); setTaggerTrades(untaggedImports); }}
+                  style={{
+                    width: "100%",
+                    marginTop: "14px",
+                    padding: "12px 16px",
+                    background: `color-mix(in oklch, ${C.green} 10%, transparent)`,
+                    border: `1px solid color-mix(in oklch, ${C.green} 40%, transparent)`,
+                    borderRadius: "10px",
+                    color: C.text,
+                    cursor: "pointer",
+                    fontFamily: MONO,
+                    fontSize: "11px",
+                    letterSpacing: "0.06em",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    position: "relative",
+                    zIndex: 2,
+                  }}
+                >
+                  <span>
+                    <span style={{ color: C.green, fontWeight: 600 }}>{untaggedImports.length}</span>
+                    <span style={{ color: C.text2 }}> imported trade{untaggedImports.length === 1 ? "" : "s"} not yet tagged</span>
+                  </span>
+                  <span style={{ color: C.green, fontSize: "13px" }}>Tag them →</span>
+                </button>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "20px" }}>
                 <input placeholder="Pair..." value={filter.pair} onChange={e => setFilter({ ...filter, pair: e.target.value })} style={inp} />
                 <select value={filter.outcome} onChange={e => setFilter({ ...filter, outcome: e.target.value })} style={sel}><option value="">All outcomes</option>{OUTCOMES.map(o => <option key={o}>{o}</option>)}</select>
@@ -4126,6 +4178,28 @@ export default function Koda({ user, jwtPlan }: { user?: User; jwtPlan?: "free" 
         )}
         {showCalc && (
           <LotSizeCalculator C={C} onClose={() => setShowCalc(false)} />
+        )}
+        {taggerTrades && (
+          <TradeTagger
+            trades={taggerTrades}
+            strategies={_allStratMap}
+            allStrategyNames={allStrategyNames}
+            onSave={handleTaggerSave}
+            onDone={(savedCount) => {
+              const totalCount = taggerTrades.length;
+              setTaggerTrades(null);
+              if (taggerMode === "resume") {
+                showToast(
+                  savedCount > 0
+                    ? `Tagged ${savedCount} of ${totalCount} trade${totalCount === 1 ? "" : "s"}`
+                    : "No tags saved",
+                );
+              } else {
+                showToast(`Imported ${totalCount} trade${totalCount === 1 ? "" : "s"}${savedCount > 0 ? ` · tagged ${savedCount}` : ""}`);
+              }
+            }}
+            C={C}
+          />
         )}
         <NotificationsDrawer
           open={notificationsOpen}

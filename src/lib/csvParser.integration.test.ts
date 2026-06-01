@@ -21,6 +21,7 @@ import {
   scoreHeaderRow,
   getPointValue,
   isSummarySymbol,
+  mergeTradingViewStrategyRows,
 } from "./csvParser";
 
 /** Helper: load a fixture file from the __fixtures__ directory. */
@@ -294,24 +295,45 @@ describe("FTMO / MT5 CSV integration", () => {
 
 // ── TradingView fixture ──────────────────────────────────────────────────────
 
-describe("TradingView CSV integration", () => {
+// The tradingview-export.csv fixture is a Strategy Tester file (has "Trade #",
+// no "Symbol" column) — detectBroker correctly returns "tradingview_st".
+describe("TradingView Strategy Tester CSV integration", () => {
   const csv = loadFixture("tradingview-export.csv");
   const { headers, rows } = parseCSV(csv);
 
-  it("detects broker as tradingview", () => {
-    expect(detectBroker(headers)).toBe("tradingview");
+  it("detects broker as tradingview_st (Strategy Tester — no Symbol column)", () => {
+    expect(detectBroker(headers)).toBe("tradingview_st");
   });
 
-  it("auto-maps key fields", () => {
+  it("auto-maps key fields from raw Strategy Tester headers", () => {
     const m = autoDetectMapping(headers);
     expect(m.date).toBe("Date/Time");
     expect(m.pnl).toBe("Profit");
     expect(m.bias).toBe("Type");
   });
 
-  it("maps exit rows with pnl", () => {
+  it("mergeTradingViewStrategyRows produces 3 merged trades", () => {
+    const merged = mergeTradingViewStrategyRows(rows, "NQ");
+    expect(merged).toHaveLength(3);
+  });
+
+  it("merged trade 1: entry price, exit price, P&L, Long bias", () => {
+    const [t1] = mergeTradingViewStrategyRows(rows, "NQ");
+    expect(t1["Symbol"]).toBe("NQ");
+    expect(t1["Entry Price"]).toBe("18250.50");
+    expect(t1["Exit Price"]).toBe("18283.00");
+    expect(parseNum(t1["Profit"])).toBeCloseTo(650.0);
+    expect(t1["Type"]).toBe("Long");
+  });
+
+  it("merged trade 3 (loss): P&L is negative", () => {
+    const merged = mergeTradingViewStrategyRows(rows, "NQ");
+    const t3 = merged[2];
+    expect(parseNum(t3["Profit"])).toBeCloseTo(-300.0);
+  });
+
+  it("maps exit rows with pnl via raw row (pre-merge, validates Profit column)", () => {
     const m = autoDetectMapping(headers);
-    // row index 1 is the first exit row (Long Exit with Profit = 650.00)
     const exitRow = rows.find(r => (r["Profit"] || "") !== "" && parseNum(r["Profit"] || "") !== 0);
     if (exitRow) {
       const trade = mapRow(exitRow, m);

@@ -145,7 +145,9 @@ export function detectBroker(headers: string[]): string | null {
   if (h.has("net p&l") && (h.has("entry date/time") || h.has("entry time")) && h.has("buy/sell")) return "rithmic";
   // Tradovate
   if ((h.has("b/s") || h.has("buy time")) && (h.has("p&l") || h.has("p / l"))) return "tradovate";
-  // TradingView
+  // TradingView Strategy Tester — Entry/Exit paired rows, no Symbol column
+  if (h.has("trade #") && h.has("type") && (h.has("date/time") || h.has("datetime")) && !h.has("symbol")) return "tradingview_st";
+  // TradingView Paper / Live — has Symbol + Profit + Type/Side
   if (h.has("profit") && (h.has("date/time") || h.has("datetime")) && h.has("type")) return "tradingview";
   // MT4
   if ((h.has("open time") || h.has("open_time")) && (h.has("s / l") || h.has("stop loss"))) return "mt4";
@@ -283,24 +285,54 @@ export function inferBiasFromTimes(buyRaw: string, sellRaw: string): string {
  * locale controls MM/DD vs DD/MM for ambiguous slash-delimited dates.
  */
 export function normalizeDate(s: string, locale: "us" | "eu" = "us"): string | null {
-  if (!s) return null;
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!s || !s.trim()) return null;
+  const v = s.trim();
+
+  // ISO-like: 2024-03-15, 2024-03-15T..., 2024-03-15 14:31
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const slash = s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})/);
+
+  // Slash or dot separated: 3/15/2024, 15.03.2024, 03/15/24
+  const slash = v.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})/);
   if (slash) {
     const [, a, b] = slash;
     let y = slash[3];
     if (y.length === 2) y = "20" + y;
     const aN = parseInt(a, 10), bN = parseInt(b, 10);
     let mm: number, dd: number;
-    if (aN > 12)      { mm = bN; dd = aN; }       // unambiguous: a must be day
-    else if (bN > 12) { mm = aN; dd = bN; }       // unambiguous: b must be day
-    else if (locale === "eu") { dd = aN; mm = bN; } // EU: DD/MM
-    else              { mm = aN; dd = bN; }        // US default: MM/DD
+    if (aN > 12)        { mm = bN; dd = aN; }
+    else if (bN > 12)   { mm = aN; dd = bN; }
+    else if (locale === "eu") { dd = aN; mm = bN; }
+    else                { mm = aN; dd = bN; }
     return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
   }
-  const d = new Date(s);
+
+  // Compact numeric: 20240315
+  const compact = v.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+
+  // Text month formats: "Mar 15, 2024" / "15 Mar 2024" / "March 15 2024"
+  const textMonth: Record<string, string> = {
+    jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+    jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
+  };
+  // "Mar 15, 2024" or "March 15 2024"
+  const mdy = v.match(/^([A-Za-z]{3,9})[,.\s]+(\d{1,2})[,.\s]+(\d{4})/);
+  if (mdy) {
+    const mm = textMonth[mdy[1].slice(0,3).toLowerCase()];
+    if (mm) return `${mdy[3]}-${mm}-${mdy[2].padStart(2, "0")}`;
+  }
+  // "15 Mar 2024"
+  const dmy = v.match(/^(\d{1,2})[,.\s]+([A-Za-z]{3,9})[,.\s]+(\d{4})/);
+  if (dmy) {
+    const mm = textMonth[dmy[2].slice(0,3).toLowerCase()];
+    if (mm) return `${dmy[3]}-${mm}-${dmy[1].padStart(2, "0")}`;
+  }
+
+  // Last resort: JS Date parse (handles many RFC 2822 / locale strings)
+  const d = new Date(v);
   if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+
   return null;
 }
 
@@ -360,6 +392,12 @@ export function normaliseSymbol(pair: string): string {
   // NinjaTrader 8 format: "NQ 03-25", "ES 12-24" (ROOT MM-YY)
   const m2 = upper.match(/^([A-Z]{1,5})\s+\d{2}-\d{2}$/);
   if (m2) return m2[1];
+  // TradingView format: strip exchange prefix + continuous contract suffix
+  //   "NASDAQ:NQ1!" → "NQ"  |  "CME:ES1!" → "ES"  |  "FOREXCOM:EURUSD" → "EURUSD"
+  const noExchange = upper.replace(/^[A-Z0-9]+:/, "");
+  // Match root + optional digits + optional "!" (continuous contract marker)
+  const m3 = noExchange.match(/^([A-Z]{1,8})\d*!?$/);
+  if (m3 && m3[1] !== upper) return m3[1]; // only strip if something actually changed
   return upper;
 }
 
@@ -367,6 +405,82 @@ export function normaliseSymbol(pair: string): string {
 export function isSummarySymbol(sym: string): boolean {
   const SUMMARY = new Set(["total", "total:", "subtotal", "subtotals", "sum", "grand total", "summary", "net"]);
   return SUMMARY.has(sym.trim().toLowerCase());
+}
+
+/**
+ * Returns true when the headers match TradingView Strategy Tester format.
+ * The Strategy Tester export splits each round-trip trade into two rows:
+ * "Entry Long/Short" and "Exit Long/Short", keyed by a shared "Trade #".
+ * There is NO Symbol column — the instrument is the chart, not in the file.
+ */
+export function isTradingViewStrategyTester(headers: string[]): boolean {
+  const h = new Set(headers.map(s => s.toLowerCase().trim()));
+  return (
+    h.has("trade #") &&
+    h.has("type") &&
+    (h.has("date/time") || h.has("datetime")) &&
+    h.has("price") &&
+    !h.has("symbol")
+  );
+}
+
+/**
+ * Merge TradingView Strategy Tester Entry/Exit row pairs into single trade rows.
+ *
+ * The Strategy Tester CSV splits each round-trip into two rows sharing a "Trade #":
+ *   Entry row: Date/Time = entry time, Price = entry price, Type = "Entry Long/Short"
+ *   Exit  row: Date/Time = exit  time, Price = exit  price, Profit = net P&L
+ *
+ * Returns synthetic rows with fixed column names so the standard field mapping
+ * can pick them up without any special-casing in rowToTrade.
+ *
+ * The caller supplies the instrument symbol (e.g. "NQ", "ES") since Strategy
+ * Tester CSVs omit it — the chart instrument is the context, not a column value.
+ */
+export function mergeTradingViewStrategyRows(
+  rows: Record<string, string>[],
+  symbol: string,
+): Record<string, string>[] {
+  type Pair = { entry?: Record<string, string>; exit?: Record<string, string>; seq: number };
+  const map = new Map<string, Pair>();
+  let seq = 0;
+
+  for (const row of rows) {
+    const num = (row["Trade #"] ?? "").trim();
+    if (!num) continue;
+    if (!map.has(num)) map.set(num, { seq: seq++ });
+    const pair = map.get(num)!;
+    const type = (row["Type"] ?? "").toLowerCase();
+    if (type.startsWith("entry")) pair.entry = row;
+    else if (type.startsWith("exit")) pair.exit = row;
+  }
+
+  return [...map.values()]
+    .sort((a, b) => a.seq - b.seq)
+    .map(({ entry, exit }) => {
+      if (!entry && !exit) return null;
+      const src = entry ?? exit!;
+      const typeStr = (src["Type"] ?? "").toLowerCase();
+      const bias = typeStr.includes("long") ? "Long" : typeStr.includes("short") ? "Short" : "";
+      // Entry without matching exit = open position. Marked so the panel can
+      // surface a clear "N open positions skipped" notice instead of silently
+      // importing a half-trade with no exit / no P&L.
+      const isOpen = !!entry && !exit;
+      return {
+        "Symbol":         symbol,
+        "Date/Time":      entry?.["Date/Time"] ?? exit?.["Date/Time"] ?? "",
+        "Exit Date/Time": exit?.["Date/Time"] ?? "",
+        "Entry Price":    entry?.["Price"] ?? "",
+        "Exit Price":     exit?.["Price"] ?? "",
+        "Contracts":      entry?.["Contracts"] ?? exit?.["Contracts"] ?? "",
+        "Profit":         exit?.["Profit"] ?? "",
+        "Type":           bias,
+        "Run-up":         entry?.["Run-up"] ?? "",
+        "Drawdown":       entry?.["Drawdown"] ?? "",
+        ...(isOpen ? { "__openPosition": "1" } : {}),
+      };
+    })
+    .filter((r): r is Record<string, string> => r !== null);
 }
 
 // ── Futures point value table ─────────────────────────────────────────────────

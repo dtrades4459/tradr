@@ -1,4 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Prevent supabase.ts from throwing during module init in the test environment.
+// buildImportStoragePath is a pure function — it never calls supabase directly.
+vi.mock("./supabase", () => ({
+  supabase: {
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }) },
+    storage: {
+      from: vi.fn().mockReturnValue({
+        upload: vi.fn().mockResolvedValue({ error: null }),
+        remove: vi.fn().mockResolvedValue({ error: null }),
+      }),
+    },
+    from: vi.fn().mockReturnValue({
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+  },
+}));
+
 import { buildImportStoragePath } from "./imports";
 
 const USER = "00000000-0000-0000-0000-000000000abc";
