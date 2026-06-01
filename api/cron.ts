@@ -523,5 +523,12 @@ export default async function handler(req: Req, res: Res) {
   if (job === "complete-challenges") return handleCompleteChallenges(req, res);
   if (job === "sync")                return handleSync(req, res);
 
-  return res.status(400).json({ error: "?job= required: complete-challenges | sync" });
+  if (job === 'daily-digest') {
+    if (!isCronAuthed(req)) return res.status(401).json({ error: 'Unauthorized' });
+    const { sendDailyDigest } = await import('./lib/metrics/digest.js');
+    await sendDailyDigest();
+    return res.status(200).json({ ok: true });
+  }
+
+  return res.status(400).json({ error: "?job= required: complete-challenges | sync | daily-digest" });
 }

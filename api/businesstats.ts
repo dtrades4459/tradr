@@ -13,6 +13,7 @@ import { getTradeMetrics, formatTradeMetrics } from './lib/metrics/trades.js';
 import { getRevenueMetrics, formatRevenueMetrics } from './lib/metrics/revenue.js';
 import { getSentryMetrics, formatSentryMetrics } from './lib/metrics/errors.js';
 import { getPostHogMetrics, formatPostHogMetrics } from './lib/metrics/analytics.js';
+import { sendDailyDigest } from './lib/metrics/digest.js';
 
 const TOKEN  = process.env.TELEGRAM_BUSINESSTATS_TOKEN!;
 const SECRET = process.env.TELEGRAM_BUSINESSTATS_SECRET!;
@@ -223,6 +224,11 @@ export default async function handler(req: Req, res: Res) {
       case '/user': {
         const email = text.split(' ')[1] ?? '';
         await handleUserLookup(chatId, email.trim());
+        break;
+      }
+      case '/digest': {
+        await sendMessage(chatId, '⏳ Running digest...');
+        await sendDailyDigest();
         break;
       }
       // Further commands added in subsequent tasks
